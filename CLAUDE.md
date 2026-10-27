@@ -66,7 +66,10 @@ tests/                  тесты (unittest)
 
 ## Как подключить нового клиента
 
-1. `cp -r clients/_template clients/<код>`, в `config.yaml` — `id: <код>` и всё по итогам встречи.
+1. Анкета — **таблица** (Google-таблица или Excel, листы по-русски с выпадающими списками; `core/anketa.py`).
+   Пустой шаблон: `python3 tools/anketa.py blank шаблон.xlsx`; проверка: `tools/anketa.py check <файл|ссылка>`;
+   запись: `tools/anketa.py apply <файл|ссылка>` — создаст `clients/<код>/` из шаблона и запишет `config.yaml`.
+   config.yaml руками не правим — правим таблицу и делаем apply. Ошибки — с листом и строкой.
 2. Переводчик `parser.py` — по 2–3 файлам его 1С; проверка: `python3 tools/check_client.py <код> файлы…`.
 3. Своё, чего нет в ядре, — только в `rules.py` через крючки (`core/hooks.py`), ядро не трогаем.
 4. Бот в @BotFather → токен в `clients/<код>/.env` вместе с ADMIN_IDS и почтой.
