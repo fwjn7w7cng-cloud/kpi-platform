@@ -11,5 +11,8 @@
 Подробно — в `CLAUDE.md`, история работ — в `JOURNAL.md`.
 
 ```bash
-python3 -m unittest discover -s tests -v
+python3 -m unittest discover -s tests -v   # проверки
+python3 run.py demo                         # запуск бота клиента (токен — в clients/demo/.env)
 ```
+
+Новый клиент — `clients/_template`, порядок — в `CLAUDE.md` («Как подключить нового клиента»).

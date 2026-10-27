@@ -1,42 +1,111 @@
-# Клиент demo — вымышленная оптовая фирма для показа. Все имена и цифры выдуманы.
+# Анкета клиента demo — вымышленная оптовая фирма для показа. Все имена и цифры выдуманы.
 # Данные даёт сидер (clients/demo/seed.py), а не 1С.
+# Это же — образец анкеты для настоящего клиента: всё, что ниже, меняется без программиста.
 
 id: demo
 
 company:
   name: "Опт-Партнёр"
-  industry: building          # переключатель отраслей в демо меняет это поле на лету
+  industry: building          # отрасль: building food auto apparel electronics cosmetics pharma household
   timezone: Europe/Moscow
 
-edition: control              # в демо переключается; здесь — что показываем по умолчанию
-addons: [ai]
+edition: control              # start | business | control (в демо переключается кнопкой)
+addons: [ai]                  # модули сверх редакции
 
 work_week:
   weekend: [sun]              # выходные дни: mon tue wed thu fri sat sun
   salary_days: 26             # делитель оклада: оклад ÷ 26 × отработанные дни
+  holidays: {}                # доп. выходные: {"2026-11-04": paid} или unpaid
 
 departments:
-  - {id: sales,     name: "Отдел продаж",   kind: sales}
-  - {id: warehouse, name: "Склад",          kind: warehouse}
-  - {id: logistics, name: "Логистика",      kind: logistics}
-  - {id: office,    name: "Офис",           kind: office}
+  - {id: sales,     name: "Отдел продаж", kind: sales}
+  - {id: warehouse, name: "Склад",        kind: warehouse}
+  - {id: logistics, name: "Логистика",    kind: logistics}
+  - {id: office,    name: "Офис",         kind: office}
 
-# Линии — направления продаж со своими ставками (у одной фирмы может быть несколько брендов/юрлиц)
+# Линии — направления продаж (бренды, юрлица). У простой фирмы — одна.
 lines:
-  main: {name: "Опт-Партнёр", rate: 0.004}
+  main: {name: "Опт-Партнёр"}
 
 teams:
-  - {id: north, name: "Команда Север", dept: sales, line: main}
-  - {id: south, name: "Команда Юг",    dept: sales, line: main}
-  - {id: key,   name: "Ключевые клиенты", dept: sales, line: main}
+  - {id: north, name: "Команда Север",     dept: sales, line: main}
+  - {id: south, name: "Команда Юг",        dept: sales, line: main}
+  - {id: key,   name: "Ключевые клиенты",  dept: sales, line: main}
+
+# Должности: кто в какой роли и по какой схеме получает зарплату
+positions:
+  - {id: rep,        name: "Торговый представитель", dept: sales,     role: rep,        pay: rep}
+  - {id: sv,         name: "Супервайзер",            dept: sales,     role: sv,         pay: sv}
+  - {id: rop,        name: "Руководитель продаж",    dept: sales,     role: head,       pay: rop}
+  - {id: storekeeper, name: "Кладовщик",             dept: warehouse, role: staff,      pay: warehouse}
+  - {id: wh_head,    name: "Заведующий складом",     dept: warehouse, role: head,       pay: salary}
+  - {id: driver,     name: "Водитель",               dept: logistics, role: staff,      pay: driver}
+  - {id: log_head,   name: "Начальник логистики",    dept: logistics, role: head,       pay: salary}
+  - {id: accountant, name: "Бухгалтер",              dept: office,    role: accountant, pay: salary}
+  - {id: manager,    name: "Офис-менеджер",          dept: office,    role: staff,      pay: salary}
+  - {id: director,   name: "Директор",               dept: office,    role: owner,      pay: none}
 
 # Подписи ролей — как их называют в этой компании (необязательно)
 roles:
   rep: "Торговый представитель"
+  head: "Руководитель отдела"
   owner: "Директор"
+
+# KPI: что считаем и пороги
+kpi:
+  akb_min: 5000               # клиент входит в АКБ, если купил за месяц на эту сумму и больше
+  focus_groups: 2             # сколько групп товаров бот берёт в «фокусные» в планах демо
+  debt_days: [30, 60]         # пороги просрочки для экранов и тревог
+
+# Табель: штрафы за опоздания (минут → ₽) и за прогул
+timesheet:
+  late: [[10, 100], [30, 200], [60, 300]]
+  absent_fine: 1000
+
+# Схемы зарплаты — из кубиков. Типы кубиков и их настройки — в core/pay/components.py.
+pay_schemes:
+  rep:
+    - {type: salary, amount: 25000}
+    - {type: sales_percent, rate: 0.004}
+    - {type: plan_bonus, metric: sales, mode: steps, steps: [[0.8, 5000], [1.0, 15000], [1.2, 20000]]}
+    - {type: plan_bonus, metric: akb, mode: linear, amount: 5000, min: 0.7, cap: 1.2}
+    - {type: plan_bonus, metric: focus, mode: linear, amount: 5000, min: 0.8, cap: 1.2}
+    - {type: debt_penalty, days: 60, share: 0.10, amount: 3000}
+    - {type: timesheet}
+  sv:
+    - {type: salary, amount: 40000}
+    - {type: sales_percent, rate: 0.0015, scope: team}
+    - {type: plan_bonus, metric: sales, scope: team, mode: steps, steps: [[0.9, 10000], [1.0, 20000]]}
+    - {type: timesheet}
+  rop:
+    - {type: salary, amount: 60000}
+    - {type: sales_percent, rate: 0.0005, scope: dept}
+    - {type: timesheet}
+  warehouse:
+    - {type: salary, amount: 35000}
+    - {type: fixed_bonus, name: "Без ошибок и опозданий", amount: 5000, cut_per_miss: 1000}
+    - {type: timesheet}
+  driver:
+    - {type: salary, amount: 40000}
+    - {type: fixed_bonus, name: "Без ошибок и пропусков", amount: 5000, cut_per_miss: 1000}
+    - {type: timesheet}
+  salary:
+    - {type: salary}
+    - {type: timesheet}
+  none: []
+
+# Свои показатели (модуль «Свои формулы KPI»): имя → формула из готовых показателей
+formulas:
+  avg_check: {name: "Средний чек на клиента", expr: "sales / akb", unit: "₽"}
+  collect_rate: {name: "Сбор к продажам", expr: "collect / sales", unit: "%"}
+
+# Расписание рассылок (время местное). Пусто — не слать.
+schedule:
+  morning: "08:00"
+  evening: "19:30"
 
 source:
   kind: seed
 
 pay:
-  salary: 30000               # оклад по умолчанию за salary_days рабочих дней
+  salary: 30000               # оклад по умолчанию, если в схеме не указан

@@ -28,7 +28,7 @@ class Base(unittest.TestCase):
 
 class Migrations(Base):
     def test_fresh_db_is_current(self):
-        self.assertEqual(self.db.version(), 1)
+        self.assertEqual(self.db.version(), 2)
         self.assertEqual(self.db.migrate(), [])          # повторный запуск ничего не делает
 
     def test_file_db_survives_reopen(self):
@@ -39,7 +39,7 @@ class Migrations(Base):
             db.close()
             db = DB.open(path)
             self.assertEqual(db.get("hello"), {"a": 1})
-            self.assertEqual(db.version(), 1)
+            self.assertEqual(db.version(), 2)
             db.close()
 
 

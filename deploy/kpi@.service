@@ -1,0 +1,20 @@
+# Служба одного клиента. Установка на сервере:
+#   cp deploy/kpi@.service /etc/systemd/system/ && systemctl daemon-reload
+#   systemctl enable --now kpi@demo        # клиент demo; для другого — kpi@<код>
+# Каждый клиент — свой процесс: упал один — остальные работают.
+[Unit]
+Description=KPI-бот клиента %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/root/kpi-platform
+ExecStart=/root/kpi-platform/venv/bin/python run.py %i
+Restart=always
+RestartSec=5
+MemoryMax=300M
+CPUQuota=40%
+Environment=MALLOC_ARENA_MAX=2
+
+[Install]
+WantedBy=multi-user.target

@@ -68,6 +68,8 @@ class ClientConfig:
     lines: dict
     source: dict
     pay: dict
+    holidays: dict = field(default_factory=dict)
+    positions: list = field(default_factory=list)
     raw: dict = field(repr=False, default_factory=dict)
 
     @property
@@ -77,6 +79,17 @@ class ClientConfig:
 
     def has_module(self, code):
         return code in self.modules
+
+    def position(self, pos_id):
+        return next((p for p in self.positions if p["id"] == pos_id), None)
+
+    def with_edition(self, edition, addons=None):
+        """Копия анкеты с другой редакцией (демо: переключатель редакций)."""
+        import copy
+        c = copy.copy(self)
+        c.edition = edition
+        c.addons = list(self.addons if addons is None else addons)
+        return c
 
     def role_title(self, role):
         return self.role_titles.get(role) or R.ROLES[role]["title"]
@@ -96,8 +109,9 @@ def client_dir(client_id):
     return CLIENTS / client_id
 
 
-def load_client(client_id, path=None):
-    """Прочитать и проверить конфиг. Бросает ConfigError со списком всех проблем."""
+def load_client(client_id, path=None, hooks=None):
+    """Прочитать и проверить конфиг. Бросает ConfigError со списком всех проблем.
+    hooks — крючки клиента (из его rules.py): нужны, чтобы признать его собственные кубики зарплаты."""
     path = Path(path) if path else client_dir(client_id) / "config.yaml"
     if not path.exists():
         raise ConfigError(client_id, [f"нет файла {path}"])
@@ -105,10 +119,10 @@ def load_client(client_id, path=None):
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as e:
         raise ConfigError(client_id, [f"файл не читается как YAML: {e}"])
-    return parse(client_id, raw)
+    return parse(client_id, raw, hooks)
 
 
-def parse(client_id, raw):
+def parse(client_id, raw, hooks=None):
     p = []   # проблемы
     company = raw.get("company") or {}
     if raw.get("id", client_id) != client_id:
@@ -195,12 +209,76 @@ def parse(client_id, raw):
         if r is not None and (not isinstance(r, (int, float)) or not 0 <= r < 1):
             p.append(f"lines.{lid}.rate «{r}» — доля от 0 до 1 (0,4% = 0.004)")
 
+    holidays = week.get("holidays") or {}
+    for d, kind in holidays.items():
+        try:
+            from datetime import date as _date
+            _date.fromisoformat(str(d))
+        except ValueError:
+            p.append(f"work_week.holidays: «{d}» — дата в виде 2026-11-04")
+        if kind not in ("paid", "unpaid"):
+            p.append(f"work_week.holidays.{d}: «{kind}» — paid или unpaid")
+
+    schemes = raw.get("pay_schemes") or {}
+    from core.pay import components as C
+    custom = set((hooks.components if hooks else {}).keys())
+    for sname, comps in schemes.items():
+        for i, comp in enumerate(comps or []):
+            t = (comp or {}).get("type")
+            where = f"pay_schemes.{sname}[{i + 1}]"
+            if t in C.BUILTIN:
+                p += [f"{where}: {x}" for x in C.check(comp)]
+            elif t in custom:
+                chk = hooks.components[t][1]
+                p += [f"{where}: {x}" for x in (chk(comp) if chk else [])]
+            else:
+                p.append(f"{where}: нет кубика «{t}» — есть: {', '.join(sorted(set(C.BUILTIN) | custom))}")
+
+    positions = []
+    for pos in raw.get("positions") or []:
+        pid = pos.get("id", "")
+        if pos.get("dept") not in dept_ids:
+            p.append(f"должность «{pid}»: нет отдела «{pos.get('dept')}»")
+        if pos.get("role") not in R.ROLES:
+            p.append(f"должность «{pid}»: нет роли «{pos.get('role')}» — роли: {', '.join(R.ROLES)}")
+        if pos.get("pay", "none") not in schemes and pos.get("pay", "none") != "none":
+            p.append(f"должность «{pid}»: нет схемы зарплаты «{pos.get('pay')}» в pay_schemes")
+        positions.append({"id": pid, "name": pos.get("name", pid), "dept": pos.get("dept"),
+                          "role": pos.get("role"), "pay": pos.get("pay", "none")})
+    _dupes(p, "должности", [x["id"] for x in positions])
+
+    from core.kpi import formula
+    names = {"sales", "akb", "sku", "collect", "focus", "visits", "overdue"}
+    for code, f in (raw.get("formulas") or {}).items():
+        err = formula.check(str((f or {}).get("expr", "")), names)
+        if err:
+            p.append(f"formulas.{code}: {err}")
+
+    ts = raw.get("timesheet") or {}
+    for pair in ts.get("late") or []:
+        if not (isinstance(pair, list) and len(pair) == 2 and all(isinstance(x, (int, float)) for x in pair)):
+            p.append("timesheet.late — список пар [минут, штраф], например [[10, 100], [30, 200]]")
+            break
+
+    for key, val in (raw.get("schedule") or {}).items():
+        if val and not _is_time(str(val)):
+            p.append(f"schedule.{key} «{val}» — время в виде 08:00")
+
     if p:
         raise ConfigError(client_id, p)
     return ClientConfig(
         id=client_id, name=name, industry=industry, timezone=tz, edition=edition, addons=addons,
         weekend=weekend, salary_days=salary_days, departments=depts, teams=teams, role_titles=titles,
-        lines=lines, source=source, pay=pay, raw=raw)
+        lines=lines, source=source, pay=pay, holidays={str(k): v for k, v in holidays.items()},
+        positions=positions, raw=raw)
+
+
+def _is_time(s):
+    try:
+        h, m = s.split(":")
+        return 0 <= int(h) < 24 and 0 <= int(m) < 60 and len(m) == 2
+    except ValueError:
+        return False
 
 
 def _dupes(p, what, ids):
