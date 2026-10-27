@@ -3,6 +3,7 @@
 Всё, чем один клиент отличается от другого без кода, живёт здесь. Ошибки конфига пишутся
 по-русски и все сразу, чтобы Адам поправил файл за один заход.
 """
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -130,7 +131,7 @@ def _pct(v, where, p):
     """«0,4%» → 0.004; число оставляем как есть (старая запись долей: 0.004)."""
     if isinstance(v, (int, float)) and not isinstance(v, bool):
         return v
-    s = str(v).replace(" ", "").replace("\xa0", "").replace(",", ".")
+    s = str(v).replace(" ", "").replace("\xa0", "").replace("\u202f", "").replace(",", ".")
     if s.endswith("%"):
         try:
             return float(s[:-1]) / 100
@@ -146,7 +147,10 @@ def _money(v, where, p):
     """«25 000» / «25 000 ₽» → 25000."""
     if isinstance(v, (int, float)) and not isinstance(v, bool):
         return v
-    s = str(v).replace(" ", "").replace("\xa0", "").replace("₽", "").replace("руб", "").replace(",", ".")
+    s = str(v).replace(" ", "").replace("\xa0", "").replace("\u202f", "").replace("₽", "").replace("руб", "")
+    if re.fullmatch(r"\d{1,3}(,\d{3})+(\.\d+)?", s):
+        s = s.replace(",", "")                 # «25,000» — так таблица с английскими настройками пишет 25 000
+    s = s.replace(",", ".")
     try:
         x = float(s)
         return int(x) if x == int(x) else x

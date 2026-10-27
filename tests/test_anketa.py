@@ -43,6 +43,14 @@ class Human(unittest.TestCase):
         self.assertEqual(steps[4], "80% → 5 000; 100% → 15 000; 120% → 20 000")
         self.assertIn("Воскресенье", [r[1] for r in demo_tables()["Компания"]])
 
+    def test_numbers_as_google_sheet_returns_them(self):
+        from core.config import _money, _pct
+        p = []
+        self.assertEqual([_money(v, "x", p) for v in ("25,000", "25 000", "25\u202f000 ₽", "1 234,5", 25000)],
+                         [25000, 25000, 25000, 1234.5, 25000])
+        self.assertEqual([round(_pct(v, "x", p), 6) for v in ("0,4%", "0.40%", "80%")], [0.004, 0.004, 0.8])
+        self.assertEqual(p, [])
+
     def test_codes_optional(self):
         t = demo_tables()
         for sheet in ("Отделы", "Команды", "Должности"):
