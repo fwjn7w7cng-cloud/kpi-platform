@@ -122,8 +122,76 @@ def load_client(client_id, path=None, hooks=None):
     return parse(client_id, raw, hooks)
 
 
+PCT_KEYS = {"rate", "rate_above", "share", "min", "cap"}       # доли: в анкете — «0,4%», «80%»
+MONEY_KEYS = {"amount", "cut_per_miss", "salary", "akb_min", "absent_fine"}   # суммы: «25 000»
+
+
+def _pct(v, where, p):
+    """«0,4%» → 0.004; число оставляем как есть (старая запись долей: 0.004)."""
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return v
+    s = str(v).replace(" ", "").replace("\xa0", "").replace(",", ".")
+    if s.endswith("%"):
+        try:
+            return float(s[:-1]) / 100
+        except ValueError:
+            pass
+        p.append(f"{where} «{v}» — не понял число, пример: «0,4%»")
+        return v
+    p.append(f"{where} «{v}» — напишите со знаком %, например «0,4%» или «80%»")
+    return v
+
+
+def _money(v, where, p):
+    """«25 000» / «25 000 ₽» → 25000."""
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return v
+    s = str(v).replace(" ", "").replace("\xa0", "").replace("₽", "").replace("руб", "").replace(",", ".")
+    try:
+        x = float(s)
+        return int(x) if x == int(x) else x
+    except ValueError:
+        p.append(f"{where} «{v}» — нужна сумма, например «25 000»")
+        return v
+
+
+def human_numbers(raw, p):
+    """Перевести человеческую запись в анкете (проценты со знаком %, суммы с пробелами) в числа.
+    Меняет копию анкеты; ошибки дописывает в p."""
+    import copy
+    raw = copy.deepcopy(raw)
+    for sname, comps in (raw.get("pay_schemes") or {}).items():
+        for i, c in enumerate(comps or []):
+            if not isinstance(c, dict):
+                continue
+            where = f"pay_schemes.{sname}[{i + 1}]"
+            for k in list(c):
+                if k in PCT_KEYS:
+                    c[k] = _pct(c[k], f"{where}.{k}", p)
+                elif k in MONEY_KEYS:
+                    c[k] = _money(c[k], f"{where}.{k}", p)
+            if isinstance(c.get("steps"), list):
+                c["steps"] = [[_pct(s[0], f"{where}.steps", p), _money(s[1], f"{where}.steps", p)]
+                              if isinstance(s, (list, tuple)) and len(s) == 2 else s for s in c["steps"]]
+    for lid, line in (raw.get("lines") or {}).items():
+        if isinstance(line, dict) and "rate" in line:
+            line["rate"] = _pct(line["rate"], f"lines.{lid}.rate", p)
+    for sec in ("kpi", "pay", "timesheet"):
+        d = raw.get(sec)
+        if isinstance(d, dict):
+            for k in list(d):
+                if k in MONEY_KEYS:
+                    d[k] = _money(d[k], f"{sec}.{k}", p)
+    ts = raw.get("timesheet") or {}
+    if isinstance(ts.get("late"), list):
+        ts["late"] = [[x[0], _money(x[1], "timesheet.late", p)] if isinstance(x, (list, tuple)) and len(x) == 2 else x
+                      for x in ts["late"]]
+    return raw
+
+
 def parse(client_id, raw, hooks=None):
     p = []   # проблемы
+    raw = human_numbers(raw, p)
     company = raw.get("company") or {}
     if raw.get("id", client_id) != client_id:
         p.append(f"id в файле «{raw.get('id')}» не совпадает с папкой «{client_id}»")

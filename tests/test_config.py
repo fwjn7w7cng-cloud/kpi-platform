@@ -90,6 +90,37 @@ class Errors(unittest.TestCase):
         self.assertEqual(E.lock_text("miniapp"), "Подключается отдельно")
 
 
+class HumanNumbers(unittest.TestCase):
+    """В анкете проценты пишутся как в жизни («0,4%», «80%»), суммы — с пробелами («25 000»)."""
+
+    def test_demo_written_humanly_is_understood(self):
+        cfg = load_client("demo")
+        rep = cfg.raw["pay_schemes"]["rep"]
+        self.assertEqual(rep[0]["amount"], 25000)
+        self.assertAlmostEqual(rep[1]["rate"], 0.004)
+        self.assertEqual(rep[2]["steps"][0], [0.8, 5000])
+        self.assertAlmostEqual(cfg.raw["kpi"]["akb_min"], 5000)
+
+    def test_old_fractions_still_work(self):
+        raw = demo_raw()
+        raw["pay_schemes"]["rep"][1]["rate"] = 0.004
+        self.assertAlmostEqual(parse("demo", raw).raw["pay_schemes"]["rep"][1]["rate"], 0.004)
+
+    def test_percent_without_sign_is_refused(self):
+        raw = demo_raw()
+        raw["pay_schemes"]["rep"][1]["rate"] = "0,4"
+        with self.assertRaises(ConfigError) as ctx:
+            parse("demo", raw)
+        self.assertIn("со знаком %", str(ctx.exception))
+
+    def test_bad_money(self):
+        raw = demo_raw()
+        raw["pay_schemes"]["rep"][0]["amount"] = "двадцать тысяч"
+        with self.assertRaises(ConfigError) as ctx:
+            parse("demo", raw)
+        self.assertIn("нужна сумма", str(ctx.exception))
+
+
 class Editions(unittest.TestCase):
     def test_nested(self):
         s, b, c = (E.edition_modules(x) for x in E.ORDER)

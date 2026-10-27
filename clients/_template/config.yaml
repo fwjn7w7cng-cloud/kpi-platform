@@ -53,41 +53,42 @@ roles:
 
 # KPI: что считаем и пороги
 kpi:
-  akb_min: 5000               # клиент входит в АКБ, если купил за месяц на эту сумму и больше
+  akb_min: "5 000"            # клиент входит в АКБ, если купил за месяц на эту сумму и больше
   focus_groups: 2             # сколько групп товаров бот берёт в «фокусные» в планах демо
   debt_days: [30, 60]         # пороги просрочки для экранов и тревог
 
 # Табель: штрафы за опоздания (минут → ₽) и за прогул
 timesheet:
   late: [[10, 100], [30, 200], [60, 300]]
-  absent_fine: 1000
+  absent_fine: "1 000"
 
-# Схемы зарплаты — из кубиков. Типы кубиков и их настройки — в core/pay/components.py.
+# Схемы зарплаты — из кубиков. Проценты пишем со знаком: "0,4%", "80%"; суммы как удобно: "25 000".
+# Типы кубиков и их настройки — в core/pay/components.py.
 pay_schemes:
   rep:
-    - {type: salary, amount: 25000}
-    - {type: sales_percent, rate: 0.004}
-    - {type: plan_bonus, metric: sales, mode: steps, steps: [[0.8, 5000], [1.0, 15000], [1.2, 20000]]}
-    - {type: plan_bonus, metric: akb, mode: linear, amount: 5000, min: 0.7, cap: 1.2}
-    - {type: plan_bonus, metric: focus, mode: linear, amount: 5000, min: 0.8, cap: 1.2}
-    - {type: debt_penalty, days: 60, share: 0.10, amount: 3000}
+    - {type: salary, amount: "25 000"}
+    - {type: sales_percent, rate: "0,4%"}
+    - {type: plan_bonus, metric: sales, mode: steps, steps: [["80%", "5 000"], ["100%", "15 000"], ["120%", "20 000"]]}
+    - {type: plan_bonus, metric: akb, mode: linear, amount: "5 000", min: "70%", cap: "120%"}
+    - {type: plan_bonus, metric: focus, mode: linear, amount: "5 000", min: "80%", cap: "120%"}
+    - {type: debt_penalty, days: 60, share: "10%", amount: "3 000"}
     - {type: timesheet}
   sv:
-    - {type: salary, amount: 40000}
-    - {type: sales_percent, rate: 0.0015, scope: team}
-    - {type: plan_bonus, metric: sales, scope: team, mode: steps, steps: [[0.9, 10000], [1.0, 20000]]}
+    - {type: salary, amount: "40 000"}
+    - {type: sales_percent, rate: "0,15%", scope: team}
+    - {type: plan_bonus, metric: sales, scope: team, mode: steps, steps: [["90%", "10 000"], ["100%", "20 000"]]}
     - {type: timesheet}
   rop:
-    - {type: salary, amount: 60000}
-    - {type: sales_percent, rate: 0.0005, scope: dept}
+    - {type: salary, amount: "60 000"}
+    - {type: sales_percent, rate: "0,05%", scope: dept}
     - {type: timesheet}
   warehouse:
-    - {type: salary, amount: 35000}
-    - {type: fixed_bonus, name: "Без ошибок и опозданий", amount: 5000, cut_per_miss: 1000}
+    - {type: salary, amount: "35 000"}
+    - {type: fixed_bonus, name: "Без ошибок и опозданий", amount: "5 000", cut_per_miss: "1 000"}
     - {type: timesheet}
   driver:
-    - {type: salary, amount: 40000}
-    - {type: fixed_bonus, name: "Без ошибок и пропусков", amount: 5000, cut_per_miss: 1000}
+    - {type: salary, amount: "40 000"}
+    - {type: fixed_bonus, name: "Без ошибок и пропусков", amount: "5 000", cut_per_miss: "1 000"}
     - {type: timesheet}
   salary:
     - {type: salary}
@@ -109,4 +110,4 @@ source:
   kind: mail
 
 pay:
-  salary: 30000               # оклад по умолчанию, если в схеме не указан
+  salary: "30 000"            # оклад по умолчанию, если в схеме не указан
