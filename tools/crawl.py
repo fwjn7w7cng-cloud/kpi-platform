@@ -27,7 +27,7 @@ class Errors(logging.Handler):
         self.items.append(record.getMessage())
 
 
-def crawl(app, uid, depth=3, png_dir=None, tag="", limit=400):
+def crawl(app, uid, depth=4, png_dir=None, tag="", limit=500):
     seen, errors, shots = set(), [], 0
     queue = [(r, 0, "start") for r in app.start(uid)]
     while queue and len(seen) < limit:
