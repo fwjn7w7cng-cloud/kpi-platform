@@ -24,17 +24,20 @@ class Job:
     roles: set = field(default_factory=set)
     module: str = ""
     workdays: bool = True
+    days: object = None        # дни недели (["sun"]) или функция (app) → дни; None — каждый день
 
 
-def job(name, when, roles, title="", module="", workdays=True):
+def job(name, when, roles, title="", module="", workdays=True, days=None):
+    """when — "morning" / "evening" / "09:10" или функция (app) → "10:00" (время из настроек модуля)."""
     def deco(fn):
-        JOBS.append(Job(name, title or name, when, fn, set(roles), module, workdays))
+        JOBS.append(Job(name, title or name, when, fn, set(roles), module, workdays, days))
         return fn
     return deco
 
 
 def time_of(app, j):
-    t = (app.cfg.raw.get("schedule") or {}).get(j.when, j.when)
+    when = j.when(app) if callable(j.when) else j.when
+    t = (app.cfg.raw.get("schedule") or {}).get(when, when)
     if not t or ":" not in str(t):
         return None
     h, m = str(t).split(":")
@@ -48,6 +51,9 @@ def due(app, now: datetime):
         t = time_of(app, j)
         if t and (now.hour, now.minute) == t:
             if j.workdays and WEEKDAYS[now.weekday()] in app.cfg.weekend:
+                continue
+            days = j.days(app) if callable(j.days) else j.days
+            if days and WEEKDAYS[now.weekday()] not in days:
                 continue
             out.append(j)
     return out

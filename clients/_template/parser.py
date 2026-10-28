@@ -14,6 +14,10 @@
 
 Для настоящего клиента: взять 2–3 его файла, поправить распознавание строк, прогнать
 python3 tools/check_client.py <код> файлы… — бот покажет, что понял.
+
+Виды пачек ядра (core/data/model.py): sales, debts, payments, visits (маршрут), clients, groups,
+returns (возвраты с причиной: fault/who — чья ошибка по комментарию 1С), stock (остатки), item_sales
+(продажи по товарам), trips и trip_stops (маршрутные листы водителей). Переводчик отдаёт только то, что есть у клиента.
 """
 import re
 from datetime import date

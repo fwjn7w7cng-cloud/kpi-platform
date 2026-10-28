@@ -25,7 +25,8 @@ from core.ui.kit import Button, Reply
 log = logging.getLogger("kpi")
 
 MODULES = ["debts", "reminders", "achievements", "staff", "payroll", "tasks", "approval",
-           "audit", "watchdog", "forecast", "call_today", "formulas", "ai", "locked"]
+           "audit", "watchdog", "forecast", "call_today", "formulas", "ai", "feedback", "clients", "route", "plans",
+           "quiz", "stock", "logistics", "returns", "locked"]
 
 
 class App:
@@ -38,6 +39,7 @@ class App:
         self.admins = {int(a) for a in admins}
         self.data_dir = data_dir
         self._dbs = {}
+        self._memo = {}
         importlib.import_module("core.ui.screens")
         importlib.import_module("core.jobs.briefs")
         for m in MODULES:
@@ -67,6 +69,7 @@ class App:
             path = self.data_dir / self.client_id / industry / "kpi.db"
         else:
             path = client_db_path(self.client_id).parent / industry / "kpi.db"
+        self._memo.clear()
         old = self._dbs.pop(industry, None)
         if old:
             old.close()
@@ -86,6 +89,7 @@ class App:
 
     def reset_demo(self, industry):
         """Кнопка «Начать заново»: стереть демо-базу отрасли и заполнить свежими цифрами."""
+        self._memo.clear()
         db = self._dbs.pop(industry, None)
         if db:
             path = db.c.execute("PRAGMA database_list").fetchone()[2]
@@ -94,6 +98,17 @@ class App:
             for p in Path(path).parent.glob("kpi.db*"):
                 p.unlink()
         return self.db(industry)
+
+    def memo(self, ctx, name, fn, month=None):
+        """Кэш тяжёлых расчётов между нажатиями: живёт, пока в базе ничего не поменялось.
+        Ключ — расчёт, база, месяц, сегодня, редакция и версия данных."""
+        db = ctx.db
+        key = (name, id(db), month or ctx.month, ctx.today, ctx.cfg.edition, frozenset(ctx.cfg.modules), db.rev())
+        if key not in self._memo:
+            if len(self._memo) > 400:
+                self._memo.clear()
+            self._memo[key] = fn()
+        return self._memo[key]
 
     # ---------- вход ----------
 
@@ -113,14 +128,21 @@ class App:
         sid, *args = data.split(":")
         return self._run(ctx, sid, args)
 
-    def text(self, user_id, text):
+    def text(self, user_id, text, photo=""):
+        """Текст (или фото с подписью — photo: id файла в мессенджере)."""
         ctx = self.ctx(user_id)
+        ctx.photo = photo
         wait = ctx.session.pop("await", None)
         ctx.save()
         if not wait:
-            fn = REG.INPUTS.get("_free")
-            if fn:
-                r = fn(ctx, text, {})
+            for _, module, fn in REG.FREE:
+                if module and not ctx.can(module):
+                    continue
+                try:
+                    r = fn(ctx, text)
+                except Exception:
+                    log.error("свободный текст: %s", traceback.format_exc())
+                    r = None
                 if r:
                     return self._finish(ctx, r, "free")
             return self._run(ctx, "home", ())

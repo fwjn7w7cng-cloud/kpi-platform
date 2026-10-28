@@ -15,6 +15,7 @@ from dataclasses import dataclass
 SCREENS = {}       # id → (функция, модуль)
 INPUTS = {}        # вид ввода → функция
 MENU = []          # пункты главной
+FREE = []          # свободный текст (бот ничего не ждёт): [(порядок, модуль, функция)] — первая, что ответила
 
 
 @dataclass
@@ -38,6 +39,16 @@ def screen(sid, module=""):
 def text_input(kind):
     def deco(fn):
         INPUTS[kind] = fn
+        return fn
+    return deco
+
+
+def free_text(module="", order=50):
+    """Текст, который человек написал сам, без вопроса бота: код клиента, поиск товара…
+    Функция (ctx, text) → Reply или None (не моё — спросить следующего)."""
+    def deco(fn):
+        FREE.append((order, module, fn))
+        FREE.sort(key=lambda x: x[0])
         return fn
     return deco
 

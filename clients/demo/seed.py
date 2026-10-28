@@ -1,5 +1,5 @@
-"""Наполнение базы демо выдуманной фирмой: люди, клиенты, 3 месяца продаж, долги, деньги, маршруты,
-планы, табель, правки, задачи, отпуска, документы.
+"""Наполнение базы демо выдуманной фирмой: люди, клиенты, 4 месяца продаж, долги, деньги, маршруты,
+планы, табель, правки, задачи, отметки маршрута, тесты, склад, рейсы, возвраты.
 
     seed(db, cfg, industry="food", today=date.today())
 
@@ -14,16 +14,20 @@ from datetime import date, timedelta
 
 from clients.demo import vocab as V
 from core.calendar import Month, first_day, last_day, month_of, shift_month
-from core.data.model import Client, Dataset, Debt, Group, Payment, Sale, Visit
+from core.data.model import (Client, Dataset, Debt, Group, ItemSale, Payment, Return, Sale, Stock, Trip, TripStop,
+                             Visit)
 
 # команда → (сколько торговых, характеры: множитель темпа к плану)
 TEAMS = {"north": [1.22, 1.06, 0.98, 0.93, 0.74], "south": [1.12, 1.01, 0.95, 0.88, 0.79], "key": [1.04, 0.97]}
 STAFF = [("rop", "sales", "", 1), ("director", "office", "", 1), ("accountant", "office", "", 1),
          ("manager", "office", "", 1), ("wh_head", "warehouse", "", 1), ("storekeeper", "warehouse", "", 3),
-         ("log_head", "logistics", "", 1), ("driver", "logistics", "", 4)]
+         ("log_head", "logistics", "", 1), ("driver", "logistics", "", 4), ("buy_head", "purchasing", "", 1),
+         ("buyer", "purchasing", "", 2)]
+SUPPLIERS = ["Завод «Север»", "ТД «Восток»", "Импорт-Трейд", "Фабрика «Юг»", "Дистрибьютор «Центр»", "Опт-Снаб"]
+VARIANTS = ["эконом", "стандарт", "премиум", "профи", "мини", "макси", "XL", "лайт", "плюс", "супер"]
 
 
-def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=3):
+def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=4):
     industry = industry or cfg.industry
     today = today or date.today()
     R = random.Random(rnd_seed)
@@ -42,11 +46,14 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=3):
             hired = m0 - timedelta(days=R.randint(120, 1500))
             eid = db.add_employee(fio, "sales", team=team, position="rep", role="rep", keys=[key], hired=hired)
             reps.append((eid, key, team, skill))
+    staff_keys = {}   # должность → [ключи]
     for pos, dept, team, n in STAFF:
         role = cfg.position(pos)["role"]
         for _ in range(n):
-            fio, _ = next(names)
-            db.add_employee(fio, dept, team=team, position=pos, role=role, hired=m0 - timedelta(days=R.randint(200, 2000)))
+            fio, key = next(names)
+            db.add_employee(fio, dept, team=team, position=pos, role=role, keys=[key],
+                            hired=m0 - timedelta(days=R.randint(200, 2000)))
+            staff_keys.setdefault(pos, []).append(key)
     # новичок: пришёл в текущем месяце на место ушедшего — ключ того же торговика с даты приёма
     leaver = next(r for r in reps if r[2] == "south" and r[3] < 0.85)
     start_new = first_day(months_list[-1]) + timedelta(days=min(9, (today - first_day(months_list[-1])).days // 2))
@@ -77,6 +84,8 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=3):
     db.load(Dataset("clients", m0, last_day(months_list[-1]), rows=cli_rows, source="seed"))
 
     skill_of = {key: skill for _, key, _, skill in reps}
+    # 8% клиентов в этом месяце перестают брать одну из главных групп
+    drops = {c[0]: R.choice([g[0] for g in groups[:3]]) for c in clients if R.random() < 0.08}
     weights = [w for _, _, w in groups]
     focus = [g[0] for g in groups[:(cfg.raw.get("kpi") or {}).get("focus_groups", 2)]]
 
@@ -85,7 +94,7 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=3):
         cal = Month(cfg, month, today)
         current = mi == len(months_list) - 1
         workdays = cal.workdays
-        sales, visits, pays = [], [], []
+        sales, visits, pays, rets = [], [], [], []
         trend = 1 + 0.03 * mi
         for c in clients:
             ccode, size, key, wd, sleeping, _ = c
@@ -103,6 +112,8 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=3):
                 order = size / 4.3 * skill * trend * R.uniform(0.6, 1.45)
                 k = R.choice([1, 2, 2, 3])
                 picked = set(R.choices([g[0] for g in groups], weights=weights, k=k))
+                if current and drops.get(ccode) in picked and len(picked) > 1:
+                    picked.discard(drops[ccode])          # «бросил бренд» в этом месяце
                 for g in picked:
                     amt = round(order / len(picked) * R.uniform(0.7, 1.3), -1)
                     if g in focus:
@@ -111,6 +122,7 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=3):
                                       discount=round(R.uniform(0, 0.08 if skill > 0.9 else 0.12), 3)))
                 if R.random() < 0.08:
                     sales.append(Sale(d, key, ccode, R.choice(picked and list(picked)), -round(order * 0.15, -1)))
+                    rets.append((d, key, ccode, round(order * 0.15, -1)))
         by_client = {}
         for s in sales:
             by_client[(s.emp_key, s.client)] = by_client.get((s.emp_key, s.client), 0) + s.amount
@@ -125,6 +137,9 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=3):
             db.load(Dataset("sales", cal.start, cal.end, rows=[s for s in sales if s.day <= end], source="seed"))
             db.load(Dataset("payments", cal.start, cal.end, rows=[p for p in pays if p.day <= end], source="seed"))
         db.load(Dataset("visits", cal.start, cal.end, rows=visits, source="seed"))
+        if end >= cal.start:
+            _trips(db, R, cal, end, sales, staff_keys.get("driver", []))
+            _returns(db, R, cal, end, rets, staff_keys)
         for snap in (7, 14, 21, cal.end.day):
             on = date(cal.start.year, cal.start.month, snap)
             if on >= today:
@@ -211,8 +226,170 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=3):
         status = "done" if i % 3 == 0 else "open"
         db.x("INSERT INTO tasks (author_id, emp_id, text, due, status, ts) VALUES (?,?,?,?,?,?)",
              rop["id"] if i % 2 else owner["id"], eid, task_texts[i % len(task_texts)], due.isoformat(), status, today.isoformat())
+    _route_marks(db, R, cfg, today)
+    _stock(db, R, groups, months_list, today)
+    _quiz(db, R, today)
+    for m in months_list:
+        db.put(f"planst:{m}", {"status": "ok", "note": "", "hist": [{"ts": f"{m}-01T09:00", "who": "Директор",
+                                                                     "status": "ok", "note": ""}]})
     db.put("seeded", {"industry": industry, "seeded": today.isoformat(), "months": months_list})
     return {"reps": len(reps), "clients": len(clients), "months": months_list}
+
+
+def _trips(db, R, cal, end, sales, drivers):
+    """Рейсы: клиентов с продажами за день развозят водители, по 8–14 точек в рейс; изредка — двойной заезд."""
+    if not drivers:
+        return
+    trips, stops = [], []
+    by_day = {}
+    for s in sales:
+        if s.amount > 0 and s.day <= end:
+            by_day.setdefault(s.day, {}).setdefault(s.client, 0)
+            by_day[s.day][s.client] += s.amount
+    n = 1000 + cal.start.month * 1000
+    for d, cl in sorted(by_day.items()):
+        codes = list(cl)
+        R.shuffle(codes)
+        chunks = [codes[i:i + 11] for i in range(0, len(codes), 11)]
+        day_trips = []
+        for i, chunk in enumerate(chunks):
+            key = drivers[i % len(drivers)]
+            n += 1
+            kg = sum(cl[c] for c in chunk) / R.uniform(60, 110)
+            trips.append(Trip(d, key, str(n), round(35 + len(chunk) * R.uniform(6, 14)), round(kg), round(kg / R.uniform(250, 400), 2)))
+            day_trips.append((key, str(n)))
+            for c in chunk:
+                stops.append(TripStop(d, key, str(n), c, f"Н-{n}{c[-3:]}"))
+        if len(day_trips) > 1 and R.random() < 0.35:          # двойной заезд: клиент первого рейса — ещё и в последнем
+            c = R.choice(chunks[0])
+            key, t = day_trips[-1]
+            stops.append(TripStop(d, key, t, c, f"Н-{t}{c[-3:]}д"))
+    db.load(Dataset("trips", cal.start, cal.end, rows=trips, source="seed"))
+    db.load(Dataset("trip_stops", cal.start, cal.end, rows=stops, source="seed"))
+
+
+def _returns(db, R, cal, end, rets, staff_keys):
+    """Возвраты с комментарием, как пишут в 1С, и уже разобранной причиной (у настоящего клиента её ставит переводчик)."""
+    rows = []
+    store, drv = staff_keys.get("storekeeper", []), staff_keys.get("driver", [])
+    for i, (d, key, client, amount) in enumerate(rets):
+        if d > end:
+            continue
+        f = R.choices(["rep", "warehouse", "driver", "client", "other", ""], weights=[30, 20, 15, 20, 10, 5])[0]
+        who = ""
+        if f == "warehouse" and store and R.random() < 0.8:
+            who = R.choice(store)
+        if f == "driver" and drv and R.random() < 0.8:
+            who = R.choice(drv)
+        name = who.split()[0].capitalize() if who else ""
+        reason = {"rep": R.choice(["Ошибка торгового: заказал не тот товар", "Ошибка торгового — не согласовал цену с клиентом"]),
+                  "warehouse": f"Ошибка склада{' ' + name if name else ''}: пересорт",
+                  "driver": f"Ошибка водителя{' ' + name if name else ''}: бой при доставке",
+                  "client": R.choice(["Клиент отказался: нет денег", "Клиент передумал"]),
+                  "other": R.choice(["Брак производителя", "Истёк срок годности"]), "": "возврат по звонку"}[f]
+        rows.append(Return(d, key, client, f"ВЗ-{cal.start.month:02d}{i:03d}", amount, reason, f, who))
+    db.load(Dataset("returns", cal.start, cal.end, rows=rows, source="seed"))
+
+
+def _stock(db, R, groups, months_list, today):
+    """Склад: по 10 товаров в группе, продажи по неделям за 4 месяца, остаток на вчера; заказы в пути и пришедшие."""
+    import json
+    items = []
+    code = 100000
+    for g, gname, _ in groups:
+        for var in VARIANTS:
+            code += 1
+            speed = R.lognormvariate(1.2, 0.9)          # штук в день
+            kind = R.choices(["ok", "low", "out", "stale"], weights=[76, 11, 6, 7])[0]
+            items.append((str(code), f"{gname} · {var}", R.choice(SUPPLIERS), speed, kind, round(R.uniform(150, 3000), -1)))
+    y = today - timedelta(days=1)
+    for month in months_list:
+        start, stop = first_day(month), min(last_day(month), y)
+        if stop < start:
+            continue
+        rows = []
+        d = start
+        while d <= stop:
+            for c, _, _, speed, kind, price in items:
+                if kind == "stale" and (y - d).days < 100:
+                    continue
+                q = max(0, round(speed * 7 * R.uniform(0.6, 1.4)))
+                if q:
+                    rows.append(ItemSale(d, c, q, q * price))
+            d += timedelta(days=7)
+        db.load(Dataset("item_sales", first_day(month), last_day(month), rows=rows, source="seed"))
+    stock = []
+    for c, name, sup, speed, kind, _ in items:
+        qty = {"ok": speed * R.uniform(20, 80), "low": speed * R.uniform(2, 12), "out": 0, "stale": R.uniform(20, 200)}[kind]
+        stock.append(Stock(y, c, name, sup, round(qty)))
+    db.load(Dataset("stock", y, y, rows=stock, source="seed"))
+    low = [c for c, *_, kind, _ in items if kind in ("low", "out")]
+    sup = next((s for _, _, s, _, kind, _ in items if kind in ("low", "out")), SUPPLIERS[0])
+    mine = [[c, 50] for c, _, s, _, kind, _ in items if s == sup and c in low][:3]
+    if mine:
+        db.x("INSERT INTO stock_orders (supplier, items, status, author, ts, sent_ts) VALUES (?,?,?,?,?,?)", sup, json.dumps(mine),
+             "sent", "Начальник закупок", (today - timedelta(days=3)).isoformat(), (today - timedelta(days=3)).isoformat())
+    db.x("INSERT INTO stock_orders (supplier, items, status, author, ts, sent_ts, came_ts) VALUES (?,?,?,?,?,?,?)", SUPPLIERS[1],
+         json.dumps([[items[1][0], 120]]), "came", "Начальник закупок", (today - timedelta(days=20)).isoformat(),
+         (today - timedelta(days=20)).isoformat(), (today - timedelta(days=12)).isoformat())
+
+
+def _route_marks(db, R, cfg, today):
+    """Отметки маршрута: вчера почти все отчитались, сегодня лучший торговый уже отметил пару точек."""
+    from core.calendar import WEEKDAYS
+    y = today - timedelta(days=1)
+    while WEEKDAYS[y.weekday()] in cfg.weekend:
+        y -= timedelta(days=1)
+    reasons = ["Закрыто", "Нет денег", "Не успел", "Нет на месте"]
+    reps = [e for e in db.employees() if e["role"] in ("rep", "newbie")]
+    got, _ = db.sales_by_emp(month_of(today))
+    plans = db.plans(month_of(today))
+    top = max(reps, key=lambda e: got.get(e["id"], 0) / (plans.get(e["id"], {}).get("sales") or 1e12))["id"]
+    for n, e in enumerate(reps):
+        for day in (y, today):
+            rows = [r for r in db.q("SELECT emp_key, client FROM visits WHERE day = ?", day.isoformat())
+                    if db.emp_of_key(r["emp_key"], day) == e["id"]]
+            if day == today and e["id"] != top:
+                continue
+            if day == today:
+                rows = rows[:2]
+            for i, r in enumerate(rows):
+                s = db.one("SELECT SUM(amount) AS s FROM sales WHERE day = ? AND client = ? AND amount > 0", day.isoformat(),
+                           r["client"])["s"]
+                if s:
+                    st, why, amt = "sold", "", round(s * R.uniform(0.9, 1.15), -2)
+                elif R.random() < 0.45:
+                    st, why, amt = "visited", "", 0
+                else:
+                    st, why, amt = "missed", R.choice(reasons), 0
+                if day == today:
+                    st, why, amt = ("sold", "", round(R.uniform(8, 40)) * 1000) if i == 0 else ("visited", "", 0)
+                db.x("INSERT OR REPLACE INTO visit_marks (day, emp_id, client, status, reason, amount, ts) VALUES (?,?,?,?,?,?,?)",
+                     day.isoformat(), e["id"], r["client"], st, why, amt, f"{day.isoformat()}T18:30:00")
+            if day == y and rows and n % 6 != 5:
+                db.x("INSERT OR IGNORE INTO visit_reports (day, emp_id, ts) VALUES (?,?,?)", day.isoformat(), e["id"],
+                     f"{day.isoformat()}T19:10:00")
+
+
+def _quiz(db, R, today):
+    """Результаты тестов: за 3 прошлые недели у всех, за эту — у половины; новичок прошёл первый урок."""
+    import json
+    people = [e for e in db.employees() if e["role"] in ("rep", "sv")]
+    for back in range(4):
+        d = today - timedelta(days=7 * back)
+        y, w, _ = d.isocalendar()
+        ref = f"{y}-W{w:02d}"
+        for n, e in enumerate(people):
+            if back == 0 and n % 2:
+                continue
+            score = min(10, max(4, round(R.gauss(8.2, 1.3))))
+            wrong = [{"q": "Опоздание на 35 минут — какой штраф по табелю?", "a": "200 ₽"}] if score < 10 else []
+            db.x("INSERT INTO quiz_results (emp_id, kind, ref, score, total, wrong, ts) VALUES (?,?,?,?,?,?,?)",
+                 e["id"], "test", ref, score, 10, json.dumps(wrong, ensure_ascii=False), d.isoformat())
+    for e in db.employees():
+        if e["role"] == "newbie":
+            db.x("INSERT INTO quiz_results (emp_id, kind, ref, score, total, wrong, ts) VALUES (?,?,?,?,?,?,?)",
+                 e["id"], "lesson", "0", 3, 3, "[]", today.isoformat())
 
 
 def _names(R):

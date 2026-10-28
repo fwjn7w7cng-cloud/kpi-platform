@@ -33,6 +33,7 @@ class Reply:
     text: str = ""              # простой текст (когда экрана нет или в дополнение)
     buttons: list = field(default_factory=list)     # ряды кнопок
     files: list = field(default_factory=list)       # [(имя файла, байты)]
+    photo: str = ""             # фото из мессенджера (id файла) — переслать как есть
     ask: str = ""               # подсказка: бот ждёт ответ текстом
     to: int = 0                 # кому (для рассылок); 0 — тому, кто нажал
     edit: bool = True           # можно заменить предыдущее сообщение

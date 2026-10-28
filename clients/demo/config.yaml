@@ -10,7 +10,7 @@ company:
   timezone: Europe/Moscow
 
 edition: control              # start | business | control (в демо переключается кнопкой)
-addons: [ai]                  # модули сверх редакции
+addons: [ai, stock, logistics, returns]   # модули сверх редакции
 
 work_week:
   weekend: [sun]              # выходные дни: mon tue wed thu fri sat sun
@@ -21,6 +21,7 @@ departments:
   - {id: sales,     name: "Отдел продаж", kind: sales}
   - {id: warehouse, name: "Склад",        kind: warehouse}
   - {id: logistics, name: "Логистика",    kind: logistics}
+  - {id: purchasing, name: "Закупки",     kind: purchasing}
   - {id: office,    name: "Офис",         kind: office}
 
 # Линии — направления продаж (бренды, юрлица). У простой фирмы — одна.
@@ -41,6 +42,8 @@ positions:
   - {id: wh_head,    name: "Заведующий складом",     dept: warehouse, role: head,       pay: salary}
   - {id: driver,     name: "Водитель",               dept: logistics, role: staff,      pay: driver}
   - {id: log_head,   name: "Начальник логистики",    dept: logistics, role: head,       pay: salary}
+  - {id: buy_head,   name: "Начальник закупок",      dept: purchasing, role: head,      pay: salary}
+  - {id: buyer,      name: "Менеджер по закупкам",   dept: purchasing, role: staff,     pay: salary}
   - {id: accountant, name: "Бухгалтер",              dept: office,    role: accountant, pay: salary}
   - {id: manager,    name: "Офис-менеджер",          dept: office,    role: staff,      pay: salary}
   - {id: director,   name: "Директор",               dept: office,    role: owner,      pay: none}
@@ -72,6 +75,7 @@ pay_schemes:
     - {type: plan_bonus, metric: akb, mode: linear, amount: "5 000", min: "70%", cap: "120%"}
     - {type: plan_bonus, metric: focus, mode: linear, amount: "5 000", min: "80%", cap: "120%"}
     - {type: debt_penalty, days: 60, share: "10%", amount: "3 000"}
+    - {type: per_unit, unit: ret_own, rate: "3%", cut: true, name: "Возвраты по своей вине"}
     - {type: timesheet}
   sv:
     - {type: salary, amount: "40 000"}
@@ -85,10 +89,14 @@ pay_schemes:
   warehouse:
     - {type: salary, amount: "35 000"}
     - {type: fixed_bonus, name: "Без ошибок и опозданий", amount: "5 000", cut_per_miss: "1 000"}
+    - {type: per_unit, unit: ret_err, price: "500", cut: true, name: "Ошибки склада в возвратах"}
     - {type: timesheet}
   driver:
-    - {type: salary, amount: "40 000"}
+    - {type: salary, amount: "30 000"}
+    - {type: per_unit, unit: km, price: "4"}
+    - {type: per_unit, unit: points, price: "25"}
     - {type: fixed_bonus, name: "Без ошибок и пропусков", amount: "5 000", cut_per_miss: "1 000"}
+    - {type: per_unit, unit: ret_err, price: "1 000", cut: true, name: "Ошибки при доставке"}
     - {type: timesheet}
   salary:
     - {type: salary}
@@ -99,6 +107,15 @@ pay_schemes:
 formulas:
   avg_check: {name: "Средний чек на клиента", expr: "sales / akb", unit: "₽"}
   collect_rate: {name: "Сбор к продажам", expr: "collect / sales", unit: "%"}
+
+# Тест недели (модуль «Тесты и обучение»): в какой день и во сколько, сколько вопросов, порог «сдал»
+quiz: {day: sun, time: "10:00", count: 10, pass: "80%"}
+
+# Склад для закупок: окно скорости продаж, «скоро закончится», «залежалось», на сколько дней заказывать
+stock: {window: 60, low_days: 14, stale_days: 90, cover_days: 30}
+
+# Маршрут: во сколько руководителям сводка отчётов дня
+route: {close: "21:00"}
 
 # Расписание рассылок (время местное). Пусто — не слать.
 schedule:

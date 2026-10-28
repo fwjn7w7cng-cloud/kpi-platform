@@ -4,6 +4,7 @@ import unittest
 from datetime import date
 from pathlib import Path
 
+from core.data import migrations
 from core.data.db import DB, DataError, month_bounds, norm_key
 from core.data.model import Client, Dataset, Debt, Sale
 
@@ -28,7 +29,7 @@ class Base(unittest.TestCase):
 
 class Migrations(Base):
     def test_fresh_db_is_current(self):
-        self.assertEqual(self.db.version(), 2)
+        self.assertEqual(self.db.version(), migrations.STEPS[-1][0])
         self.assertEqual(self.db.migrate(), [])          # повторный запуск ничего не делает
 
     def test_file_db_survives_reopen(self):
@@ -39,7 +40,7 @@ class Migrations(Base):
             db.close()
             db = DB.open(path)
             self.assertEqual(db.get("hello"), {"a": 1})
-            self.assertEqual(db.version(), 2)
+            self.assertEqual(db.version(), migrations.STEPS[-1][0])
             db.close()
 
 

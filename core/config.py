@@ -124,7 +124,7 @@ def load_client(client_id, path=None, hooks=None):
 
 
 PCT_KEYS = {"rate", "rate_above", "share", "min", "cap"}       # доли: в анкете — «0,4%», «80%»
-MONEY_KEYS = {"amount", "cut_per_miss", "salary", "akb_min", "absent_fine"}   # суммы: «25 000»
+MONEY_KEYS = {"amount", "cut_per_miss", "salary", "akb_min", "absent_fine", "price"}   # суммы: «25 000»
 
 
 def _pct(v, where, p):

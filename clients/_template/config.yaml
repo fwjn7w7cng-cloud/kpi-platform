@@ -100,6 +100,13 @@ formulas:
   avg_check: {name: "Средний чек на клиента", expr: "sales / akb", unit: "₽"}
   collect_rate: {name: "Сбор к продажам", expr: "collect / sales", unit: "%"}
 
+# Настройки модулей (нужны, только если модуль подключён):
+# quiz: {day: sun, time: "10:00", count: 10, pass: "80%"}          # тест недели
+# stock: {window: 60, low_days: 14, stale_days: 90, cover_days: 30}  # склад для закупок
+# route: {close: "21:00"}                                          # сводка отчётов дня руководителям
+# Сдельно водителю: {type: per_unit, unit: km, price: "4"}; удержание за возвраты торговому:
+# {type: per_unit, unit: ret_own, rate: "3%", cut: true} — единицы: km kg m3 points trips ret_own ret_err
+
 # Расписание рассылок (время местное). Пусто — не слать.
 schedule:
   morning: "08:00"

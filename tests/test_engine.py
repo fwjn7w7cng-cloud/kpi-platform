@@ -43,7 +43,7 @@ class Demo(unittest.TestCase):
         cls.p = Payroll(cls.cfg, cls.db, cls.k)
 
     def test_seed_shape(self):
-        self.assertEqual(self.info["months"], ["2026-08", "2026-09", "2026-10"])
+        self.assertEqual(self.info["months"], ["2026-07", "2026-08", "2026-09", "2026-10"])
         self.assertEqual(self.k.unknown, {})           # все продажи привязаны к людям
         self.assertGreater(len(self.k.members("dept", "sales")), 10)
 

@@ -28,6 +28,7 @@ class Ctx:
         if self.month > month_of(self.today):
             self.month = month_of(self.today)
         self._kpi, self._pay = {}, {}
+        self.photo = ""
         self._resolve()
 
     # ---------- сессия ----------
@@ -133,7 +134,8 @@ class Ctx:
     def kpi(self, month=None):
         month = month or self.month
         if month not in self._kpi:
-            self._kpi[month] = Kpi(self.cfg, self.db, month, self.today, self.app.hooks)
+            self._kpi[month] = self.app.memo(self, "kpi", lambda: Kpi(self.cfg, self.db, month, self.today, self.app.hooks),
+                                             month)
         return self._kpi[month]
 
     def pay(self, month=None):

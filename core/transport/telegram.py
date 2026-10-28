@@ -40,6 +40,8 @@ def build(app, token, mailbox=None, drive=None):
                 last = p == n - 1
                 await bot.send_photo(chat_id, png, caption=(reply.text[:1000] or None) if last else None,
                                      reply_markup=markup if last else None)
+        elif reply.photo:
+            await bot.send_photo(chat_id, reply.photo, caption=reply.text[:1000] or None, reply_markup=markup)
         elif reply.text:
             await bot.send_message(chat_id, reply.text[:4000], reply_markup=markup)
         for name, data in reply.files:
@@ -65,6 +67,12 @@ def build(app, token, mailbox=None, drive=None):
         u = update.effective_user
         await deliver(context.bot, update.effective_chat.id,
                       await asyncio.to_thread(app.text, u.id, update.message.text or ""))
+
+    async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        u = update.effective_user
+        photo = update.message.photo[-1].file_id
+        await deliver(context.bot, update.effective_chat.id,
+                      await asyncio.to_thread(app.text, u.id, update.message.caption or "", photo))
 
     async def on_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         u = update.effective_user
@@ -113,6 +121,7 @@ def build(app, token, mailbox=None, drive=None):
     tg.add_handler(CommandHandler("start", on_start))
     tg.add_handler(CallbackQueryHandler(on_button))
     tg.add_handler(MessageHandler(filters.Document.ALL, on_file))
+    tg.add_handler(MessageHandler(filters.PHOTO, on_photo))
     tg.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     tg.job_queue.run_repeating(tick, interval=60, first=5, name="schedule")
     if mailbox or drive:

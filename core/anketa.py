@@ -16,6 +16,7 @@ import re
 from core.access import editions as E
 from core.access import roles as R
 from core.config import INDUSTRIES, ConfigError, parse
+from core.pay.components import UNIT_TITLES
 
 # ---------- словари «как пишет человек» → «как понимает бот» ----------
 
@@ -30,9 +31,11 @@ ROLE_RU = {"Менеджер": "rep", "Супервайзер": "sv", "Нача�
 CUBE_RU = {"Оклад": ("salary", None), "% от продаж": ("sales_percent", None),
            "Бонус за план — ступени": ("plan_bonus", "steps"), "Бонус за план — пропорционально": ("plan_bonus", "linear"),
            "Фикс-бонус": ("fixed_bonus", None), "Удержание за просрочку": ("debt_penalty", None),
-           "Штрафы табеля": ("timesheet", None)}
+           "Штрафы табеля": ("timesheet", None), "Сдельно за единицу": ("per_unit", None),
+           "Удержание за единицу": ("per_unit", "cut")}
 METRIC_RU = {"Продажи": "sales", "АКБ": "akb", "SKU": "sku", "Сбор денег": "collect", "Фокусные группы": "focus",
              "Визиты с заказом": "visits"}
+UNIT_RU = {t: k for k, (t, _) in UNIT_TITLES.items()}
 WHOSE_RU = {"Свои": "self", "Команды": "team", "Отдела": "dept"}
 SOURCE_RU = {"Почта": "mail", "Google Диск": "drive", "Выдуманные (показ)": "seed"}
 FORMULA_RU = {"Продажи": "sales", "АКБ": "akb", "SKU": "sku", "Сбор": "collect", "Фокус": "focus", "Визиты": "visits",
@@ -83,7 +86,7 @@ HEADS = {
 CHOICES = {
     "Отделы": {"Вид": list(KIND_RU)},
     "Должности": {"Роль": list(ROLE_RU)},
-    "Зарплата": {"Кубик": list(CUBE_RU), "Показатель": list(METRIC_RU), "Чей": list(WHOSE_RU)},
+    "Зарплата": {"Кубик": list(CUBE_RU), "Показатель": list(METRIC_RU) + list(UNIT_RU), "Чей": list(WHOSE_RU)},
     "Праздники": {"Оплачивается": ["Да", "Нет"]},
     "Формулы": {"Единица": ["₽", "%", "шт."]},
     "Роли": {"Роль": list(ROLE_RU)},
@@ -100,6 +103,8 @@ GUIDE = [
     "• Бонус за план — пропорционально: «Значение» — сумма за 100% плана, «Порог» — с какого % платим, «Потолок» — выше не платим.",
     "• % от продаж: «Порог» — платить, только если план выполнен на столько; «Сверх плана» — другая ставка на продажи сверх плана.",
     "• Чей: Свои — по своим продажам, Команды — по продажам команды (супервайзеру), Отдела — по всему отделу.",
+    "• Сдельно за единицу: «Показатель» — единица (км, точки доставки…), «Значение» — сумма за единицу: 4; для единиц в ₽ — процент: 3%.",
+    "• Удержание за единицу — то же со знаком минус: например, 500 за каждую ошибку в возвратах.",
     "• Колонки «Код» можно не трогать — бот заполнит сам.",
 ]
 
@@ -246,7 +251,9 @@ def to_raw(tables):
             continue
         t, mode = cube
         c = {"type": t}
-        if mode:
+        if mode and t == "per_unit":
+            c["cut"] = True
+        elif mode:
             c["mode"] = mode
         if t == "plan_bonus":
             mt = d.get("Показатель", "")
@@ -257,6 +264,13 @@ def to_raw(tables):
                 bad("Зарплата", n, f"показатель «{mt}» — выберите из списка или «Группа <код>»")
                 continue
             c["metric"] = m
+        if t == "per_unit":
+            mt = d.get("Показатель", "")
+            u = UNIT_RU.get(next((k for k in UNIT_RU if k.lower() == mt.lower()), ""), None)
+            if u is None:
+                bad("Зарплата", n, f"единица «{mt}» — выберите из списка: {', '.join(UNIT_RU)}")
+                continue
+            c["unit"] = u
         whose = d.get("Чей", "")
         if whose and t in ("sales_percent", "plan_bonus"):
             s = pick(WHOSE_RU, whose, "Зарплата", n, "Чей")
@@ -296,6 +310,10 @@ def to_raw(tables):
         elif t == "debt_penalty":
             c["amount"] = val
             c["share"] = d.get("Порог") or "10%"
+        elif t == "per_unit":
+            c["rate" if str(val).strip().endswith("%") else "price"] = val
+            if d.get("Название"):
+                c["name"] = d["Название"]
         schemes.setdefault(pid, []).append(c)
         where[f"pay_schemes.{pid}[{len(schemes[pid])}]"] = ("Зарплата", n, "")
     for pos in positions:
@@ -459,9 +477,12 @@ def from_raw(raw):
     for pid, (pn, scheme) in pname.items():
         for c in schemes.get(scheme, []) or []:
             ty = c["type"]
-            key = (ty, c.get("mode", "steps") if ty == "plan_bonus" else None)
+            key = (ty, c.get("mode", "steps") if ty == "plan_bonus" else ("cut" if c.get("cut") else None))
             m = c.get("metric", "")
-            row = [pn, cubes.get(key, ty), metrics.get(m, f"Группа {m[4:]}" if m.startswith("grp:") else ""),
+            shown = metrics.get(m, f"Группа {m[4:]}" if m.startswith("grp:") else "")
+            if ty == "per_unit":
+                shown = UNIT_TITLES.get(c.get("unit"), (c.get("unit", ""),))[0]
+            row = [pn, cubes.get(key, ty), shown,
                    whose.get(c.get("scope", "self"), "") if ty in ("sales_percent", "plan_bonus") else "", "", "", "", "",
                    "", ""]
             if ty == "salary":
@@ -476,6 +497,9 @@ def from_raw(raw):
                 row[4], row[8], row[9] = _human(c.get("amount")), _human(c.get("cut_per_miss", "")), c.get("name", "")
             elif ty == "debt_penalty":
                 row[4], row[5] = _human(c.get("amount")), _pct(c.get("share"))
+            elif ty == "per_unit":
+                row[4] = _pct(c["rate"]) if "rate" in c else _human(c.get("price"))
+                row[9] = c.get("name", "")
             t["Зарплата"].append(row)
     for mins, fine in (get("timesheet.late") or []):
         t["Опоздания"].append([mins, _human(fine)])

@@ -20,7 +20,23 @@
   fixed_bonus    фиксированный бонус name/amount; cut_per_miss — минус за каждый пропуск дня
   debt_penalty   удержание amount, если просрочка дольше days дней больше доли share от продаж
   timesheet      штрафы табеля: опоздания и прогулы (правила — timesheet в анкете)
+  per_unit       сдельно: unit — единица (км, кг, точки, ошибки…), price — сумма за единицу или rate — доля
+                 от суммы (для единиц в ₽); cut: true — это удержание (минус). Единицы дают модули (UNITS).
 """
+
+# Единицы для сдельных кубиков: код → (название, модуль). Считает их модуль: ``unit("km", fn)``,
+# fn(payroll, emp) → количество за месяц. Модуль не подключён — кубик даёт ноль с пояснением.
+UNIT_TITLES = {
+    "km": ("Пробег, км", "logistics"), "kg": ("Вес, кг", "logistics"), "m3": ("Объём, м³", "logistics"),
+    "points": ("Точки доставки", "logistics"), "trips": ("Рейсы", "logistics"),
+    "ret_own": ("Возвраты по своей вине, ₽", "returns"), "ret_err": ("Ошибки в возвратах", "returns"),
+}
+UNITS = {}
+
+
+def unit(code, fn):
+    """Модуль регистрирует, как считать единицу."""
+    UNITS[code] = fn
 
 SCOPES = {"self", "team", "dept"}
 METRICS = {"sales", "akb", "sku", "collect", "focus", "visits"}
@@ -69,6 +85,11 @@ def check(c):
             p.append("debt_penalty: amount — сумма удержания, share — допустимая доля просрочки")
     elif t == "timesheet":
         pass
+    elif t == "per_unit":
+        if c.get("unit") not in UNIT_TITLES:
+            p.append(f"per_unit.unit «{c.get('unit')}» — одна из: {', '.join(UNIT_TITLES)}")
+        if not _num(c.get("price")) and not _num(c.get("rate")):
+            p.append("per_unit: price — сумма за единицу («4») или rate — доля («3%»)")
     if c.get("scope", "self") not in SCOPES:
         p.append(f"scope «{c.get('scope')}» — self, team или dept")
     return p
@@ -160,8 +181,27 @@ def timesheet(ctx, emp, c):
     return [("Штрафы по табелю", -total, ", ".join(n for _, n in fines[:4]) + ("…" if len(fines) > 4 else ""))]
 
 
+def per_unit(ctx, emp, c):
+    code = c["unit"]
+    title, module = UNIT_TITLES.get(code, (code, ""))
+    name = c.get("name") or (("Удержание: " if c.get("cut") else "") + title.split(",")[0].lower()).capitalize()
+    if module and not ctx.cfg.has_module(module):
+        return []
+    fn = UNITS.get(code)
+    if fn is None:
+        return [(name, 0, "нет данных")]
+    qty = fn(ctx, emp) or 0
+    sign = -1 if c.get("cut") else 1
+    if _num(c.get("rate")):
+        return [(name, sign * qty * c["rate"], f"{_n(qty)} × {_p(c['rate'], 1)}")] if qty else []
+    if not qty:
+        return []
+    unit_ = title.split(", ")[1] if ", " in title else "шт."
+    return [(name, sign * qty * c["price"], f"{_d(round(qty, 1))} {unit_} × {_d(c['price'])} ₽")]
+
+
 BUILTIN = {"salary": salary, "sales_percent": sales_percent, "plan_bonus": plan_bonus, "fixed_bonus": fixed_bonus,
-           "debt_penalty": debt_penalty, "timesheet": timesheet}
+           "debt_penalty": debt_penalty, "timesheet": timesheet, "per_unit": per_unit}
 
 
 def _n(x):
