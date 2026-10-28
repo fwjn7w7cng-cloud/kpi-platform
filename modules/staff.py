@@ -44,8 +44,7 @@ def staff_card(ctx, emp_id):
     if open_tasks and ctx.can("tasks"):
         v.table(["Задача", "Срок"], [Row([x["text"], x["due"][8:10] + "." + x["due"][5:7]]) for x in open_tasks[:5]])
     kb = rows([mod_button(ctx, "💰 Зарплата", f"pay:{emp['id']}", "payroll"), Button("📅 Табель", f"ts:{emp['id']}"),
-               mod_button(ctx, "📌 Задачи", "tasks", "tasks"), mod_button(ctx, "🌴 Отпуск", "lv", "shifts"),
-               mod_button(ctx, "📄 Документы", "docs", "documents")], 2)
+               mod_button(ctx, "📌 Задачи", "tasks", "tasks")], 2)
     return Reply(view=v, buttons=kb)
 
 

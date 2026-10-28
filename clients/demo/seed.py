@@ -211,20 +211,6 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=3):
         status = "done" if i % 3 == 0 else "open"
         db.x("INSERT INTO tasks (author_id, emp_id, text, due, status, ts) VALUES (?,?,?,?,?,?)",
              rop["id"] if i % 2 else owner["id"], eid, task_texts[i % len(task_texts)], due.isoformat(), status, today.isoformat())
-    staff = [e for e in everyone if e["dept"] != "sales"]
-    if staff:
-        e = R.choice(staff)
-        db.x("INSERT INTO leave (emp_id, kind, start, end, status, ts) VALUES (?,?,?,?,?,?)",
-             e["id"], "vacation", (today + timedelta(days=10)).isoformat(), (today + timedelta(days=23)).isoformat(), "wait", today.isoformat())
-        e2 = R.choice(everyone)
-        db.x("INSERT INTO leave (emp_id, kind, start, end, status, decided_by, ts) VALUES (?,?,?,?,?,?,?)",
-             e2["id"], "dayoff", (today + timedelta(days=2)).isoformat(), (today + timedelta(days=2)).isoformat(), "ok", "Директор",
-             today.isoformat())
-    docs = {"driver": ["Водительские права", "Медсправка водителя"], "storekeeper": ["Медкнижка"], "rep": ["Трудовой договор"]}
-    for e in everyone:
-        for t in docs.get(e["position"], []):
-            until = today + timedelta(days=R.choice([-5, 12, 25, 60, 200, 400]))
-            db.x("INSERT INTO documents (emp_id, title, until) VALUES (?,?,?)", e["id"], t, until.isoformat())
     db.put("seeded", {"industry": industry, "seeded": today.isoformat(), "months": months_list})
     return {"reps": len(reps), "clients": len(clients), "months": months_list}
 

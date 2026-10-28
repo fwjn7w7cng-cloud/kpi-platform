@@ -24,7 +24,7 @@ from core.ui.kit import Button, Reply
 
 log = logging.getLogger("kpi")
 
-MODULES = ["debts", "reminders", "achievements", "staff", "payroll", "shifts", "documents", "tasks", "approval",
+MODULES = ["debts", "reminders", "achievements", "staff", "payroll", "tasks", "approval",
            "audit", "watchdog", "forecast", "call_today", "formulas", "ai", "locked"]
 
 

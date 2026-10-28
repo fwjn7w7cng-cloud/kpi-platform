@@ -15,8 +15,6 @@ MODULES = {
     "achievements": ("Достижения и челленджи", "business"),
     "staff":        ("Кабинеты склада, водителей, офиса", "business"),
     "payroll":      ("Предварительный расчёт зарплаты", "business"),
-    "shifts":       ("График смен и заявки на отпуск", "business"),
-    "documents":    ("Сроки документов", "business"),
     "tasks":        ("Задачи от руководителя", "business"),
     "approval":     ("Цепочка утверждения зарплаты и реестр", "control"),
     "audit":        ("Журнал изменений", "control"),
@@ -46,7 +44,6 @@ REQUIRES = {
     "approval": {"payroll"},
     "audit": {"payroll"},
     "call_today": {"debts"},
-    "shifts": {"staff"},
 }
 
 
