@@ -38,10 +38,21 @@ class Demo(unittest.TestCase):
         self.app.press(10, "sw:ed:start")
         self.app.press(10, "sw:role:rep")
         labels = self.labels(self.app.start(10))
-        self.assertIn("🔒 Долги", labels)
+        self.assertIn("🔒 Клиенты", labels)
         self.assertIn("📈 Мой план", labels)
+        self.assertIn("🔒 Долги", self.labels(self.app.press(10, "mg:sales")))   # длинная главная — в группах
         r = self.app.press(10, "debts")                        # закрытый экран не открывается — объясняет
         self.assertIn("Доступно в Бизнес", r[0].view.subtitle)
+
+    def test_long_home_is_grouped(self):
+        self.app.press(15, "sw:ed:control")
+        self.app.press(15, "sw:role:owner")
+        menu = [b for r in self.app.start(15) for b in r.all_buttons() if not b.to.startswith(("sw:", "mon:"))]
+        self.assertLessEqual(len(menu), 12)
+        self.assertIn("mg:money", [b.to for b in menu])
+        inside = self.labels(self.app.press(15, "mg:money"))
+        self.assertIn("🗓 Месяц", inside)
+        self.assertIn("📋 Планы", inside)
 
     def test_rep_cannot_see_colleague(self):
         self.app.press(11, "sw:ed:control")

@@ -47,7 +47,31 @@ def home(ctx):
     if ctx.demo:
         v.note(f"Демо · {INDUSTRIES[ctx.industry].lower()} · редакция «{E.EDITIONS[ctx.cfg.edition]['title']}». "
                "Все люди и цифры выдуманы.")
-    btns = []
+    kb = rows(_home_buttons(ctx), 2)
+    kb.append(_month_switch(ctx))
+    if ctx.demo:
+        kb.append([Button("🎭 Роль", "sw:role"), Button("🏭 Отрасль", "sw:ind"), Button("💼 Редакция", "sw:ed")])
+    elif ctx.admin:
+        kb.append([Button("👁 Смотреть как…", "viewas")])
+    return Reply(view=v, buttons=kb)
+
+
+# Длинная главная (больше MENU_MAX кнопок) собирается в группы: на главной — самое частое и кнопки групп,
+# внутри группы — её пункты. Пункт без группы всегда на главной; группа из одного пункта не создаётся.
+MENU_MAX = 12
+MENU_GROUPS = [
+    ("sales", "📈 Продажи и клиенты", {"rating", "cli", "rtd", "alerts", "ai", "fc", "cmp", "debts", "rv", "watch", "achb",
+                                       "fx", "call"}),
+    ("money", "💰 Зарплата, планы, месяц", {"fund", "month", "pl", "log"}),
+    ("ops", "📦 Склад и логистика", {"sk", "lg"}),
+    ("team", "👥 Люди и задачи", {"people", "ts", "tasks", "qz"}),
+    ("more", "➕ Ещё модули", {"miniapp", "direct_1c", "branches", "branding"}),
+]
+TOP_FOR_SELLERS = {"call", "cli"}         # торговому это нужно каждый день — не прятать в группу
+
+
+def _menu_items(ctx):
+    out = []
     for m in MENU:
         if ctx.role not in m.roles:
             continue
@@ -55,14 +79,39 @@ def home(ctx):
             continue
         if m.when and not m.when(ctx):
             continue
-        btns.append(Button(m.label, m.to) if ctx.can(m.module) else Button(m.label, lock=m.module))
-    kb = rows(btns, 2)
-    kb.append(_month_switch(ctx))
-    if ctx.demo:
-        kb.append([Button("🎭 Роль", "sw:role"), Button("🏭 Отрасль", "sw:ind"), Button("💼 Редакция", "sw:ed")])
-    elif ctx.admin:
-        kb.append([Button("👁 Смотреть как…", "viewas")])
-    return Reply(view=v, buttons=kb)
+        out.append((m, Button(m.label, m.to) if ctx.can(m.module) else Button(m.label, lock=m.module)))
+    return out
+
+
+def _group_of(ctx, m):
+    if ctx.role in SELLERS and m.to in TOP_FOR_SELLERS:
+        return None
+    return next((g for g, _, tos in MENU_GROUPS if m.to in tos), None)
+
+
+def _home_buttons(ctx):
+    items = _menu_items(ctx)
+    if len(items) <= MENU_MAX:
+        return [b for _, b in items]
+    groups = {}
+    for m, b in items:
+        g = _group_of(ctx, m)
+        if g:
+            groups.setdefault(g, []).append(b)
+    top = [b for m, b in items if not _group_of(ctx, m) or len(groups[_group_of(ctx, m)]) == 1]
+    helpers = [b for b in top if b.to in ("help", "fb", "fbl")]
+    top = [b for b in top if b not in helpers]
+    grp = [Button(title, f"mg:{g}") for g, title, _ in MENU_GROUPS if len(groups.get(g, [])) > 1]
+    return top + grp + helpers
+
+
+@screen("mg")
+def menu_group(ctx, gid):
+    title = next((t for g, t, _ in MENU_GROUPS if g == gid), None)
+    bs = [b for m, b in _menu_items(ctx) if _group_of(ctx, m) == gid]
+    if not title or not bs:
+        return home(ctx)
+    return Reply(text=title, buttons=rows(bs, 2))
 
 
 def _home_tiles(ctx):
