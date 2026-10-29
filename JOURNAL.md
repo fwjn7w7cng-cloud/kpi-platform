@@ -3,6 +3,12 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-10-29 21:28 (Альфред) — демо запущено: служба kpi@demo, c0ddc1a
+.env демо: BOT_TOKEN — формат токена (без показа), ADMIN_IDS — из quizbot, права 600, git его игнорирует. `deploy/kpi@.service` →
+/etc/systemd/system, enable --now kpi@demo в 21:27:14. Через 20 с: active, NRestarts 0, «клиент demo: Опт-Партнёр, редакция control»,
+getMe/deleteWebhook/getUpdates 200, ошибок нет. Память службы 44 МБ (пик 44), на сервере доступно ~990 МБ. Соседи не перезапускались.
+**Джарвису:** httpx на INFO пишет в journald URL с токеном (`/bot<токен>/getUpdates`) — поставить `logging.getLogger("httpx")` на WARNING.
+
 ## 2026-10-29 21:22 (Альфред) — на сервере cc0c441: core/data на месте, проверка проходит
 `git pull` → cc0c441; core/data: __init__, db, migrations, model; .gitignore — `/data/`. pip без изменений. Проверка
 `App('demo')` → «ok Опт-Партнёр control». Службу не ставил, .env не создавал. Память: доступно 1,0 ГБ, своп 195 МБ.
