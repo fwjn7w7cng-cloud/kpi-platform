@@ -37,12 +37,15 @@ class Demo(unittest.TestCase):
     def test_start_edition_shows_locks(self):
         self.app.press(10, "sw:ed:start")
         self.app.press(10, "sw:role:rep")
-        labels = self.labels(self.app.start(10))
-        self.assertIn("🔒 Клиенты", labels)
-        self.assertIn("📈 Мой план", labels)
-        self.assertIn("🔒 Возвраты", self.labels(self.app.press(10, "mg:sales")))   # длинная главная — в группах
-        self.assertIn("💵 Долги", self.labels(self.app.press(10, "mg:sales")))      # дебиторка — уже в Старте
-        self.assertIn("💰 Моя зарплата", labels)                                     # и зарплата
+        out = self.app.start(10)
+        labels = self.labels(out)
+        kb = [x for r in out if r.keyboard for row in r.keyboard for x in row]
+        self.assertIn("😴 Клиенты", kb)                        # то, что в нижнем меню, на главной не повторяется
+        self.assertIn("📈 Мой план", kb)
+        self.assertNotIn("📈 Мой план", labels)
+        self.assertIn("🔒 Возвраты", labels)
+        self.assertIn("💵 Долги", labels)                       # дебиторка — уже в Старте
+        self.assertIn("💰 Зарплата", kb)                        # и зарплата
         r = self.app.press(10, "cli")                          # закрытый экран не открывается — объясняет
         self.assertIn("Доступно в Бизнес", r[0].view.subtitle)
 
@@ -53,8 +56,24 @@ class Demo(unittest.TestCase):
         self.assertLessEqual(len(menu), 12)
         self.assertIn("mg:money", [b.to for b in menu])
         inside = self.labels(self.app.press(15, "mg:money"))
-        self.assertIn("🗓 Месяц", inside)
+        self.assertNotIn("🗓 Месяц", inside)                    # он в нижнем меню
         self.assertIn("📋 Планы", inside)
+        tos = [b.to for b in menu]
+        self.assertIn("deptv:warehouse", tos)                    # все отделы — отдельными кнопками
+        self.assertIn("sales", tos)
+        self.assertNotIn("sw:role", [b.to for r in self.app.start(15) for b in r.all_buttons()])
+
+    def test_back_button(self):
+        self.app.press(16, "sw:ed:control")
+        self.app.press(16, "sw:role:owner")
+        self.app.start(16)
+        r1 = self.app.press(16, "mg:money")
+        self.assertIn("bk:0", [b.to for r in r1 for b in r.all_buttons()])
+        r2 = self.app.press(16, "pl")
+        back = next(b.to for r in r2 for b in r.all_buttons() if b.label == "‹ Назад")
+        self.assertEqual(back, "bk:1")
+        r3 = self.app.press(16, back)                            # назад — снова группа «Зарплата, планы, месяц»
+        self.assertIn("📋 Планы", self.labels(r3))
 
     def test_rep_cannot_see_colleague(self):
         self.app.press(11, "sw:ed:control")

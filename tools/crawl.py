@@ -46,7 +46,7 @@ def crawl(app, uid, depth=4, png_dir=None, tag="", limit=500):
         if d >= depth or reply.to:
             continue
         for b in reply.all_buttons():
-            if not b.to or b.to in seen or b.to in SKIP or b.to.startswith(("sw:", "mon:", "appr:")):
+            if not b.to or b.to in seen or b.to in SKIP or b.to.startswith(("sw:", "mon:", "appr:", "bk:")):
                 continue
             seen.add(b.to)
             for r in app.press(uid, b.to):

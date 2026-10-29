@@ -29,6 +29,10 @@ MODULES = ["debts", "reminders", "achievements", "staff", "payroll", "tasks", "a
            "quiz", "stock", "logistics", "returns", "ramadan", "locked"]
 
 
+RESET = {"home", "mon"}          # главная и смена месяца: путь «Назад» начинается заново
+TRAIL = 12
+
+
 class App:
     def __init__(self, client_id, today=None, admins=(), data_dir=None):
         self.client_id = client_id
@@ -119,14 +123,33 @@ class App:
     def start(self, user_id, name=""):
         ctx = self.ctx(user_id)
         ctx.session.pop("await", None)
+        ctx.session["trail"] = []
         ctx.save()
         return self._with_keyboard(user_id, self._run(ctx, "home", ()), force=True)
 
-    def press(self, user_id, data):
+    def press(self, user_id, data, top=False):
+        """top — нажатие из нижнего меню: путь «Назад» начинается заново."""
         ctx = self.ctx(user_id)
         ctx.session.pop("await", None)
+        trail = [] if top else list(ctx.session.get("trail") or [])
         sid, *args = data.split(":")
-        return self._with_keyboard(user_id, self._run(ctx, sid, args))
+        if sid == "bk":                              # «‹ Назад»: вернуться на экран из пути
+            n = int(args[0]) if args and args[0].isdigit() else 0
+            trail = trail[:n]
+            data = trail[-1] if trail else "home"
+            sid, *args = data.split(":")
+        if sid in RESET:
+            trail = []
+        rev = ctx.db.rev()
+        out = self._run(ctx, sid, args, finish=False)
+        mine = [r for r in out if not r.to]
+        # Экран можно открыть ещё раз кнопкой «Назад», только если он ничего не менял и никому не писал.
+        safe = sid not in RESET and ctx.db.rev() == rev and len(mine) == len(out) and not (mine and mine[-1].ask)
+        if safe and (not trail or trail[-1] != data):
+            trail.append(data)
+        ctx.session["trail"] = trail[-TRAIL:]
+        back = len(trail) - 1 if safe else len(trail)
+        return self._with_keyboard(user_id, self._finish(ctx, out, sid, back=back))
 
     def _with_keyboard(self, user_id, out, force=False):
         """Нижнее меню: прислать заново, когда оно поменялось (сменилась роль, редакция) или по /start."""
@@ -148,7 +171,7 @@ class App:
         from core.ui.screens import bottom_target
         to = bottom_target(ctx, text) if not photo else None
         if to:                                       # кнопка нижнего меню — даже если бот ждал ответ текстом
-            return self.press(user_id, to)
+            return self.press(user_id, to, top=True)
         wait = ctx.session.pop("await", None)
         ctx.save()
         if not wait:
@@ -172,7 +195,7 @@ class App:
             log.error("ввод %s: %s", wait["kind"], traceback.format_exc())
             return [Reply(text="⚠️ Не получилось. Попробуйте ещё раз.", buttons=[[Button("🏠 Главная", "home")]])]
 
-    def _run(self, ctx, sid, args):
+    def _run(self, ctx, sid, args, finish=True):
         if sid not in REG.SCREENS:
             sid, args = "home", ()
         fn, module = REG.SCREENS[sid]
@@ -183,13 +206,19 @@ class App:
         except Exception:
             log.error("экран %s %s: %s", sid, args, traceback.format_exc())
             r = Reply(text="⚠️ Экран не открылся. Мы уже знаем об этом.")
-        return self._finish(ctx, r, sid)
-
-    def _finish(self, ctx, r, sid):
         out = r if isinstance(r, list) else [r]
-        last = out[-1]
-        if sid != "home" and not last.ask and not any(b.to == "home" for b in last.all_buttons()):
-            last.buttons = list(last.buttons) + [[Button("🏠 Главная", "home")]]
+        return self._finish(ctx, out, sid) if finish else out
+
+    def _finish(self, ctx, r, sid, back=None):
+        """Под последним своим сообщением — «‹ Назад» (на прошлый экран пути; «Главная» есть в нижнем меню)."""
+        out = r if isinstance(r, list) else [r]
+        mine = [x for x in out if not x.to]
+        last = mine[-1] if mine else None
+        if back is None:                             # ответ на ввод текста — назад на экран, с которого спросили
+            back = len(ctx.session.get("trail") or [])
+        if last and sid not in RESET and not last.ask and \
+                not any(b.to == "home" or (b.to or "").startswith("bk:") for b in last.all_buttons()):
+            last.buttons = list(last.buttons) + [[Button("‹ Назад", f"bk:{max(back, 0)}")]]
         ctx.save()
         return out
 

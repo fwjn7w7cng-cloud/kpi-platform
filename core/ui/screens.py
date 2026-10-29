@@ -52,13 +52,28 @@ def home(ctx):
     if ctx.demo:
         v.note(f"Демо · {INDUSTRIES[ctx.industry].lower()} · редакция «{E.EDITIONS[ctx.cfg.edition]['title']}». "
                "Все люди и цифры выдуманы.")
-    kb = rows(_home_buttons(ctx), 2)
+    # Что уже есть в нижнем меню, на главной не повторяем (переключатели демо, «Смотреть как», отзывы — тоже там).
+    kb = rows(_dept_buttons(ctx), 2) + rows(_home_buttons(ctx), 2)
     kb.append(_month_switch(ctx))
-    if ctx.demo:
-        kb.append([Button("🎭 Роль", "sw:role"), Button("🏭 Отрасль", "sw:ind"), Button("💼 Редакция", "sw:ed")])
-    elif ctx.admin:
-        kb.append([Button("👁 Смотреть как…", "viewas")])
     return Reply(view=v, buttons=kb)
+
+
+DEPT_ICON = {"sales": "🏢", "warehouse": "📦", "logistics": "🚚", "purchasing": "🛒", "office": "🏛"}
+
+
+def _dept_buttons(ctx):
+    """Все отделы — каждый своей кнопкой (тому, кто видит всю фирму). Продажи → экран отдела продаж,
+    остальные → экран отдела из модуля кабинетов (deptv:<отдел>)."""
+    if ctx.scope != "all" or ctx.role not in ("owner", "admin"):
+        return []
+    out = []
+    for d in ctx.cfg.departments:
+        label = f"{DEPT_ICON.get(d.kind, '🏬')} {d.name}"
+        if d.kind == "sales":
+            out.append(Button(label, "sales"))
+        else:
+            out.append(_mod(ctx, label, f"deptv:{d.id}", "staff"))
+    return out
 
 
 # Длинная главная (больше MENU_MAX кнопок) собирается в группы: на главной — самое частое и кнопки групп,
@@ -94,8 +109,19 @@ def _group_of(ctx, m):
     return next((g for g, _, tos in MENU_GROUPS if m.to in tos), None)
 
 
+HOME_SKIP = {"sales", "deptv", "sk", "lg"}   # у владельца и админа они внутри кнопок отделов
+
+
+def _home_items(ctx):
+    """Пункты главной без тех, что уже в нижнем меню или заменены кнопками отделов."""
+    skip = {to for row in bottom_rows(ctx) for _, to in row}
+    if _dept_buttons(ctx):
+        skip |= HOME_SKIP
+    return [(m, b) for m, b in _menu_items(ctx) if m.to not in skip]
+
+
 def _home_buttons(ctx):
-    items = _menu_items(ctx)
+    items = _home_items(ctx)
     if len(items) <= MENU_MAX:
         return [b for _, b in items]
     groups = {}
@@ -113,7 +139,7 @@ def _home_buttons(ctx):
 @screen("mg")
 def menu_group(ctx, gid):
     title = next((t for g, t, _ in MENU_GROUPS if g == gid), None)
-    bs = [b for m, b in _menu_items(ctx) if _group_of(ctx, m) == gid]
+    bs = [b for m, b in _home_items(ctx) if _group_of(ctx, m) == gid]
     if not title or not bs:
         return home(ctx)
     return Reply(text=title, buttons=rows(bs, 2))
@@ -127,10 +153,10 @@ BOTTOM = {
     "rep":   [("📈 Мой план", "me"), ("🚗 Маршрут", "rt"), ("😴 Клиенты", "cli"), ("💰 Зарплата", "pay")],
     "sv":    [("👥 Команда", "team"), ("📋 Отчёты дня", "rtd"), ("💵 Долги", "debts"), ("📌 Задачи", "tasks")],
     "head":  [("🏢 Отдел", "sales"), ("📋 Планы", "pl"), ("🗓 Месяц", "month"), ("📌 Задачи", "tasks")],
-    "owner": [("🏢 Продажи", "sales"), ("💰 Фонд", "fund"), ("✅ Утвердить", "appr"), ("🗓 Месяц", "month")],
+    "owner": [("💰 Фонд", "fund"), ("✅ Утвердить", "appr"), ("🗓 Месяц", "month")],
     "accountant": [("🗓 Месяц", "month"), ("💰 Фонд", "fund")],
     "staff": [("🧑‍🔧 Кабинет", "cab"), ("💰 Зарплата", "pay")],
-    "admin": [("🏢 Продажи", "sales"), ("💬 Отзывы", "fbl"), ("🗓 Месяц", "month"), ("👁 Смотреть как", "viewas")],
+    "admin": [("💬 Отзывы", "fbl"), ("🗓 Месяц", "month"), ("👁 Смотреть как", "viewas")],
 }
 HEAD_OTHER = [("👤 Люди", "people"), ("📅 Табель", "ts"), ("📌 Задачи", "tasks")]
 
@@ -145,7 +171,7 @@ def bottom_rows(ctx):
         items = [("🎓 Обучение", "qz")] + items[:3]
     fb = ("💬 Отзывы", "fbl") if ctx.role == "admin" else \
         ("🐞 Не работает", "fb") if ctx.role in ("rep", "newbie", "staff") else ("💬 Предложение", "fb")
-    items = [("🏠 Главная", "home")] + [x for x in items if x != fb] + ([fb] if fb not in items else [])
+    items = [("🏠 Главная", "home")] + [x for x in items if x != fb] + [fb]
     out = [items[i:i + 3] for i in range(0, len(items), 3)]
     if ctx.demo:
         out.append([("🎭 Роль", "sw:role"), ("🏭 Отрасль", "sw:ind"), ("💼 Редакция", "sw:ed")])
