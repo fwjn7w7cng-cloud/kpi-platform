@@ -120,6 +120,19 @@ class App:
         from core.ui.context import Ctx
         return Ctx(self, user_id)
 
+    def commands(self):
+        """Команды для кнопки «Меню» мессенджера: [(команда, подпись, экран)]."""
+        out = [("start", "🏠 Главная", "home"), ("help", "❓ Как пользоваться", "help"),
+               ("feedback", "🐞 Не работает / предложение", "fb")]
+        if self.demo:
+            out += [("role", "🎭 Сменить роль", "sw:role"), ("industry", "🏭 Сменить отрасль", "sw:ind"),
+                    ("edition", "💼 Сменить редакцию", "sw:ed"), ("restart", "🔄 Начать демо заново", "sw:reset")]
+        return out
+
+    def command(self, user_id, cmd):
+        to = next((t for c, _, t in self.commands() if c == cmd), "home")
+        return self.start(user_id) if to == "home" else self.press(user_id, to, top=True)
+
     def start(self, user_id, name=""):
         ctx = self.ctx(user_id)
         ctx.session.pop("await", None)

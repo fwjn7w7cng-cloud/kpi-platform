@@ -63,6 +63,14 @@ class Demo(unittest.TestCase):
         self.assertIn("sales", tos)
         self.assertNotIn("sw:role", [b.to for r in self.app.start(15) for b in r.all_buttons()])
 
+    def test_menu_commands(self):
+        cmds = [c for c, _, _ in self.app.commands()]
+        self.assertEqual(cmds[0], "start")
+        self.assertIn("restart", cmds)                           # в демо — «Начать заново» в кнопке «Меню»
+        r = self.app.command(17, "role")
+        self.assertTrue(any(b.to.startswith("sw:role:") for x in r for b in x.all_buttons()))
+        self.assertTrue(self.app.command(17, "нет-такой"))       # неизвестная — главная
+
     def test_back_button(self):
         self.app.press(16, "sw:ed:control")
         self.app.press(16, "sw:role:owner")

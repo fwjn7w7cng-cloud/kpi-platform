@@ -17,11 +17,10 @@ log = logging.getLogger("kpi")
 
 
 def build(app, token, mailbox=None, drive=None):
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, KeyboardButton, ReplyKeyboardMarkup, Update
+    from telegram import BotCommand, InlineKeyboardButton, MenuButtonCommands, InlineKeyboardMarkup, InputFile, KeyboardButton, ReplyKeyboardMarkup, Update
     from telegram.ext import (Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler,
                               filters)
 
-    tg = Application.builder().token(token).build()
     tz = ZoneInfo(app.cfg.timezone)
 
     def kb(reply):
@@ -60,6 +59,18 @@ def build(app, token, mailbox=None, drive=None):
     async def on_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         u = update.effective_user
         await deliver(context.bot, update.effective_chat.id, await asyncio.to_thread(app.start, u.id, u.full_name))
+
+    async def on_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        cmd = (update.message.text or "").split()[0].lstrip("/").split("@")[0].lower()
+        u = update.effective_user
+        await deliver(context.bot, update.effective_chat.id, await asyncio.to_thread(app.command, u.id, cmd))
+
+    async def post_init(application):                 # кнопка «Меню» слева от поля ввода — список команд
+        try:
+            await application.bot.set_my_commands([BotCommand(c, t) for c, t, _ in app.commands()])
+            await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+        except Exception:                             # noqa: BLE001
+            log.exception("команды меню")
 
     async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         q = update.callback_query
@@ -121,7 +132,9 @@ def build(app, token, mailbox=None, drive=None):
             except Exception:                         # noqa: BLE001
                 log.exception("админу %s", a)
 
+    tg = Application.builder().token(token).post_init(post_init).build()
     tg.add_handler(CommandHandler("start", on_start))
+    tg.add_handler(CommandHandler([c for c, _, _ in app.commands() if c != "start"], on_command))
     tg.add_handler(CallbackQueryHandler(on_button))
     tg.add_handler(MessageHandler(filters.Document.ALL, on_file))
     tg.add_handler(MessageHandler(filters.PHOTO, on_photo))
