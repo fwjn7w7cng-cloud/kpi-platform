@@ -58,7 +58,9 @@ roles:
 kpi:
   akb_min: "5 000"            # клиент входит в АКБ, если купил за месяц на эту сумму и больше
   focus_groups: 2             # сколько групп товаров бот берёт в «фокусные» в планах демо
-  debt_days: [30, 60]         # пороги просрочки для экранов и тревог
+  debt_days: [30, 60]         # пороги просрочки для экранов и тревог; главный — последний
+  debt_norm: "10%"            # норма просрочки: выше — красная зона и «собрать до нормы»
+  debt_base: 30d              # от чего доля: month — продажи месяца, 30d — продажи за 30 дней, debt — весь долг
 
 # Табель: штрафы за опоздания (минут → ₽) и за прогул
 timesheet:
@@ -81,10 +83,12 @@ pay_schemes:
     - {type: salary, amount: "40 000"}
     - {type: sales_percent, rate: "0,15%", scope: team}
     - {type: plan_bonus, metric: sales, scope: team, mode: steps, steps: [["90%", "10 000"], ["100%", "20 000"]]}
+    - {type: debt_bonus, mode: steps, scope: team, steps: [["3%", "5 000"], ["6%", "2 000"]], name: "Бонус: низкая просрочка команды"}
     - {type: timesheet}
   rop:
     - {type: salary, amount: "60 000"}
     - {type: sales_percent, rate: "0,05%", scope: dept}
+    - {type: debt_penalty, mode: percent, rate: "1%", max: "10 000", scope: dept, days: 90, name: "Просрочка 90+ отдела"}
     - {type: timesheet}
   warehouse:
     - {type: salary, amount: "35 000"}

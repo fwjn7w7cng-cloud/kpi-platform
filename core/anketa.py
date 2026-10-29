@@ -31,11 +31,17 @@ ROLE_RU = {"Менеджер": "rep", "Супервайзер": "sv", "Нача�
 CUBE_RU = {"Оклад": ("salary", None), "% от продаж": ("sales_percent", None),
            "Бонус за план — ступени": ("plan_bonus", "steps"), "Бонус за план — пропорционально": ("plan_bonus", "linear"),
            "Фикс-бонус": ("fixed_bonus", None), "Удержание за просрочку": ("debt_penalty", None),
+           "Удержание за просрочку — % от неё": ("debt_penalty", "percent"),
+           "Удержание за просрочку — ступени": ("debt_penalty", "steps"),
+           "Бонус за низкую просрочку": ("debt_bonus", None), "Бонус за низкую просрочку — ступени": ("debt_bonus", "steps"),
            "Штрафы табеля": ("timesheet", None), "Сдельно за единицу": ("per_unit", None),
            "Удержание за единицу": ("per_unit", "cut")}
 METRIC_RU = {"Продажи": "sales", "АКБ": "akb", "SKU": "sku", "Сбор денег": "collect", "Фокусные группы": "focus",
              "Визиты с заказом": "visits"}
 UNIT_RU = {t: k for k, (t, _) in UNIT_TITLES.items()}
+DEBT_OF_RU = {"от продаж": "sales", "от продаж за 30 дней": "30d", "от долга": "debt"}
+DEBT_BASE_RU = {"Продажи месяца": "month", "Продажи за 30 дней": "30d", "Весь долг": "debt"}
+DEBT_EXAMPLES = ["Просрочка 30+", "Просрочка 60+", "Просрочка 90+", "Просрочка 60+ от долга", "Просрочка 30+ от продаж за 30 дней"]
 WHOSE_RU = {"Свои": "self", "Команды": "team", "Отдела": "dept"}
 SOURCE_RU = {"Почта": "mail", "Google Диск": "drive", "Выдуманные (показ)": "seed"}
 FORMULA_RU = {"Продажи": "sales", "АКБ": "akb", "SKU": "sku", "Сбор": "collect", "Фокус": "focus", "Визиты": "visits",
@@ -61,7 +67,9 @@ COMPANY = [
     ("Делитель оклада, дней", "work_week.salary_days", "int", "оклад ÷ это число × отработанные дни; обычно 26"),
     ("Порог АКБ, ₽", "kpi.akb_min", "money", "клиент входит в АКБ, если купил за месяц на эту сумму"),
     ("Фокусных групп", "kpi.focus_groups", "int", "сколько групп товаров в фокусе месяца"),
-    ("Пороги просрочки, дней", "kpi.debt_days", "ints", "через запятую: 30, 60"),
+    ("Пороги просрочки, дней", "kpi.debt_days", "ints", "через запятую: 30, 60; главный — последний"),
+    ("Норма просрочки", "kpi.debt_norm", "pct", "доля просрочки, выше — красная зона и «собрать до нормы»; обычно 10%"),
+    ("База нормы просрочки", "kpi.debt_base", "debtbase", "Продажи месяца / Продажи за 30 дней / Весь долг"),
     ("Штраф за прогул, ₽", "timesheet.absent_fine", "money", ""),
     ("Утренняя рассылка", "schedule.morning", "text", "время 08:00; пусто — не слать"),
     ("Вечерняя рассылка", "schedule.evening", "text", "время 19:30; пусто — не слать"),
@@ -86,12 +94,13 @@ HEADS = {
 CHOICES = {
     "Отделы": {"Вид": list(KIND_RU)},
     "Должности": {"Роль": list(ROLE_RU)},
-    "Зарплата": {"Кубик": list(CUBE_RU), "Показатель": list(METRIC_RU) + list(UNIT_RU), "Чей": list(WHOSE_RU)},
+    "Зарплата": {"Кубик": list(CUBE_RU), "Показатель": list(METRIC_RU) + list(UNIT_RU) + DEBT_EXAMPLES, "Чей": list(WHOSE_RU)},
     "Праздники": {"Оплачивается": ["Да", "Нет"]},
     "Формулы": {"Единица": ["₽", "%", "шт."]},
     "Роли": {"Роль": list(ROLE_RU)},
 }
-COMPANY_CHOICES = {"industry": list(INDUSTRY_RU), "edition": list(EDITION_RU), "source": list(SOURCE_RU)}
+COMPANY_CHOICES = {"industry": list(INDUSTRY_RU), "edition": list(EDITION_RU), "source": list(SOURCE_RU),
+                   "debtbase": list(DEBT_BASE_RU)}
 
 GUIDE = [
     "Как заполнять анкету",
@@ -105,6 +114,9 @@ GUIDE = [
     "• Чей: Свои — по своим продажам, Команды — по продажам команды (супервайзеру), Отдела — по всему отделу.",
     "• Сдельно за единицу: «Показатель» — единица (км, точки доставки…), «Значение» — сумма за единицу: 4; для единиц в ₽ — процент: 3%.",
     "• Удержание за единицу — то же со знаком минус: например, 500 за каждую ошибку в возвратах.",
+    "• Просрочка: «Показатель» — «Просрочка 60+» (порог в днях) и, если нужно, «от долга» / «от продаж за 30 дней».",
+    "  Удержание: фикс (Значение — сумма, Порог — доля), % от неё (Значение — 5%, Потолок — не больше суммы), ступени (5% → 1 000).",
+    "  Бонус за низкую просрочку: фикс (Значение — сумма, Порог — не больше доли) или ступени (3% → 5 000; 5% → 3 000).",
     "• Колонки «Код» можно не трогать — бот заполнит сам.",
 ]
 
@@ -178,6 +190,8 @@ def to_raw(tables):
             v = pick(EDITION_RU, v, "Компания", n, "Редакция")
         elif kind == "source":
             v = pick(SOURCE_RU, v, "Компания", n, "Откуда отчёты")
+        elif kind == "debtbase":
+            v = pick(DEBT_BASE_RU, v, "Компания", n, "База нормы просрочки")
         elif kind == "modules":
             v = [pick(MODULE_RU, x, "Компания", n, "Модуль") for x in _list(v)]
         elif kind == "days":
@@ -271,8 +285,18 @@ def to_raw(tables):
                 bad("Зарплата", n, f"единица «{mt}» — выберите из списка: {', '.join(UNIT_RU)}")
                 continue
             c["unit"] = u
+        if t in ("debt_penalty", "debt_bonus"):
+            mt = d.get("Показатель", "").strip().lower()
+            if mt:
+                mm = re.match(r"просрочка\s*(\d+)\s*\+?\s*(.*)$", mt)
+                if not mm or (mm.group(2) and mm.group(2).strip() not in DEBT_OF_RU):
+                    bad("Зарплата", n, f"показатель «{d.get('Показатель')}» — пишите так: {', '.join(DEBT_EXAMPLES)}")
+                    continue
+                c["days"] = int(mm.group(1))
+                if mm.group(2).strip():
+                    c["of"] = DEBT_OF_RU[mm.group(2).strip()]
         whose = d.get("Чей", "")
-        if whose and t in ("sales_percent", "plan_bonus"):
+        if whose and t in ("sales_percent", "plan_bonus", "debt_penalty", "debt_bonus"):
             s = pick(WHOSE_RU, whose, "Зарплата", n, "Чей")
             if s and s != "self":
                 c["scope"] = s
@@ -307,9 +331,31 @@ def to_raw(tables):
             c["name"] = d.get("Название") or "Бонус"
             if d.get("Минус за пропуск"):
                 c["cut_per_miss"] = d["Минус за пропуск"]
-        elif t == "debt_penalty":
+        elif t == "debt_penalty" and mode == "percent":
+            c["rate"] = val
+            if d.get("Порог"):
+                c["min"] = d["Порог"]
+            if d.get("Потолок"):
+                c["max"] = d["Потолок"]
+        elif t in ("debt_penalty", "debt_bonus") and mode == "steps":
+            steps = []
+            for part in re.split(r"[;\n]", val):
+                if not part.strip():
+                    continue
+                mm = re.match(r"\s*([\d\s,.]+%)\s*(?:→|->|=|:|—|-)\s*(.+)$", part)
+                if not mm:
+                    bad("Зарплата", n, f"ступень «{part.strip()}» — пишите так: 5% → 1 000")
+                    continue
+                steps.append([mm.group(1).replace(" ", ""), mm.group(2).strip()])
+            c["steps"] = steps
+        elif t in ("debt_penalty", "debt_bonus"):
             c["amount"] = val
-            c["share"] = d.get("Порог") or "10%"
+            if d.get("Порог"):
+                c["share"] = d["Порог"]
+            elif t == "debt_penalty":
+                c["share"] = "10%"
+        if t in ("debt_penalty", "debt_bonus") and d.get("Название"):
+            c["name"] = d["Название"]
         elif t == "per_unit":
             c["rate" if str(val).strip().endswith("%") else "price"] = val
             if d.get("Название"):
@@ -435,7 +481,8 @@ def problems_text(p):
 
 def from_raw(raw):
     """Анкета (config.yaml) → листы таблицы со всеми значениями по-русски."""
-    inv = {"industry": _inv(INDUSTRY_RU), "edition": _inv(EDITION_RU), "source": _inv(SOURCE_RU)}
+    inv = {"industry": _inv(INDUSTRY_RU), "edition": _inv(EDITION_RU), "source": _inv(SOURCE_RU),
+           "debtbase": _inv(DEBT_BASE_RU)}
     t = {k: [list(v)] for k, v in HEADS.items()}
 
     def get(path):
@@ -456,6 +503,8 @@ def from_raw(raw):
             v = ", ".join(_inv(DAYS_RU).get(d, d) for d in v or [])
         elif kind == "ints":
             v = ", ".join(str(x) for x in v or [])
+        elif kind == "pct":
+            v = _pct(v)
         t["Компания"].append([label, _human(v), hint])
     kinds = _inv(KIND_RU)
     dname = {d["id"]: d["name"] for d in raw.get("departments", [])}
@@ -478,12 +527,18 @@ def from_raw(raw):
         for c in schemes.get(scheme, []) or []:
             ty = c["type"]
             key = (ty, c.get("mode", "steps") if ty == "plan_bonus" else ("cut" if c.get("cut") else None))
+            if ty in ("debt_penalty", "debt_bonus"):
+                key = (ty, None if c.get("mode", "fixed") == "fixed" else c["mode"])
             m = c.get("metric", "")
             shown = metrics.get(m, f"Группа {m[4:]}" if m.startswith("grp:") else "")
             if ty == "per_unit":
                 shown = UNIT_TITLES.get(c.get("unit"), (c.get("unit", ""),))[0]
+            if ty in ("debt_penalty", "debt_bonus") and (c.get("days") or c.get("of")):
+                shown = f"Просрочка {c.get('days') or (get('kpi.debt_days') or [60])[-1]}+" + \
+                    (f" {_inv(DEBT_OF_RU)[c['of']]}" if c.get("of") and c["of"] in _inv(DEBT_OF_RU) else "")
             row = [pn, cubes.get(key, ty), shown,
-                   whose.get(c.get("scope", "self"), "") if ty in ("sales_percent", "plan_bonus") else "", "", "", "", "",
+                   whose.get(c.get("scope", "self"), "") if ty in ("sales_percent", "plan_bonus", "debt_penalty", "debt_bonus") else "",
+                "", "", "", "",
                    "", ""]
             if ty == "salary":
                 row[4] = _human(c.get("amount", ""))
@@ -495,8 +550,14 @@ def from_raw(raw):
                 row[4], row[5], row[6] = _human(c.get("amount")), _pct(c.get("min")), _pct(c.get("cap"))
             elif ty == "fixed_bonus":
                 row[4], row[8], row[9] = _human(c.get("amount")), _human(c.get("cut_per_miss", "")), c.get("name", "")
-            elif ty == "debt_penalty":
+            elif ty in ("debt_penalty", "debt_bonus") and c.get("mode") == "percent":
+                row[4], row[5], row[6] = _pct(c.get("rate")), _pct(c.get("min")), _human(c.get("max", ""))
+            elif ty in ("debt_penalty", "debt_bonus") and c.get("mode") == "steps":
+                row[4] = "; ".join(f"{_pct(a)} → {_human(b)}" for a, b in c.get("steps", []))
+            elif ty in ("debt_penalty", "debt_bonus"):
                 row[4], row[5] = _human(c.get("amount")), _pct(c.get("share"))
+            if ty in ("debt_penalty", "debt_bonus"):
+                row[9] = c.get("name", "")
             elif ty == "per_unit":
                 row[4] = _pct(c["rate"]) if "rate" in c else _human(c.get("price"))
                 row[9] = c.get("name", "")

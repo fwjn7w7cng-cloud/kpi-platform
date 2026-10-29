@@ -222,3 +222,77 @@ class Anketa(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Debts(unittest.TestCase):
+    """Дебиторка: любой порог, доля от разной базы, удержания тремя способами, бонус, «собрать до нормы»."""
+
+    def setUp(self):
+        from core.data.db import DB
+        from core.data.model import Dataset, Debt, Sale
+        from core.kpi.engine import Kpi
+        from core.pay.engine import Payroll
+        from core.config import parse
+        self.raw = load_client("demo").raw
+        self.db = DB.open(":memory:")
+        self.emp = self.db.add_employee("Иванов Пётр", "sales", team="north", position="rep", role="rep", keys=["иванов петр"])
+        on = date(2026, 10, 21)
+        self.db.load(Dataset("sales", date(2026, 10, 1), date(2026, 10, 31), rows=[Sale(date(2026, 10, 5), "иванов петр", "1", "", 100000)]))
+        self.db.load(Dataset("debts", on, on, rows=[Debt(on, "иванов петр", "1", 50000, 20000, 12000, 9000, 9000)]))
+        self.parse, self.Kpi, self.Payroll = parse, Kpi, Payroll
+
+    def pay(self, comps, kpi=None):
+        raw = json.loads(json.dumps(self.raw))
+        raw["kpi"].update(kpi or {})
+        raw["pay_schemes"]["rep"] = comps
+        cfg = self.parse("demo", raw)
+        k = self.Kpi(cfg, self.db, "2026-10", TODAY)
+        return k, self.Payroll(cfg, self.db, k).calc(self.db.employee(self.emp)).rows
+
+    def test_thresholds_and_bases(self):
+        k, _ = self.pay([])
+        r = k.debts[self.emp][0]
+        self.assertEqual(k.overdue_amount(r, 30), 30000)
+        self.assertEqual(k.overdue_amount(r, 45), 24000)        # половина 31–60 + 61–90 + 91+
+        self.assertEqual(k.overdue_amount(r, 90), 9000)
+        self.assertAlmostEqual(k.debt_share([self.emp], 60, "debt")[2], 18000 / 50000)
+        self.assertEqual(k.emp(self.emp)["overdue"].detail["to_norm"], 18000 - 0.10 * 100000)
+        k2, _ = self.pay([], {"debt_norm": "20%"})
+        self.assertEqual(k2.emp(self.emp)["overdue"].detail["to_norm"], 0)
+
+    def test_penalty_modes_and_bonus(self):
+        _, rows = self.pay([{"type": "debt_penalty", "amount": "3 000", "share": "10%"}])
+        self.assertEqual(rows[0][1], -3000)                       # 18% > 10%
+        _, rows = self.pay([{"type": "debt_penalty", "mode": "percent", "rate": "5%", "max": "500"}])
+        self.assertEqual(rows[0][1], -500)                        # 5% от 18 000 = 900, потолок 500
+        _, rows = self.pay([{"type": "debt_penalty", "mode": "steps", "steps": [["5%", "1 000"], ["15%", "2 000"], ["30%", "5 000"]]}])
+        self.assertEqual(rows[0][1], -2000)
+        _, rows = self.pay([{"type": "debt_bonus", "mode": "steps", "days": 90, "steps": [["5%", "3 000"], ["10%", "1 000"]]}])
+        self.assertEqual(rows[0][1], 1000)                        # 90+: 9 000 / 100 000 = 9%
+        _, rows = self.pay([{"type": "debt_bonus", "amount": "2 000", "share": "5%"}])
+        self.assertEqual(rows[0][1], 0)
+
+    def test_ready_overdue_from_1c_wins(self):
+        from core.data.model import Dataset, Debt
+        on = date(2026, 10, 22)
+        self.db.load(Dataset("debts", on, on, rows=[Debt(on, "иванов петр", "1", 50000, 20000, 12000, 9000, 9000, over=7000)]))
+        k, _ = self.pay([])
+        self.assertEqual(k.emp(self.emp)["overdue"].detail["sum"], 7000)
+
+    def test_anketa_debt_rows_roundtrip(self):
+        raw = json.loads(json.dumps(self.raw))
+        raw["pay_schemes"]["rep"] = [{"type": "debt_penalty", "mode": "steps", "days": 45, "of": "debt",
+                                      "steps": [["5%", "1 000"], ["10%", "3 000"]]},
+                                     {"type": "debt_bonus", "amount": "2 000", "share": "3%", "scope": "team"}]
+        t = A.from_raw(raw)
+        rows = [r for r in t["Зарплата"] if r[0] == "Торговый представитель"]
+        self.assertIn(["Торговый представитель", "Удержание за просрочку — ступени", "Просрочка 45+ от долга", "Свои",
+                       "5% → 1 000; 10% → 3 000", "", "", "", "", ""], rows)
+        cfg, problems = A.check(t)
+        self.assertEqual(problems, [])
+        rep = cfg.raw["pay_schemes"][cfg.position("rep")["pay"]]
+        self.assertEqual(rep[0], {"type": "debt_penalty", "mode": "steps", "days": 45, "of": "debt",
+                                  "steps": [[0.05, 1000], [0.1, 3000]]})
+        self.assertEqual(rep[1]["scope"], "team")
+        comp = {r[0]: r[1] for r in t["Компания"]}
+        self.assertEqual((comp["Норма просрочки"], comp["База нормы просрочки"]), ("10%", "Продажи за 30 дней"))

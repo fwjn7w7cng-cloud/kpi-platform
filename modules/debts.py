@@ -39,36 +39,44 @@ def debts(ctx, kind=None, ident=None):
         return Reply(text="Нет доступа.")
     k = ctx.kpi()
     days = k.debt_days
+    first = min((ctx.cfg.raw.get("kpi") or {}).get("debt_days") or [days])
+    norm = k.debt_norm
+    base_t = {"month": "продажам месяца", "30d": "продажам за 30 дней", "debt": "всему долгу"}.get(k.debt_base, "продажам")
     rows_all = [(i, r) for i in ids for r in k.debts.get(i, [])]
     total = sum(r["total"] for _, r in rows_all)
-    over30 = sum(r["d31_60"] + r["d61_90"] + r["d91"] for _, r in rows_all)
-    over60 = sum(r["d61_90"] + r["d91"] for _, r in rows_all)
-    sales = sum(k.sales.get(i, 0) for i in ids)
+    over1 = sum(k.overdue_amount(r, first) for _, r in rows_all)
+    over, base, share = k.debt_share(ids)
+    to_norm = sum(max(o - norm * b_, 0) for o, b_, _ in (k.debt_share([i]) for i in ids))   # каждый — до своей нормы
     title = {"e": k.employees[int(ident)]["fio"] if kind == "e" else "",
              "t": next((t.name for t in ctx.cfg.teams if t.id == ident), "")}.get(kind, "Отдел продаж")
     on = day_title(date.fromisoformat(k.debt_on)) if k.debt_on else "—"
     v = View(f"💵 Долги · {title}", f"срез на {on}")
-    v.tiles([("Всего долг", money(total), None), ("Просрочка 30+", money(over30), "warn" if over30 else "good"),
-             (f"Просрочка {days}+", money(over60), "bad" if over60 > 0.1 * max(sales, 1) else "good")])
+    t = [("Всего долг", money(total), None)]
+    if first != days:
+        t.append((f"Просрочка {first}+", money(over1), "warn" if over1 else "good"))
+    t += [(f"Просрочка {days}+", money(over), "bad" if share > norm else "good"),
+          ("Собрать до нормы", money(to_norm), "bad" if to_norm else "good")]
+    v.tiles(t)
     if kind == "e":
-        top = sorted((r for _, r in rows_all), key=lambda r: -(r["d61_90"] + r["d91"] + r["d31_60"] * 0.5))
+        top = sorted((r for _, r in rows_all), key=lambda r: -(k.overdue_amount(r) + k.overdue_amount(r, first) * 0.5))
         v.cards([Card(ctx.db.client_name(r["client"]), money(r["total"]),
-                      [f"31–60: {money(r['d31_60'])} · 61+: {money(r['d61_90'] + r['d91'])}"],
-                      color="bad" if r["d61_90"] + r["d91"] else "warn" if r["d31_60"] else None)
-                 for r in top[:15] if r["d31_60"] + r["d61_90"] + r["d91"] > 0], title="Кто просрочил")
+                      [f"{first}+: {money(k.overdue_amount(r, first))}" + (f" · {days}+: {money(k.overdue_amount(r))}"
+                                                                          if first != days else "")],
+                      color="bad" if k.overdue_amount(r) else "warn")
+                 for r in top[:15] if k.overdue_amount(r, first) > 0], title="Кто просрочил")
+        v.note(f"Доля просрочки {days}+ — {pct(share, 1)} к {base_t}, норма — {pct(norm)}."
+               + (f" Чтобы выйти в норму, собрать {money(to_norm)}." if to_norm else ""))
         kb = [[Button("‹ План", f"emp:{ident}")]]
     else:
         per = []
         for i in ids:
-            rs = k.debts.get(i, [])
-            o = sum(r["d61_90"] + r["d91"] for r in rs)
-            s = k.sales.get(i, 0)
-            share = o / s if s else (1 if o else 0)
-            per.append((i, sum(r["total"] for r in rs), o, share))
+            o, b_, sh = k.debt_share([i])
+            per.append((i, sum(r["total"] for r in k.debts.get(i, [])), o, sh, max(o - norm * b_, 0)))
         per.sort(key=lambda x: -x[2])
-        v.table(["Менеджер", "Долг", f"{days}+", "Доля"],
-                [Row([short(k.employees[i]["fio"]), money(t, ""), money(o, ""),
-                      Cell(pct(sh), "bad" if sh > 0.1 else "warn" if sh > 0.05 else "good")]) for i, t, o, sh in per])
-        v.note(f"Доля — просрочка {days}+ к продажам месяца. Больше 10% — красная зона.")
+        v.table(["Менеджер", "Долг", f"{days}+", "Доля", "Собрать"],
+                [Row([short(k.employees[i]["fio"]), money(t_, ""), money(o, ""),
+                      Cell(pct(sh), "bad" if sh > norm else "warn" if sh > norm / 2 else "good"), money(tn, "") if tn else "—"])
+                 for i, t_, o, sh, tn in per])
+        v.note(f"Доля — просрочка {days}+ к {base_t}. Больше {pct(norm)} — красная зона; «Собрать» — сколько занести до нормы.")
         kb = rows([Button(short(k.employees[i]["fio"]), f"debts:e:{i}") for i, *_ in per], 3)
     return Reply(view=v, buttons=kb)

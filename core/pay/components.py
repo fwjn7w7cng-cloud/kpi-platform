@@ -18,7 +18,13 @@
                  visits); scope; mode = steps (steps: [[доля, сумма], …] — берётся высшая достигнутая ступень)
                  или linear (amount × выполнение, порог min, потолок cap)
   fixed_bonus    фиксированный бонус name/amount; cut_per_miss — минус за каждый пропуск дня
-  debt_penalty   удержание amount, если просрочка дольше days дней больше доли share от продаж
+  debt_penalty   удержание за просрочку. days — порог (по умолчанию из анкеты), of — база доли: sales/month
+                 (продажи месяца), 30d (за 30 дней), debt (весь долг); scope — self/team/dept. mode:
+                   fixed   — amount, если доля просрочки больше share (по умолчанию — норма анкеты)
+                   percent — rate от суммы просрочки (с min — только если доля больше; max — не больше суммы)
+                   steps   — ступени [[доля, сумма]]: берётся сумма самой высокой превышенной ступени
+  debt_bonus     бонус за низкую просрочку (те же days / of / scope). mode fixed — amount, если доля не больше share;
+                 steps — [[доля, сумма]]: берётся самая щедрая ступень, в которую уложились
   timesheet      штрафы табеля: опоздания и прогулы (правила — timesheet в анкете)
   per_unit       сдельно: unit — единица (км, кг, точки, ошибки…), price — сумма за единицу или rate — доля
                  от суммы (для единиц в ₽); cut: true — это удержание (минус). Единицы дают модули (UNITS).
@@ -80,9 +86,23 @@ def check(c):
     elif t == "fixed_bonus":
         if not _num(c.get("amount")):
             p.append("fixed_bonus.amount — сумма бонуса")
-    elif t == "debt_penalty":
-        if not _num(c.get("amount")) or not _num(c.get("share", 0.1)):
-            p.append("debt_penalty: amount — сумма удержания, share — допустимая доля просрочки")
+    elif t in ("debt_penalty", "debt_bonus"):
+        mode = c.get("mode", "fixed")
+        allowed = ("fixed", "percent", "steps") if t == "debt_penalty" else ("fixed", "steps")
+        if mode not in allowed:
+            p.append(f"{t}.mode «{mode}» — {', '.join(allowed)}")
+        elif mode == "fixed" and (not _num(c.get("amount")) or not _num(c.get("share", 0.1))):
+            p.append(f"{t}: amount — сумма, share — доля просрочки («10%»)")
+        elif mode == "percent" and not _num(c.get("rate")):
+            p.append("debt_penalty: rate — доля от суммы просрочки («5%»)")
+        elif mode == "steps":
+            st = c.get("steps")
+            if not st or not all(isinstance(s, (list, tuple)) and len(s) == 2 and _num(s[0]) and _num(s[1]) for s in st):
+                p.append(f"{t}.steps — пары [доля просрочки, сумма]: «5% → 1 000; 10% → 3 000»")
+        if "days" in c and (not isinstance(c["days"], int) or c["days"] <= 0):
+            p.append(f"{t}.days — число дней просрочки, например 60")
+        if c.get("of", "sales") not in ("sales", "month", "30d", "debt"):
+            p.append(f"{t}.of — sales, 30d или debt")
     elif t == "timesheet":
         pass
     elif t == "per_unit":
@@ -163,14 +183,59 @@ def fixed_bonus(ctx, emp, c):
     return [(c.get("name", "Бонус"), amount, note)]
 
 
+def _debt(ctx, emp, c):
+    """(просрочка, база, доля, подпись) для кубиков дебиторки по scope/days/of."""
+    k = ctx.kpi
+    scope = c.get("scope", "self")
+    ids = [emp["id"]] if scope == "self" else k.members("team" if scope == "team" else "dept",
+                                                          emp["team"] if scope == "team" else emp["dept"])
+    days = c.get("days") or k.debt_days
+    over, base, share = k.debt_share(ids, days, c.get("of"))
+    of = {"sales": "month"}.get(c.get("of"), c.get("of")) or k.debt_base
+    where = {"team": " команды", "dept": " отдела"}.get(scope, "")
+    base_t = {"month": "продаж", "30d": "продаж 30 дн.", "debt": "долга"}[of]
+    return over, base, share, f"{days}+{where}: {_n(over)} · {_p(share, 1)} от {base_t}", days
+
+
 def debt_penalty(ctx, emp, c):
-    m = ctx.kpi.emp(emp["id"]).get("overdue")
-    if m is None or not m.detail.get("debt"):
+    over, base, share, note, days = _debt(ctx, emp, c)
+    if not over:
         return []
-    share = c.get("share", 0.1)
-    if m.fact > share:
-        return [(f"Просрочка {m.detail['days']}+ дн.", -c["amount"], f"{_p(m.fact)} от продаж — больше {_p(share)}")]
+    title = c.get("name") or f"Просрочка {days}+ дн."
+    mode = c.get("mode", "fixed")
+    if mode == "percent":
+        if c.get("min") and share <= c["min"]:
+            return []
+        amount = over * c["rate"]
+        if c.get("max"):
+            amount = min(amount, c["max"])
+        return [(title, -amount, f"{note} · ×{_p(c['rate'], 1)}" + (f", макс. {_n(c['max'])}" if c.get("max") else ""))]
+    if mode == "steps":
+        got = 0
+        for s, a in sorted(c["steps"]):
+            if share > s:
+                got = a
+        return [(title, -got, note)] if got else []
+    lim = c.get("share", ctx.kpi.debt_norm)
+    if share > lim:
+        return [(title, -c["amount"], f"{note} > {_p(lim)}")]
     return []
+
+
+def debt_bonus(ctx, emp, c):
+    over, base, share, note, days = _debt(ctx, emp, c)
+    if base <= 0:
+        return []
+    title = c.get("name") or f"Бонус: низкая просрочка {days}+"
+    if c.get("mode", "fixed") == "steps":
+        for s, a in sorted(c["steps"]):
+            if share <= s:
+                return [(title, a, f"{note} ≤ {_p(s)}")]
+        return [(title, 0, f"{note} · бонус до {_p(max(s for s, _ in c['steps']))}")]
+    lim = c.get("share", ctx.kpi.debt_norm / 2)
+    if share <= lim:
+        return [(title, c["amount"], f"{note} ≤ {_p(lim)}")]
+    return [(title, 0, f"{note} · бонус до {_p(lim)}")]
 
 
 def timesheet(ctx, emp, c):
@@ -201,7 +266,7 @@ def per_unit(ctx, emp, c):
 
 
 BUILTIN = {"salary": salary, "sales_percent": sales_percent, "plan_bonus": plan_bonus, "fixed_bonus": fixed_bonus,
-           "debt_penalty": debt_penalty, "timesheet": timesheet, "per_unit": per_unit}
+           "debt_penalty": debt_penalty, "debt_bonus": debt_bonus, "timesheet": timesheet, "per_unit": per_unit}
 
 
 def _n(x):

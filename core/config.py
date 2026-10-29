@@ -123,8 +123,8 @@ def load_client(client_id, path=None, hooks=None):
     return parse(client_id, raw, hooks)
 
 
-PCT_KEYS = {"rate", "rate_above", "share", "min", "cap"}       # доли: в анкете — «0,4%», «80%»
-MONEY_KEYS = {"amount", "cut_per_miss", "salary", "akb_min", "absent_fine", "price"}   # суммы: «25 000»
+PCT_KEYS = {"rate", "rate_above", "share", "min", "cap", "debt_norm"}       # доли: в анкете — «0,4%», «80%»
+MONEY_KEYS = {"amount", "cut_per_miss", "salary", "akb_min", "absent_fine", "price", "max"}   # суммы: «25 000»
 
 
 def _pct(v, where, p):
@@ -186,6 +186,8 @@ def human_numbers(raw, p):
             for k in list(d):
                 if k in MONEY_KEYS:
                     d[k] = _money(d[k], f"{sec}.{k}", p)
+                elif k in PCT_KEYS:
+                    d[k] = _pct(d[k], f"{sec}.{k}", p)
     ts = raw.get("timesheet") or {}
     if isinstance(ts.get("late"), list):
         ts["late"] = [[x[0], _money(x[1], "timesheet.late", p)] if isinstance(x, (list, tuple)) and len(x) == 2 else x
@@ -331,6 +333,15 @@ def parse(client_id, raw, hooks=None):
         if not (isinstance(pair, list) and len(pair) == 2 and all(isinstance(x, (int, float)) for x in pair)):
             p.append("timesheet.late — список пар [минут, штраф], например [[10, 100], [30, 200]]")
             break
+
+    kp = raw.get("kpi") or {}
+    if kp.get("debt_base", "month") not in ("month", "30d", "debt"):
+        p.append(f"kpi.debt_base «{kp.get('debt_base')}» — month (продажи месяца), 30d (за 30 дней) или debt (весь долг)")
+    if "debt_norm" in kp and (not isinstance(kp["debt_norm"], (int, float)) or not 0 <= kp["debt_norm"] <= 1):
+        p.append(f"kpi.debt_norm «{kp['debt_norm']}» — доля, например «10%»")
+    dd = kp.get("debt_days") or []
+    if not (isinstance(dd, list) and all(isinstance(x, int) and 0 < x < 1000 for x in dd)):
+        p.append("kpi.debt_days — список дней, например [30, 60]")
 
     for key, val in (raw.get("schedule") or {}).items():
         if val and not _is_time(str(val)):

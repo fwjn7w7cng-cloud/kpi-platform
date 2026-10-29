@@ -31,7 +31,8 @@ class DemoConfig(unittest.TestCase):
     def test_modules_from_edition_and_addons(self):
         cfg = load_client("demo")
         self.assertTrue(cfg.has_module("kpi"))        # старт
-        self.assertTrue(cfg.has_module("debts"))      # бизнес
+        self.assertTrue(cfg.has_module("debts"))      # старт (с 29.10)
+        self.assertTrue(cfg.has_module("route"))      # бизнес
         self.assertTrue(cfg.has_module("approval"))   # контроль
         self.assertTrue(cfg.has_module("ai"))         # докуплен
         self.assertFalse(cfg.has_module("miniapp"))   # не куплен
@@ -52,7 +53,7 @@ class Errors(unittest.TestCase):
         self.assertIn("нет такого модуля", self.broken(lambda r: r.update(addons=["teleport"])))
 
     def test_addon_already_in_edition(self):
-        self.assertIn("уже входит", self.broken(lambda r: r.update(addons=["debts"])))
+        self.assertIn("уже входит", self.broken(lambda r: r.update(addons=["route"])))
 
     def test_team_without_dept(self):
         def ch(r):
@@ -80,13 +81,15 @@ class Errors(unittest.TestCase):
         for word in ("edition", "industry", "source.kind"):
             self.assertIn(word, msg)
 
-    def test_start_edition_lacks_payroll(self):
+    def test_start_edition_has_payroll_and_debts(self):
         raw = demo_raw()
-        raw.update(edition="start", addons=["debts"])
+        raw.update(edition="start", addons=["route"])
         cfg = parse("demo", raw)
+        self.assertTrue(cfg.has_module("payroll"))
         self.assertTrue(cfg.has_module("debts"))
-        self.assertFalse(cfg.has_module("payroll"))
-        self.assertEqual(E.lock_text("payroll"), "Доступно в Бизнес")
+        self.assertTrue(cfg.has_module("route"))       # докуплен к Старту
+        self.assertFalse(cfg.has_module("clients"))
+        self.assertEqual(E.lock_text("clients"), "Доступно в Бизнес")
         self.assertEqual(E.lock_text("miniapp"), "Подключается отдельно")
 
 

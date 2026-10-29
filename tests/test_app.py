@@ -40,8 +40,10 @@ class Demo(unittest.TestCase):
         labels = self.labels(self.app.start(10))
         self.assertIn("🔒 Клиенты", labels)
         self.assertIn("📈 Мой план", labels)
-        self.assertIn("🔒 Долги", self.labels(self.app.press(10, "mg:sales")))   # длинная главная — в группах
-        r = self.app.press(10, "debts")                        # закрытый экран не открывается — объясняет
+        self.assertIn("🔒 Возвраты", self.labels(self.app.press(10, "mg:sales")))   # длинная главная — в группах
+        self.assertIn("💵 Долги", self.labels(self.app.press(10, "mg:sales")))      # дебиторка — уже в Старте
+        self.assertIn("💰 Моя зарплата", labels)                                     # и зарплата
+        r = self.app.press(10, "cli")                          # закрытый экран не открывается — объясняет
         self.assertIn("Доступно в Бизнес", r[0].view.subtitle)
 
     def test_long_home_is_grouped(self):

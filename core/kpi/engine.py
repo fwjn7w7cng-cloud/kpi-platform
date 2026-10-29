@@ -11,7 +11,11 @@
   collect  занесённые деньги, ₽
   focus    продажи фокусных групп месяца, ₽ (список в настройке focus:<месяц>)
   visits   визиты с заказом: точки маршрута, где в тот день была продажа (план — точки маршрута на прошедшие дни)
-  overdue  доля просрочки дольше kpi.debt_days[-1] дней от продаж месяца (чем меньше — тем лучше)
+  overdue  доля просрочки дольше kpi.debt_days[-1] дней (чем меньше — тем лучше) от базы kpi.debt_base:
+           month — продажи месяца (по умолчанию), 30d — продажи за последние 30 дней, debt — весь долг;
+           норма — kpi.debt_norm (по умолчанию 10%). Просрочка сверх любого порога — overdue_amount():
+           точно, если переводчик дал её готовой (поле over), иначе из корзин 0–30/31–60/61–90/91+
+           (порог внутри корзины — пропорционально, например 45 дней = половина 31–60 + 61–90 + 91+)
   grp:<код> продажи группы товаров
   <формула> свои показатели из formulas в config.yaml (модуль formulas)
 """
@@ -92,6 +96,8 @@ class Kpi:
         kcfg = cfg.raw.get("kpi") or {}
         self.akb_min = float(kcfg.get("akb_min", 1))
         self.debt_days = (kcfg.get("debt_days") or [30, 60])[-1]
+        self.debt_norm = float(kcfg.get("debt_norm", 0.10))
+        self.debt_base = kcfg.get("debt_base", "month")
         self.start, self.end = month_bounds(month)
         self._keys = db.key_map()
         self.plans = db.plans(month)
@@ -160,8 +166,7 @@ class Kpi:
         today = self.cal.today.isoformat()
         route_passed = [(d, c) for d, c in self.route.get(emp, []) if d < today or self.cal.closed]
         hit = sum(1 for dc in route_passed if dc in self.sold_days.get(emp, ()))
-        overdue = sum(r["d61_90"] + r["d91"] if self.debt_days >= 60 else r["d31_60"] + r["d61_90"] + r["d91"]
-                      for r in self.debts.get(emp, []))
+        overdue = sum(self.overdue_amount(r) for r in self.debts.get(emp, []))
         debt_total = sum(r["total"] for r in self.debts.get(emp, []))
         return {
             "sales": self.sales.get(emp, 0.0),
@@ -170,7 +175,7 @@ class Kpi:
             "collect": self.collect.get(emp, 0.0),
             "focus": sum(v for g, v in self.by_group.get(emp, {}).items() if g in self.focus),
             "visits": hit, "visits_plan": len(route_passed),
-            "overdue": overdue, "debt": debt_total,
+            "overdue": overdue, "debt": debt_total, "debt_base": self.base_of(emp, debt_total),
             "groups": dict(self.by_group.get(emp, {})),
         }
 
@@ -213,9 +218,10 @@ class Kpi:
             "sku": self._m("sku", r["sku"], p.get("sku")),
             "collect": self._m("collect", r["collect"], p.get("collect")),
             "visits": self._m("visits", r["visits"], r["visits_plan"], need=1.0),
-            "overdue": self._m("overdue", (r["overdue"] / sales) if sales > 0 else (1.0 if r["overdue"] else 0.0),
-                               p.get("overdue", 0.10 if r["debt"] else 0), lower_better=True,
-                               detail={"sum": r["overdue"], "debt": r["debt"], "days": self.debt_days}),
+            "overdue": self._m("overdue", (r["overdue"] / r["debt_base"]) if r["debt_base"] > 0 else (1.0 if r["overdue"] else 0.0),
+                               p.get("overdue", self.debt_norm if r["debt"] else 0), lower_better=True,
+                               detail={"sum": r["overdue"], "debt": r["debt"], "days": self.debt_days, "base": r["debt_base"],
+                                       "to_norm": max(r["overdue"] - self.debt_norm * r["debt_base"], 0)}),
         }
         for g in sorted(set(r["groups"]) | {k[4:] for k in p if k.startswith("grp:")}):
             if not g:
@@ -278,8 +284,56 @@ class Kpi:
                 plans[k] += v
         tot["groups"] = dict(groups)
         if tot.get("debt") and not plans.get("overdue"):
-            plans["overdue"] = 0.10
+            plans["overdue"] = self.debt_norm
         return self._build(tot, plans)
+
+    # ---------- дебиторка ----------
+
+    BUCKETS = (("d0_30", 0, 30), ("d31_60", 30, 60), ("d61_90", 60, 90), ("d91", 90, None))
+
+    def overdue_amount(self, r, days=None):
+        """Просрочка строки долга старше days дней (по умолчанию — главный порог анкеты)."""
+        days = self.debt_days if days is None else days
+        if days == self.debt_days and r.get("over") is not None:
+            return r["over"]
+        out = 0.0
+        for col, lo, hi in self.BUCKETS:
+            v = r.get(col) or 0
+            if hi is None or days <= lo:          # 91+ целиком (для порога больше 90 — приближённо)
+                out += v
+            elif days < hi:
+                out += v * (hi - days) / (hi - lo)
+        return out
+
+    def sales_30d(self, emp):
+        """Продажи за 30 дней до сегодня (или до конца месяца) — база нормы просрочки «30d»."""
+        if not hasattr(self, "_s30"):
+            from datetime import timedelta
+            end = min(self.cal.today, self.cal.end + timedelta(days=1))
+            start = end - timedelta(days=30)
+            self._s30 = defaultdict(float)
+            for r in self.db.c.execute("SELECT day, emp_key, amount FROM sales WHERE day >= ? AND day < ?",
+                                       (start.isoformat(), end.isoformat())):
+                e = self.who(r[1], r[0])
+                if e is not None:
+                    self._s30[e] += r[2]
+        return self._s30.get(emp, 0.0)
+
+    def base_of(self, emp, debt_total):
+        if self.debt_base == "debt":
+            return debt_total
+        if self.debt_base == "30d":
+            return self.sales_30d(emp)
+        return self.sales.get(emp, 0.0)
+
+    def debt_share(self, ids, days=None, of=None):
+        """(просрочка, база, доля) по людям ids: порог days, база of (month | 30d | debt | sales = month)."""
+        of = {"sales": "month"}.get(of, of) or self.debt_base
+        over = sum(self.overdue_amount(r, days) for i in ids for r in self.debts.get(i, []))
+        debt = sum(r["total"] for i in ids for r in self.debts.get(i, []))
+        base = debt if of == "debt" else sum(self.sales_30d(i) if of == "30d" else self.sales.get(i, 0.0) for i in ids)
+        share = over / base if base > 0 else (1.0 if over else 0.0)
+        return over, base, share
 
     def rating(self, ids, metric="sales"):
         """[(сотрудник, Metric)] по убыванию выполнения плана (без плана — по факту)."""
