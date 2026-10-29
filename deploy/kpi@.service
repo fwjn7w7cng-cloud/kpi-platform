@@ -12,8 +12,11 @@ WorkingDirectory=/root/kpi-platform
 ExecStart=/root/kpi-platform/venv/bin/python run.py %i
 Restart=always
 RestartSec=5
-MemoryMax=300M
-CPUQuota=40%
+# Потолок: бот клиента не может забрать память у соседей — при превышении падает и перезапускается только он.
+# Поменять для одного клиента: systemctl edit kpi@<код> → [Service] MemoryMax=400M
+MemoryMax=200M
+MemorySwapMax=100M
+CPUQuota=25%
 Environment=MALLOC_ARENA_MAX=2
 
 [Install]
