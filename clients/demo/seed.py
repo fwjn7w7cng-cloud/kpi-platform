@@ -395,7 +395,7 @@ def _quiz(db, R, today):
 def _names(R):
     used = set()
     while True:
-        female = R.random() < 0.3
+        female = False                      # Адам 29.10: в демо только мужчины
         sur = R.choice(V.SURNAMES_M)
         if female:
             sur = sur + "а" if not sur.endswith("ий") else sur[:-2] + "ая"
