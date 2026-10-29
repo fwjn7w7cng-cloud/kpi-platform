@@ -7,7 +7,7 @@ from datetime import date, timedelta
 
 from core.access import editions as E
 from core.access import roles as R
-from core.calendar import day_title, month_of, month_title, shift_month
+from core.calendar import MONTHS_GEN, day_title, month_of, month_title, shift_month
 from core.config import INDUSTRIES
 from core.kpi.engine import MAIN, SELLERS
 from core.month import cycle
@@ -44,6 +44,11 @@ def home(ctx):
     lines = _home_lines(ctx)
     if lines:
         v.lines(lines)
+    from core.calendar import in_ramadan, ramadan
+    if in_ramadan(ctx.db, ctx.today):
+        r = ramadan(ctx.db)
+        v.note(f"🌙 Рамадан мубарак! До {_dm(r['end'])}: рассылки в {r['morning']} и {r['evening']}"
+               + (", опоздания без штрафа." if r.get("late_free") else "."))
     if ctx.demo:
         v.note(f"Демо · {INDUSTRIES[ctx.industry].lower()} · редакция «{E.EDITIONS[ctx.cfg.edition]['title']}». "
                "Все люди и цифры выдуманы.")
@@ -60,11 +65,11 @@ def home(ctx):
 # внутри группы — её пункты. Пункт без группы всегда на главной; группа из одного пункта не создаётся.
 MENU_MAX = 12
 MENU_GROUPS = [
-    ("sales", "📈 Продажи и клиенты", {"rating", "cli", "rtd", "alerts", "ai", "fc", "cmp", "debts", "rv", "watch", "achb",
+    ("sales", "📈 Продажи и клиенты", {"rating", "cli", "rtd", "alerts", "fc", "cmp", "debts", "rv", "watch", "achb",
                                        "fx", "call"}),
     ("money", "💰 Зарплата, планы, месяц", {"fund", "month", "pl", "log"}),
     ("ops", "📦 Склад и логистика", {"sk", "lg"}),
-    ("team", "👥 Люди и задачи", {"people", "ts", "tasks", "qz"}),
+    ("team", "👥 Люди и задачи", {"people", "ts", "tasks", "qz", "rmd"}),
     ("more", "➕ Ещё модули", {"miniapp", "direct_1c", "branches", "branding"}),
 ]
 TOP_FOR_SELLERS = {"call", "cli"}         # торговому это нужно каждый день — не прятать в группу
@@ -577,7 +582,6 @@ LOCK_TEXT = {
     "forecast": "Прогноз выполнения плана на конец месяца и сравнение команд и отделов.",
     "call_today": "Список на сегодня: кому позвонить — заснувшие клиенты, должники, точки маршрута без заказа.",
     "formulas": "Свои показатели компании по формуле: средний чек, сбор к продажам — что угодно из готовых цифр.",
-    "ai": "Аналитик сам находит главное в цифрах и пишет простыми словами, на что обратить внимание.",
     "clients": "Кто из клиентов перестал брать, кто берёт меньше, кто растёт, какие бренды бросили — с карточкой клиента по коду.",
     "route": "Маршрут на день по точкам и отчёт торгового вечером: продал, был без заказа, не застал — СВ видит всё сразу.",
     "quiz": "Тест по продукции раз в неделю и курс для новичка: уроки, вопросы, результаты у руководителя.",
@@ -681,6 +685,11 @@ def help_screen(ctx):
 
 
 # ======================= мелочи =======================
+
+def _dm(iso):
+    d = date.fromisoformat(iso)
+    return f"{d.day} {MONTHS_GEN[d.month - 1]}"
+
 
 def _short(fio):
     p = fio.split()

@@ -35,9 +35,17 @@ def job(name, when, roles, title="", module="", workdays=True, days=None):
     return deco
 
 
-def time_of(app, j):
+def time_of(app, j, day=None):
     when = j.when(app) if callable(j.when) else j.when
     t = (app.cfg.raw.get("schedule") or {}).get(when, when)
+    if day is not None and when in ("morning", "evening"):
+        from core.calendar import in_ramadan, ramadan
+        try:
+            db = app.db()
+        except Exception:            # noqa: BLE001
+            db = None
+        if db is not None and in_ramadan(db, day):
+            t = ramadan(db).get(when) or t          # в Рамадан утро и вечер — в своё время
     if not t or ":" not in str(t):
         return None
     h, m = str(t).split(":")
@@ -48,7 +56,7 @@ def due(app, now: datetime):
     """Рассылки, которым пора в эту минуту."""
     out = []
     for j in JOBS:
-        t = time_of(app, j)
+        t = time_of(app, j, now.date())
         if t and (now.hour, now.minute) == t:
             if j.workdays and WEEKDAYS[now.weekday()] in app.cfg.weekend:
                 continue

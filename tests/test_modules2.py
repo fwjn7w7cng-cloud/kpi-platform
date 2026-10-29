@@ -296,3 +296,35 @@ class Debts(unittest.TestCase):
         self.assertEqual(rep[1]["scope"], "team")
         comp = {r[0]: r[1] for r in t["Компания"]}
         self.assertEqual((comp["Норма просрочки"], comp["База нормы просрочки"]), ("10%", "Продажи за 30 дней"))
+
+
+class Ramadan(Base):
+    def test_switch_on_fines_schedule_and_plan(self):
+        ctx = self.as_(801, "owner")
+        self.assertTrue(self.app.press(801, "rmd:on")[0].ask)
+        self.app.text(801, "20.10.2026 – 18.11.2026")
+        from core.calendar import in_ramadan, ramadan
+        self.assertTrue(in_ramadan(ctx.db, TODAY))
+        home = self.app.start(801)[0]
+        self.assertTrue(any("Рамадан" in b[1][0] for b in home.view.blocks if b[0] == "note"))
+        # опоздание в Рамадан — без штрафа, до — со штрафом
+        rep = next(e for e in ctx.db.employees() if e["role"] == "rep")
+        ctx.db.add_timesheet("2026-10-21", rep["id"], "late", minutes=40)
+        ctx.db.add_timesheet("2026-10-05", rep["id"], "late", minutes=40)
+        fines = self.app.ctx(801).pay().fines(rep)
+        self.assertEqual([n for _, n in fines if "21.10" in n], [])
+        self.assertTrue(any("05.10" in n for _, n in fines))
+        # рассылки: утро в 10:00 вместо 08:00
+        names = lambda now: [j.name for j in schedule.due(self.app, now)]       # noqa: E731
+        self.assertNotIn("morning_brief", names(datetime(2026, 10, 27, 8, 0)))
+        self.assertIn("morning_brief", names(datetime(2026, 10, 27, 10, 0)))
+        # планы на ноябрь «как в октябре»: дни поста — 85%
+        self.as_(802, "head")
+        self.app.press(802, "plc:2026-11:0")
+        p_nov, p_oct = ctx.db.plans("2026-11"), ctx.db.plans("2026-10")
+        rid = next(iter(p_nov))
+        self.assertLess(p_nov[rid]["sales"], p_oct[rid]["sales"])
+        self.app.press(801, "rmd:late")
+        self.assertFalse(ramadan(ctx.db)["late_free"])
+        self.app.press(801, "rmd:off")
+        self.assertFalse(in_ramadan(ctx.db, TODAY))

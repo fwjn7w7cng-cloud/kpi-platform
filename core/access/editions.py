@@ -26,7 +26,6 @@ MODULES = {
     "forecast":     ("Прогноз плана и сравнение отделов", "control"),
     "call_today":   ("«Кому позвонить сегодня»", "control"),
     "formulas":     ("Свои формулы KPI", "control"),
-    "ai":           ("AI-аналитик", None),
     "stock":        ("Склад для закупок", None),
     "logistics":    ("Логистика: рейсы водителей", None),
     "returns":      ("Возвраты и чья ошибка", None),
@@ -40,7 +39,7 @@ MODULES = {
 EDITIONS = {
     "start":    {"title": "Старт",    "users": 15},
     "business": {"title": "Бизнес",   "users": 50},
-    "control":  {"title": "Контроль", "users": 150},
+    "control":  {"title": "Премиум",  "users": 150},
 }
 ORDER = list(EDITIONS)
 

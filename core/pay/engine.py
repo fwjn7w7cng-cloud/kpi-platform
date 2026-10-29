@@ -17,6 +17,7 @@
 from dataclasses import dataclass, field
 from datetime import date
 
+from core.calendar import in_ramadan
 from core.pay import components as C
 
 DAY_KINDS = {"absent", "truancy", "half", "late", "fine", "extra", "comment"}
@@ -92,6 +93,8 @@ class Payroll:
             d = date.fromisoformat(r["day"])
             when = f"{d.day:02d}.{d.month:02d}"
             if r["kind"] == "late":
+                if self._ramadan_free(d):
+                    continue                     # Рамадан: опоздание отмечено, но без штрафа
                 fine = 0
                 for minutes, amount in self.late_scale:
                     if r["minutes"] >= minutes:
@@ -103,6 +106,11 @@ class Payroll:
             elif r["kind"] == "fine" and r["amount"]:
                 out.append((r["amount"], f"{r['note'] or 'штраф'} {when}"))
         return out
+
+    def _ramadan_free(self, d):
+        from core.calendar import ramadan
+        r = ramadan(self.db)
+        return bool(r and r.get("late_free") and in_ramadan(self.db, d))
 
     # ---------- расчёт ----------
 

@@ -101,7 +101,11 @@ def copy(ctx, month, growth):
         return Reply(text="Планы этого месяца сейчас не меняются.")
     src = ctx.db.plans(shift_month(month, -1))
     ids, _ = _reps(ctx, month)
+    from core.calendar import ramadan, ramadan_share
     g = 1 + int(growth) / 100
+    share = ramadan_share(ctx.db, ctx.cfg, month)
+    if share:                                   # Рамадан: дни поста — с поправкой плана
+        g *= 1 - (1 - ramadan(ctx.db)["plan"]) * share
     for i in ids:
         for m, val in src.get(i, {}).items():
             rnd = -3 if m in MONEY or m.startswith("grp:") else 0

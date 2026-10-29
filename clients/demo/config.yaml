@@ -10,7 +10,7 @@ company:
   timezone: Europe/Moscow
 
 edition: control              # start | business | control (в демо переключается кнопкой)
-addons: [ai, stock, logistics, returns]   # модули сверх редакции
+addons: [stock, logistics, returns]   # модули сверх редакции
 
 work_week:
   weekend: [sun]              # выходные дни: mon tue wed thu fri sat sun

@@ -34,7 +34,7 @@ class DemoConfig(unittest.TestCase):
         self.assertTrue(cfg.has_module("debts"))      # старт (с 29.10)
         self.assertTrue(cfg.has_module("route"))      # бизнес
         self.assertTrue(cfg.has_module("approval"))   # контроль
-        self.assertTrue(cfg.has_module("ai"))         # докуплен
+        self.assertTrue(cfg.has_module("stock"))      # докуплен
         self.assertFalse(cfg.has_module("miniapp"))   # не куплен
 
 

@@ -81,3 +81,39 @@ class Month:
 
     def passed_days(self):
         return [d for d in self.workdays if d < self.today] if not self.closed else list(self.workdays)
+
+
+# ---------- Рамадан ----------
+# Включает руководитель или админ в боте (экран «🌙 Рамадан»), даты каждый год свои. Хранится в базе клиента
+# (настройка ramadan): {"start", "end", "morning", "evening", "late_free", "plan"}. В эти дни:
+#   опоздания отмечаются, но без штрафа (late_free); утренняя и вечерняя рассылки идут в своё время;
+#   планы «как в прошлом месяце» на месяц с Рамаданом умножаются на plan за дни Рамадана.
+
+RAMADAN_DEFAULT = {"morning": "10:00", "evening": "16:30", "late_free": True, "plan": 0.85}
+
+
+def ramadan(db):
+    """Настройки Рамадана или None, если не включён."""
+    r = db.get("ramadan") if db is not None else None
+    if not r or not r.get("start") or not r.get("end"):
+        return None
+    return {**RAMADAN_DEFAULT, **r}
+
+
+def in_ramadan(db, day):
+    r = ramadan(db)
+    if not r:
+        return False
+    d = day.isoformat() if isinstance(day, date) else str(day)
+    return r["start"] <= d <= r["end"]
+
+
+def ramadan_share(db, cfg, month):
+    """Доля рабочих дней месяца, попавших в Рамадан (0…1)."""
+    r = ramadan(db)
+    if not r:
+        return 0.0
+    days = Month(cfg, month, date(2100, 1, 1)).workdays
+    if not days:
+        return 0.0
+    return sum(1 for d in days if r["start"] <= d.isoformat() <= r["end"]) / len(days)
