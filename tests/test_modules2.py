@@ -328,3 +328,19 @@ class Ramadan(Base):
         self.assertFalse(ramadan(ctx.db)["late_free"])
         self.app.press(801, "rmd:off")
         self.assertFalse(in_ramadan(ctx.db, TODAY))
+
+
+class BottomMenu(Base):
+    def test_keyboard_follows_role_and_opens_screens(self):
+        r = self.app.start(901)
+        self.assertTrue(any(x.keyboard for x in r))                     # /start — меню всегда
+        self.as_(901, "owner")
+        self.assertFalse(any(x.keyboard for x in self.app.press(901, "home")))   # не поменялось — не шлём
+        out = self.app.press(901, "sw:role:rep")
+        kb = next(x.keyboard for x in out if x.keyboard)                 # роль сменилась — новое меню
+        self.assertIn("🚗 Маршрут", [b for row in kb for b in row])
+        self.assertIn("Маршрут", self.app.text(901, "🚗 Маршрут")[0].view.title)
+        self.app.press(901, "fb")                                        # бот ждёт текст…
+        card = self.app.text(901, "📈 Мой план")[0]                     # …но кнопка меню важнее: открылся план
+        self.assertEqual(card.view.title, self.app.ctx(901).me["fio"])
+        self.assertNotIn("await", self.app.ctx(901).session)

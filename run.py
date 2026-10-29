@@ -29,6 +29,8 @@ def load_env(path):
 
 def main(client):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    for noisy in ("httpx", "httpcore", "telegram.ext.Updater"):     # их адреса запросов содержат токен бота
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     load_env(ROOT / "clients" / client / ".env")
     from core.app import App
     admins = [a for a in os.environ.get("ADMIN_IDS", "").replace(" ", "").split(",") if a]

@@ -119,6 +119,48 @@ def menu_group(ctx, gid):
     return Reply(text=title, buttons=rows(bs, 2))
 
 
+# ======================= нижнее меню =======================
+# Постоянные кнопки под полем ввода: самое нужное для роли + в демо переключатели. Нажатие приходит текстом —
+# App.text узнаёт подпись и открывает экран. Модуль не в редакции → экран сам покажет замок.
+
+BOTTOM = {
+    "rep":   [("📈 Мой план", "me"), ("🚗 Маршрут", "rt"), ("😴 Клиенты", "cli"), ("💰 Зарплата", "pay")],
+    "sv":    [("👥 Команда", "team"), ("📋 Отчёты дня", "rtd"), ("💵 Долги", "debts"), ("📌 Задачи", "tasks")],
+    "head":  [("🏢 Отдел", "sales"), ("📋 Планы", "pl"), ("🗓 Месяц", "month"), ("📌 Задачи", "tasks")],
+    "owner": [("🏢 Продажи", "sales"), ("💰 Фонд", "fund"), ("✅ Утвердить", "appr"), ("🗓 Месяц", "month")],
+    "accountant": [("🗓 Месяц", "month"), ("💰 Фонд", "fund")],
+    "staff": [("🧑‍🔧 Кабинет", "cab"), ("💰 Зарплата", "pay")],
+    "admin": [("🏢 Продажи", "sales"), ("💬 Отзывы", "fbl"), ("🗓 Месяц", "month"), ("👁 Смотреть как", "viewas")],
+}
+HEAD_OTHER = [("👤 Люди", "people"), ("📅 Табель", "ts"), ("📌 Задачи", "tasks")]
+
+
+def bottom_rows(ctx):
+    """[[(подпись, экран)]] нижнего меню этого зрителя."""
+    if ctx.role == "guest":
+        return []
+    role = "rep" if ctx.role == "newbie" else ctx.role
+    items = HEAD_OTHER if role == "head" and ctx.dept_kind != "sales" else BOTTOM.get(role, BOTTOM["staff"])
+    if ctx.role == "newbie":
+        items = [("🎓 Обучение", "qz")] + items[:3]
+    fb = ("💬 Отзывы", "fbl") if ctx.role == "admin" else \
+        ("🐞 Не работает", "fb") if ctx.role in ("rep", "newbie", "staff") else ("💬 Предложение", "fb")
+    items = [("🏠 Главная", "home")] + [x for x in items if x != fb] + ([fb] if fb not in items else [])
+    out = [items[i:i + 3] for i in range(0, len(items), 3)]
+    if ctx.demo:
+        out.append([("🎭 Роль", "sw:role"), ("🏭 Отрасль", "sw:ind"), ("💼 Редакция", "sw:ed")])
+    return out
+
+
+def bottom_keyboard(ctx):
+    return [[label for label, _ in row] for row in bottom_rows(ctx)]
+
+
+def bottom_target(ctx, text):
+    t = (text or "").strip()
+    return next((to for row in bottom_rows(ctx) for label, to in row if label == t), None)
+
+
 def _home_tiles(ctx):
     k = ctx.kpi()
     if ctx.role in SELLERS and ctx.me:

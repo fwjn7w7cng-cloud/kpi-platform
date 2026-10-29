@@ -17,7 +17,7 @@ log = logging.getLogger("kpi")
 
 
 def build(app, token, mailbox=None, drive=None):
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, Update
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, KeyboardButton, ReplyKeyboardMarkup, Update
     from telegram.ext import (Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler,
                               filters)
 
@@ -32,6 +32,9 @@ def build(app, token, mailbox=None, drive=None):
 
     async def send(bot, chat_id, reply):
         chat_id = reply.to or chat_id
+        if reply.keyboard:                       # нижнее меню — отдельным коротким сообщением, остаётся под полем ввода
+            await bot.send_message(chat_id, "Меню внизу 👇", reply_markup=ReplyKeyboardMarkup(
+                [[KeyboardButton(x) for x in row] for row in reply.keyboard], resize_keyboard=True, is_persistent=True))
         markup = kb(reply)
         if reply.view is not None:
             n = views.pages(reply.view)

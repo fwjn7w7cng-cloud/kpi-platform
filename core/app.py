@@ -120,18 +120,35 @@ class App:
         ctx = self.ctx(user_id)
         ctx.session.pop("await", None)
         ctx.save()
-        return self._run(ctx, "home", ())
+        return self._with_keyboard(user_id, self._run(ctx, "home", ()), force=True)
 
     def press(self, user_id, data):
         ctx = self.ctx(user_id)
         ctx.session.pop("await", None)
         sid, *args = data.split(":")
-        return self._run(ctx, sid, args)
+        return self._with_keyboard(user_id, self._run(ctx, sid, args))
+
+    def _with_keyboard(self, user_id, out, force=False):
+        """Нижнее меню: прислать заново, когда оно поменялось (сменилась роль, редакция) или по /start."""
+        from core.ui.screens import bottom_keyboard
+        ctx = self.ctx(user_id)
+        kb = bottom_keyboard(ctx)
+        if kb and (force or ctx.session.get("kb") != kb):
+            ctx.session["kb"] = kb
+            ctx.save()
+            first = next((r for r in out if not r.to), None)
+            if first is not None:
+                first.keyboard = kb
+        return out
 
     def text(self, user_id, text, photo=""):
         """Текст (или фото с подписью — photo: id файла в мессенджере)."""
         ctx = self.ctx(user_id)
         ctx.photo = photo
+        from core.ui.screens import bottom_target
+        to = bottom_target(ctx, text) if not photo else None
+        if to:                                       # кнопка нижнего меню — даже если бот ждал ответ текстом
+            return self.press(user_id, to)
         wait = ctx.session.pop("await", None)
         ctx.save()
         if not wait:
