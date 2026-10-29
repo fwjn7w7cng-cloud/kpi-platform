@@ -41,10 +41,45 @@ class Feedback(Base):
         self.assertTrue(ask[0].ask)
         out = self.app.text(101, "Не открывается маршрут")
         self.assertTrue(any(r.to == 1 and "маршрут" in r.text for r in out))
-        fid = ctx.db.one("SELECT MAX(id) AS i FROM feedback")["i"]
+        fid = ctx.office.one("SELECT MAX(id) AS i FROM feedback")["i"]
         self.as_(102, "admin")
         done = self.app.press(102, f"fbd:{fid}")
         self.assertTrue(any(r.to == 101 and "Сделано" in r.text for r in done))
+
+
+class DemoGate(unittest.TestCase):
+    """Демо по приглашению: ссылка, заявка, срок, отключение, своя копия у каждого."""
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.app = App("demo", today=TODAY, admins=[1], data_dir=self.tmp, demo_gate=True)
+        self.app.bot_username = "demo_bot"
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_invite_link(self):
+        self.assertTrue(self.app.start(50)[0].ask)                     # чужой — просят представиться
+        r = self.app.press(1, "gsi:3")
+        code = r[0].text.split("start=")[1].split()[0]
+        out = self.app.start(60, "Ахмед", code)
+        self.assertIsNotNone(out[0].view)                              # вошёл сразу
+        self.assertTrue((self.tmp / "demo" / "guests" / "60").exists())   # своя копия
+        self.assertTrue(self.app.start(61, "", code)[0].ask)           # ссылка одноразовая
+        self.app.press(1, "gsoff:60")
+        self.assertIn("закрыт", self.app.press(60, "home")[0].text)
+        self.assertFalse((self.tmp / "demo" / "guests" / "60").exists())  # копия стёрта
+
+    def test_request_and_expiry(self):
+        self.app.start(70, "Ислам")
+        out = self.app.text(70, "Ислам, Стройбаза")
+        req = next(r for r in out if r.to == 1)
+        self.assertIn("Стройбаза", req.text)
+        self.assertIn("у администратора", self.app.press(70, "home")[0].text)
+        ok = self.app.press(1, "gsa:70:3")
+        self.assertTrue(any(r.to == 70 and "открыт" in r.text for r in ok))
+        self.assertIsNotNone(self.app.press(70, "home")[0].view)
+        later = App("demo", today=date(2026, 11, 5), admins=[1], data_dir=self.tmp, demo_gate=True)
+        self.assertIn("закончился", later.press(70, "home")[0].text)
 
 
 class Clients(Base):

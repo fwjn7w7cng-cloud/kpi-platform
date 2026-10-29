@@ -58,7 +58,8 @@ def build(app, token, mailbox=None, drive=None):
 
     async def on_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         u = update.effective_user
-        await deliver(context.bot, update.effective_chat.id, await asyncio.to_thread(app.start, u.id, u.full_name))
+        arg = context.args[0] if context.args else ""         # t.me/бот?start=<код> — приглашение в демо
+        await deliver(context.bot, update.effective_chat.id, await asyncio.to_thread(app.start, u.id, u.full_name, arg))
 
     async def on_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cmd = (update.message.text or "").split()[0].lstrip("/").split("@")[0].lower()
@@ -67,6 +68,7 @@ def build(app, token, mailbox=None, drive=None):
 
     async def post_init(application):                 # кнопка «Меню» слева от поля ввода — список команд
         try:
+            app.bot_username = (await application.bot.get_me()).username or ""
             await application.bot.set_my_commands([BotCommand(c, t) for c, t, _ in app.commands()])
             await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
         except Exception:                             # noqa: BLE001

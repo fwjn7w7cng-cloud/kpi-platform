@@ -31,10 +31,11 @@ MODULES = ["debts", "reminders", "achievements", "staff", "payroll", "tasks", "a
 
 RESET = {"home", "mon"}          # главная и смена месяца: путь «Назад» начинается заново
 TRAIL = 12
+MAX_OPEN = 40                    # демо: сколько копий фирмы держать открытыми одновременно
 
 
 class App:
-    def __init__(self, client_id, today=None, admins=(), data_dir=None):
+    def __init__(self, client_id, today=None, admins=(), data_dir=None, demo_gate=False):
         self.client_id = client_id
         self.hooks = H.load_rules(client_id)
         self.cfg = load_client(client_id, hooks=self.hooks)
@@ -42,9 +43,12 @@ class App:
         self._today = today
         self.admins = {int(a) for a in admins}
         self.data_dir = data_dir
+        self.demo_gate = bool(demo_gate) and self.demo     # демо по приглашению / заявке (core/demo.py)
+        self.bot_username = ""                             # ставит транспорт — для ссылок-приглашений
         self._dbs = {}
         self._memo = {}
         importlib.import_module("core.ui.screens")
+        importlib.import_module("core.demo")
         importlib.import_module("core.jobs.briefs")
         for m in MODULES:
             importlib.import_module(f"modules.{m}")
@@ -54,54 +58,89 @@ class App:
     def today(self):
         return self._today or date.today()
 
-    def db(self, industry=None):
+    def db(self, industry=None, guest=None):
+        """База клиента. В демо — своя копия выдуманной фирмы у каждого зрителя (guest) и отрасли;
+        без guest — общая (для рассылок)."""
         if not self.demo:
             if None not in self._dbs:
                 path = client_db_path(self.client_id) if not self.data_dir else self.data_dir / self.client_id / "kpi.db"
                 self._dbs[None] = DB.open(path)
             return self._dbs[None]
         industry = industry if industry in INDUSTRIES else self.cfg.industry
-        db = self._dbs.get(industry)
+        key = (guest, industry)
+        db = self._dbs.pop(key, None)
+        if db is not None:
+            self._dbs[key] = db                       # самая свежая — в конец (закрываем самые старые)
         meta = db.get("seeded") if db else None
         if db is None or not meta or meta.get("months", [""])[-1] != month_of(self.today()):
-            db = self._reseed(industry)
+            db = self._reseed(industry, guest)
         return db
 
-    def _reseed(self, industry):
+    def _demo_base(self):
+        return self.data_dir / self.client_id if self.data_dir else client_db_path(self.client_id).parent
+
+    def _demo_path(self, industry, guest=None):
+        base = self._demo_base()
+        return (base / "guests" / str(guest) / industry if guest else base / industry) / "kpi.db"
+
+    def office(self):
+        """Где живут сессии, гости и отзывы: в демо — отдельная база (её не стирает «Начать заново»), иначе — база клиента."""
+        if not self.demo:
+            return self.db()
+        if "office" not in self._dbs:
+            self._dbs["office"] = DB.open(self._demo_base() / "demo.db")
+        return self._dbs["office"]
+
+    def _close_old(self, keep=MAX_OPEN):
+        opened = [k for k in self._dbs if isinstance(k, tuple)]
+        for k in opened[:max(0, len(opened) - keep)]:
+            self._dbs.pop(k).close()
+            self._memo.clear()
+
+    def _reseed(self, industry, guest=None):
         seed = importlib.import_module(f"clients.{self.client_id}.seed").seed   # наполнитель — в папке клиента
-        if self.data_dir:
-            path = self.data_dir / self.client_id / industry / "kpi.db"
-        else:
-            path = client_db_path(self.client_id).parent / industry / "kpi.db"
+        path = self._demo_path(industry, guest)
+        key = (guest, industry)
         self._memo.clear()
-        old = self._dbs.pop(industry, None)
+        old = self._dbs.pop(key, None)
         if old:
             old.close()
+        self._close_old(MAX_OPEN - 1)
         if path.exists():
             db = DB.open(path)
             meta = db.get("seeded")
             if meta and meta.get("months", [""])[-1] == month_of(self.today()):
-                self._dbs[industry] = db
+                self._dbs[key] = db
                 return db
             db.close()
             for p in path.parent.glob("kpi.db*"):
                 p.unlink()
         db = DB.open(path)
         seed(db, self.cfg, industry, today=self.today())
-        self._dbs[industry] = db
+        try:
+            db.c.execute("PRAGMA wal_checkpoint(TRUNCATE)")    # копия гостя — поменьше места на диске
+        except Exception:                                     # noqa: BLE001
+            pass
+        self._dbs[key] = db
         return db
 
-    def reset_demo(self, industry):
-        """Кнопка «Начать заново»: стереть демо-базу отрасли и заполнить свежими цифрами."""
+    def reset_demo(self, industry, guest=None):
+        """Кнопка «Начать заново»: стереть демо-базу отрасли (у этого зрителя) и заполнить свежими цифрами."""
         self._memo.clear()
-        db = self._dbs.pop(industry, None)
+        db = self._dbs.pop((guest, industry), None)
         if db:
-            path = db.c.execute("PRAGMA database_list").fetchone()[2]
             db.close()
-            from pathlib import Path
-            for p in Path(path).parent.glob("kpi.db*"):
-                p.unlink()
-        return self.db(industry)
+        for p in self._demo_path(industry, guest).parent.glob("kpi.db*"):
+            p.unlink()
+        return self.db(industry, guest)
+
+    def drop_guest(self, guest):
+        """Отключили гостя демо — его копии фирмы больше не нужны."""
+        import shutil
+        for k in [k for k in self._dbs if isinstance(k, tuple) and k[0] == guest]:
+            self._dbs.pop(k).close()
+        self._memo.clear()
+        shutil.rmtree(self._demo_base() / "guests" / str(guest), ignore_errors=True)
 
     def memo(self, ctx, name, fn, month=None):
         """Кэш тяжёлых расчётов между нажатиями: живёт, пока в базе ничего не поменялось.
@@ -133,8 +172,16 @@ class App:
         to = next((t for c, _, t in self.commands() if c == cmd), "home")
         return self.start(user_id) if to == "home" else self.press(user_id, to, top=True)
 
-    def start(self, user_id, name=""):
+    def start(self, user_id, name="", arg=""):
+        from core import demo
         ctx = self.ctx(user_id)
+        if name:
+            ctx.session["tgname"] = name[:60]
+            ctx.save()
+        g = demo.gate(ctx, arg=arg)
+        if g is not None:
+            return g
+        ctx = self.ctx(user_id)                      # доступ мог только что открыться — уже со своей копией фирмы
         ctx.session.pop("await", None)
         ctx.session["trail"] = []
         ctx.save()
@@ -142,7 +189,11 @@ class App:
 
     def press(self, user_id, data, top=False):
         """top — нажатие из нижнего меню: путь «Назад» начинается заново."""
+        from core import demo
         ctx = self.ctx(user_id)
+        g = demo.gate(ctx, press=data)
+        if g is not None:
+            return g
         ctx.session.pop("await", None)
         trail = [] if top else list(ctx.session.get("trail") or [])
         sid, *args = data.split(":")
@@ -179,8 +230,12 @@ class App:
 
     def text(self, user_id, text, photo=""):
         """Текст (или фото с подписью — photo: id файла в мессенджере)."""
+        from core import demo
         ctx = self.ctx(user_id)
         ctx.photo = photo
+        g = demo.gate(ctx, text=text)
+        if g is not None:
+            return g
         from core.ui.screens import bottom_target
         to = bottom_target(ctx, text) if not photo else None
         if to:                                       # кнопка нижнего меню — даже если бот ждал ответ текстом

@@ -34,7 +34,7 @@ def main(client):
     load_env(ROOT / "clients" / client / ".env")
     from core.app import App
     admins = [a for a in os.environ.get("ADMIN_IDS", "").replace(" ", "").split(",") if a]
-    app = App(client, admins=admins)
+    app = App(client, admins=admins, demo_gate=True)       # демо — только по приглашению или заявке (core/demo.py)
     token = os.environ.get("BOT_TOKEN")
     if not token:
         sys.exit(f"Нет BOT_TOKEN в clients/{client}/.env")

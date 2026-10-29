@@ -37,7 +37,7 @@ def on_text(ctx, text, data):
     if not text and not ctx.photo:
         return ctx.ask("fb_text", "Пустое сообщение. Напишите пару слов.", data)
     kind = data.get("kind", "bug")
-    fid = ctx.db.x("INSERT INTO feedback (user_id, emp_id, kind, text, photo, ts) VALUES (?,?,?,?,?,?)",
+    fid = ctx.office.x("INSERT INTO feedback (user_id, emp_id, kind, text, photo, ts) VALUES (?,?,?,?,?,?)",
                    ctx.user_id, ctx.me["id"] if ctx.me else None, kind, text[:2000], ctx.photo or "", ctx.today)
     out = [Reply(text="✅ Отправлено администратору. Ответ придёт сюда." +
                       ("\n\nВ демо сообщение видно в роли «Администратор» → «💬 Отзывы»." if ctx.demo else ""))]
@@ -48,7 +48,8 @@ def on_text(ctx, text, data):
 
 
 def _card(ctx, r):
-    who = ctx.db.employee(r["emp_id"])["fio"] if r["emp_id"] else f"id {r['user_id']}"
+    e = ctx.db.employee(r["emp_id"]) if r["emp_id"] else None
+    who = e["fio"] if e else f"id {r['user_id']}"
     lines = [r["text"] or "(скрин без подписи)"] + ([f"Ответ: {r['answer']}"] if r["answer"] else [])
     return Card(f"{KINDS.get(r['kind'], '')} · {who}", ST.get(r["status"], ""), lines,
                 color="bad" if r["kind"] == "bug" and r["status"] == "new" else "good" if r["status"] == "done" else None,
@@ -60,7 +61,7 @@ def inbox(ctx, show="new"):
     if ctx.role != "admin":
         return feedback(ctx)
     q = "status != 'done'" if show == "new" else "status = 'done'"
-    rs = ctx.db.q(f"SELECT * FROM feedback WHERE {q} ORDER BY id DESC LIMIT 20")
+    rs = ctx.office.q(f"SELECT * FROM feedback WHERE {q} ORDER BY id DESC LIMIT 20")
     v = View("💬 Отзывы и «не работает»", "новые и отвеченные" if show == "new" else "сделанные")
     v.cards([_card(ctx, r) for r in rs])
     if not rs:
@@ -72,7 +73,7 @@ def inbox(ctx, show="new"):
 
 @screen("fbo")
 def open_one(ctx, fid):
-    r = ctx.db.one("SELECT * FROM feedback WHERE id = ?", int(fid))
+    r = ctx.office.one("SELECT * FROM feedback WHERE id = ?", int(fid))
     if ctx.role != "admin" or not r:
         return Reply(text="Нет доступа.")
     v = View(f"№{r['id']}", ST.get(r["status"], ""))
@@ -94,10 +95,10 @@ def answer(ctx, fid):
 
 @text_input("fb_answer")
 def on_answer(ctx, text, data):
-    r = ctx.db.one("SELECT * FROM feedback WHERE id = ?", data["id"])
+    r = ctx.office.one("SELECT * FROM feedback WHERE id = ?", data["id"])
     if not r:
         return Reply(text="Сообщение не найдено.")
-    ctx.db.x("UPDATE feedback SET answer = ?, status = CASE status WHEN 'done' THEN 'done' ELSE 'answered' END WHERE id = ?",
+    ctx.office.x("UPDATE feedback SET answer = ?, status = CASE status WHEN 'done' THEN 'done' ELSE 'answered' END WHERE id = ?",
              text.strip()[:1000], r["id"])
     return [Reply(text=f"💬 Ответ администратора:\n{text.strip()}", to=r["user_id"],
                   buttons=[[Button("🐞 Написать ещё", "fb")]]), inbox(ctx)]
@@ -105,9 +106,9 @@ def on_answer(ctx, text, data):
 
 @screen("fbd")
 def done(ctx, fid):
-    r = ctx.db.one("SELECT * FROM feedback WHERE id = ?", int(fid))
+    r = ctx.office.one("SELECT * FROM feedback WHERE id = ?", int(fid))
     if ctx.role != "admin" or not r:
         return Reply(text="Нет доступа.")
-    ctx.db.x("UPDATE feedback SET status = 'done' WHERE id = ?", r["id"])
+    ctx.office.x("UPDATE feedback SET status = 'done' WHERE id = ?", r["id"])
     what = (r["text"] or "ваше сообщение")[:120]
     return [Reply(text=f"✅ Сделано: {what}", to=r["user_id"]), inbox(ctx)]

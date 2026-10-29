@@ -19,7 +19,12 @@ class Ctx:
         self.demo = app.demo
         self.session = self._load_session()
         self.industry = self.session.get("industry", app.cfg.industry) if self.demo else app.cfg.industry
-        self.db = app.db(self.industry)
+        self.office = app.office()
+        guest = None
+        if self.demo and app.demo_gate:              # демо по приглашению: у каждого гостя своя копия фирмы
+            from core.demo import has_access
+            guest = user_id if has_access(app, self.office, user_id, self.today) else None   # без доступа — без копии
+        self.db = app.db(self.industry, guest=guest)
         cfg = app.cfg
         if self.demo and self.session.get("edition") in E.EDITIONS:
             cfg = cfg.with_edition(self.session["edition"], app.cfg.addons if self.session["edition"] == app.cfg.edition else [])
@@ -34,8 +39,8 @@ class Ctx:
     # ---------- сессия ----------
 
     def _store(self):
-        """Где хранить сессии: в демо — в базе первой отрасли (общей для всех зрителей), иначе — в базе клиента."""
-        return self.app.db(self.app.cfg.industry) if self.demo else self.app.db()
+        """Где хранить сессии: в демо — в отдельной базе (общей для всех зрителей), иначе — в базе клиента."""
+        return self.app.office()
 
     def _load_session(self):
         return self._store().session(self.user_id)

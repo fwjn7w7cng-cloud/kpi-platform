@@ -174,7 +174,8 @@ def bottom_rows(ctx):
     items = [("🏠 Главная", "home")] + [x for x in items if x != fb] + [fb]
     out = [items[i:i + 3] for i in range(0, len(items), 3)]
     if ctx.demo:
-        out.append([("🎭 Роль", "sw:role"), ("🏭 Отрасль", "sw:ind"), ("💼 Редакция", "sw:ed")])
+        out.append([("🎭 Роль", "sw:role"), ("🏭 Отрасль", "sw:ind"), ("💼 Редакция", "sw:ed")] +
+                   ([("👥 Гости демо", "gst")] if ctx.user_id in ctx.app.admins else []))
     return out
 
 
@@ -711,7 +712,7 @@ def demo(ctx, what=None, value=None):
         return Reply(view=v, buttons=[[Button(("• " if c == ctx.cfg.edition else "") + E.EDITIONS[c]["title"], f"sw:ed:{c}")
                                        for c in E.ORDER], [Button("🔄 Начать демо заново", "sw:reset")]])
     if what == "reset":
-        ctx.app.reset_demo(ctx.industry)
+        ctx.app.reset_demo(ctx.industry, ctx.user_id)
         ctx.session = {"industry": ctx.industry}
         ctx.save()
         return [Reply(text="🔄 Демо заполнено заново."), home(ctx.app.ctx(ctx.user_id))]
