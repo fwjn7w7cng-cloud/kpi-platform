@@ -197,6 +197,14 @@ def on_counts(ctx, text, data):
     return build(ctx)
 
 
+@text_input("partner_req")
+def on_partner_req(ctx, text, data):
+    client = " ".join((text or "").split())[:120]
+    if len(client) < 3:
+        return request(ctx)
+    return request(ctx, client)
+
+
 def reset_counts(ctx):
     ctx.session.pop("counts", None)
     ctx.save()
@@ -238,24 +246,37 @@ def pdf(ctx):
                  files=[(f"КП KPI-бот {ctx.today:%d.%m.%Y}.pdf", data)], buttons=[[Button("‹ Собрать", "sw:ed")]])
 
 
-def request(ctx):
-    """«Хочу так» в демо: заявка администратору платформы с набором, людьми и суммами."""
+def request(ctx, client=None):
+    """«Хочу так» в демо: заявка администратору платформы с набором, людьми и суммами.
+    Партнёр сначала пишет, для какого клиента; заявка клиента партнёра приходит и партнёру."""
+    from core.demo import is_partner
     q = quote_of(ctx)
     if q["empty"]:
         return Reply(text="Сначала выберите хотя бы один пакет.", buttons=[[Button("🧩 Собрать", "sw:ed")]])
+    partner = is_partner(ctx)
+    if partner and not client:
+        return ctx.ask("partner_req", "Для какого клиента заявка? Имя, компания и телефон — например: "
+                                      "«Ахмед, Стройбаза, 8 928 000 00 00».", buttons=[[Button("✖️ Отмена", "sw:ed")]])
     counts = counts_of(ctx)
-    g = (ctx.office.get("demo_guests") or {}).get(str(ctx.user_id)) or {}
-    who = g.get("note") or g.get("name") or ctx.session.get("tgname") or f"id {ctx.user_id}"
+    guests = ctx.office.get("demo_guests") or {}
+    g = guests.get(str(ctx.user_id)) or {}
+    me = g.get("note") or g.get("name") or ctx.session.get("tgname") or f"id {ctx.user_id}"
+    by = str(ctx.user_id) if partner else str(g.get("by") or "")
+    pname = (guests.get(by) or {}).get("note") or "" if by else ""
+    who = f"{client} (показ партнёра {me})" if partner else (f"{me} (клиент партнёра {pname})" if pname else me)
     text = (f"🧩 Заявка из показа: {who}\n{ctx.cfg.set_title}\n"
             f"Людей: продажи {counts['sales']}, склад {counts['stock']}, логистика {counts['logistics']}, офис {counts['office']}\n"
             f"Подключение {money(q['setup'])} · в месяц {money(q['monthly'])}")
     reqs = ctx.office.get(REQ_KEY) or []
     reqs.append({"uid": ctx.user_id, "who": who, "set": ctx.cfg.set_title, "counts": counts, "setup": q["setup"],
-                 "monthly": q["monthly"], "ts": datetime.now().strftime("%d.%m %H:%M"), "show": True})
+                 "monthly": q["monthly"], "ts": datetime.now().strftime("%d.%m %H:%M"), "show": True, "partner": by})
     ctx.office.put(REQ_KEY, reqs[-100:])
     out = [Reply(text=text, to=a, buttons=[[Button("👥 Гости демо", "gst")]]) for a in ctx.app.admins if a != ctx.user_id]
+    if by and not partner and by.isdigit():
+        out.append(Reply(text="🎉 Ваш клиент нажал «Хочу так»:\n" + text, to=int(by), buttons=[[Button("🤝 Мои клиенты", "ptn")]]))
+    tail = f"Клиент «{client}» закреплён за вами." if partner else "Мы свяжемся с вами в приложении."
     out.append(Reply(text=f"📨 Заявка отправлена: {ctx.cfg.set_title}, подключение {money(q['setup'])}, дальше {money(q['monthly'])} "
-                          "в месяц. Мы свяжемся с вами в приложении.", buttons=[[Button("🧩 Собрать", "sw:ed")]]))
+                          f"в месяц. {tail}", buttons=[[Button("🧩 Собрать", "sw:ed")]]))
     return out
 
 

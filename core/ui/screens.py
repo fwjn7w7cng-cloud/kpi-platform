@@ -55,6 +55,10 @@ def home(ctx):
                + (", опоздания без штрафа." if r.get("late_free") else "."))
     if ctx.demo:
         v.note(f"Демо · {INDUSTRIES[ctx.industry].lower()} · набор «{ctx.cfg.set_title}». Все люди и цифры выдуманы.")
+        from core.demo import is_partner
+        if is_partner(ctx):
+            v.note("🤝 Вы партнёр: «📘 Памятка» — как показывать, «🤝 Мои клиенты» — приглашения и заявки, "
+                   "«🔄 Заново» — свежие цифры перед каждым показом.")
     # Что уже есть в нижнем меню, на главной не повторяем (переключатели демо, «Смотреть как», отзывы — тоже там).
     kb = rows(_dept_buttons(ctx), 2) + rows(_home_buttons(ctx), 2)
     kb.append(_month_switch(ctx))
@@ -221,6 +225,9 @@ def bottom_rows(ctx):
     if ctx.demo:
         out.append([("🎭 Роль", "sw:role"), ("🏭 Отрасль", "sw:ind"), ("🧩 Собрать", "sw:ed")] +
                    ([("👥 Гости демо", "gst")] if ctx.user_id in ctx.app.admins else []))
+        from core.demo import is_partner
+        if is_partner(ctx):
+            out.append([("🤝 Мои клиенты", "ptn"), ("📘 Памятка", "ptm"), ("🔄 Заново", "sw:reset")])
     return out
 
 

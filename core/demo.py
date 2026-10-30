@@ -12,7 +12,7 @@ import secrets
 from datetime import date, timedelta
 
 from core.ui.kit import Button, Reply, rows
-from core.ui.registry import screen
+from core.ui.registry import screen, text_input
 from core.ui.views import Card, View
 
 DAYS = (3, 7, 14)
@@ -81,10 +81,20 @@ def gate(ctx, arg="", press=None, text=None):
         me = me or {}
         me.update(name=me.get("name") or name, note=inv.get("note", ""), since=me.get("since") or today, via="ссылка",
                   presses=me.get("presses", 0))
-        _open(ctx, me, inv["days"])
+        if inv.get("partner"):
+            me.update(partner=True, status="on", till=FOREVER, via="партнёрская ссылка")
+        else:
+            _open(ctx, me, inv["days"])
+            if inv.get("by"):
+                me.update(by=inv["by"], via="приглашение партнёра")
         guests[uid] = me
         _put(ctx, guests, invites)
         ctx.save()
+        if inv.get("by"):
+            p = guests.get(str(inv["by"])) or {}
+            if p.get("partner"):
+                ctx.app.pending = [Reply(text=f"🎉 Ваш клиент «{me.get('note') or me.get('name') or 'клиент'}» открыл демо.",
+                                         to=int(inv["by"]), buttons=[[Button("🤝 Мои клиенты", "ptn")]])]
         return None
     if me and me.get("status") == "on":
         if me.get("till", "") >= today:
@@ -165,7 +175,8 @@ def guests_list(ctx):
     no = _deny(ctx)
     if no:
         return no
-    guests = _sweep(ctx)
+    guests = {u: g for u, g in _sweep(ctx).items() if not g.get("partner")}
+    names = {u: _title(g, u) for u, g in _guests(ctx).items() if g.get("partner")}
     order = {"wait": 0, "on": 1, "end": 2, "off": 3}
     items = sorted(guests.items(), key=lambda t: (order.get(t[1].get("status"), 9), t[1].get("till", "")))
     v = View("👥 Гости демо", f"смотрят: {sum(g.get('status') == 'on' for g in guests.values())} · "
@@ -177,7 +188,7 @@ def guests_list(ctx):
                  f"доступ был до {_dm(g.get('till'))}"]
         if g.get("last"):
             lines.append(f"последний раз {_dm(g['last'])} · нажатий {g.get('presses', 0)}")
-        lines.append(f"вход: {g.get('via', '—')}")
+        lines.append(f"вход: {g.get('via', '—')}" + (f" · партнёр {names.get(str(g['by']), '?')}" if g.get("by") else ""))
         cards.append(Card(_title(g, uid), ST.get(st, ""), lines,
                           color="good" if st == "on" else "warn" if st == "wait" else None))
     v.cards(cards)
@@ -187,7 +198,7 @@ def guests_list(ctx):
     if free:
         v.note(f"Неиспользованных приглашений: {len(free)}.")
     kb = rows([Button(f"{ST.get(g.get('status'), '')[:1]} {_title(g, uid)[:22]}", f"gso:{uid}") for uid, g in items[:15]], 2)
-    kb.append([Button("➕ Пригласить", "gsi")])
+    kb.append([Button("➕ Пригласить", "gsi"), Button(f"🤝 Партнёры ({len(names)})", "ptl")])
     return Reply(view=v, buttons=kb)
 
 
@@ -227,6 +238,17 @@ def guest_card(ctx, uid):
     lines = [f"Имя в мессенджере: {g.get('name') or '—'}", f"Вошёл: {g.get('via', '—')}, с {_dm(g.get('since'))}",
              f"Доступ до: {_dm(g.get('till'))}" if g.get("till") else "Доступа ещё не было",
              f"Последний раз: {_dm(g.get('last'))} · нажатий {g.get('presses', 0)}"]
+    if g.get("partner"):
+        guests = _guests(ctx)
+        cl = _clients_of(guests, uid)
+        lines = [f"Партнёр · вошёл {_dm(g.get('since'))}", f"Клиентов привёл: {len(cl)}",
+                 f"Заявок «Хочу так»: {len(_reqs_of(ctx, {uid, *cl}))}",
+                 f"Последний раз: {_dm(g.get('last'))} · нажатий {g.get('presses', 0)}"] + \
+                [f"• {_title(c, u)} — {ST.get(c.get('status'), '')}" for u, c in list(cl.items())[:8]]
+        v.lines(lines)
+        kb = [[Button("🚫 Отключить партнёра", f"gsoff:{uid}")]] if st == "on" else [[Button("✅ Включить снова", f"gsa:{uid}:7")]]
+        kb.append([Button("🤝 Партнёры", "ptl")])
+        return Reply(view=v, buttons=kb)
     v.lines(lines)
     if st == "on":
         kb = [[Button(f"➕ {d} дн.", f"gsx:{uid}:{d}") for d in DAYS], [Button("🚫 Отключить", f"gsoff:{uid}")]]
@@ -256,6 +278,9 @@ def approve(ctx, uid, days="7"):
         return no
 
     def fn(g):
+        if g.get("partner"):
+            g.update(status="on", till=FOREVER)
+            return Reply(text="✅ Доступ партнёра снова открыт.", to=int(uid), buttons=[[Button("🏠 Открыть", "home")]])
         _open(ctx, g, days)
         return Reply(text=f"✅ Доступ к демо открыт до {_dm(g['till'])}. Нажимайте и смотрите — всё выдумано, "
                           "ничего не сломаете.", to=int(uid), buttons=[[Button("🏠 Открыть демо", "home")]])
@@ -299,3 +324,278 @@ def switch_off(ctx, uid):
     _change(ctx, uid, lambda g: g.update(status="off"))
     ctx.app.drop_guest(int(uid))
     return guest_card(ctx, uid)
+
+
+# ======================= партнёры =======================
+# Партнёр — человек, который показывает демо клиентам со своего телефона (решение Адама 30.10).
+# Входит по партнёрской ссылке (админ: «🤝 Добавить партнёра»), доступ без срока, пока админ не отключит.
+# Может: всё демо, «Начать заново», конструктор с ценами и КП, свои приглашения клиентам (клиент закрепляется за ним),
+# заявки «Хочу так» от своих клиентов. Не может: менять цены, видеть чужих гостей, админку.
+# В гостях: {"partner": True, ...}; у клиента партнёра — {"by": "<id партнёра>"}.
+
+FOREVER = "2999-12-31"
+
+
+def partner_of(office, user_id):
+    """Запись партнёра, если этот зритель — действующий партнёр, иначе None."""
+    g = (office.get("demo_guests") or {}).get(str(user_id)) or {}
+    return g if g.get("partner") and g.get("status") == "on" else None
+
+
+def is_partner(ctx):
+    return bool(ctx.demo and ctx.app.demo_gate and partner_of(ctx.office, ctx.user_id))
+
+
+def _link(ctx, code):
+    if ctx.app.web_url:
+        return f"{ctx.app.web_url}/?start={code}"
+    if ctx.app.bot_username:
+        return f"https://t.me/{ctx.app.bot_username}?start={code}"
+    return f"/start {code}"
+
+
+def _clients_of(guests, pid):
+    return {u: g for u, g in guests.items() if str(g.get("by", "")) == str(pid)}
+
+
+def _reqs_of(ctx, uids):
+    return [r for r in ctx.office.get("tariff_req") or [] if str(r.get("uid")) in uids or str(r.get("partner", "")) in uids]
+
+
+# ---------- админ ----------
+
+@screen("ptl")
+def partners(ctx):
+    no = _deny(ctx)
+    if no:
+        return no
+    guests = _guests(ctx)
+    ps = [(u, g) for u, g in guests.items() if g.get("partner")]
+    v = View("🤝 Партнёры", f"работают: {sum(g.get('status') == 'on' for _, g in ps)} · всего {len(ps)}")
+    cards = []
+    for u, g in ps:
+        cl = _clients_of(guests, u)
+        rq = _reqs_of(ctx, {u, *cl})
+        cards.append(Card(_title(g, u), "✅ работает" if g.get("status") == "on" else "🚫 отключён",
+                          [f"клиентов привёл: {len(cl)} · смотрят сейчас: {sum(c.get('status') == 'on' for c in cl.values())}",
+                           f"заявок «Хочу так»: {len(rq)}",
+                           f"последний раз {_dm(g.get('last'))} · нажатий {g.get('presses', 0)}"],
+                          color="good" if g.get("status") == "on" else None))
+    v.cards(cards)
+    if not ps:
+        v.note("Партнёров пока нет. «🤝 Добавить партнёра» — бот даст ссылку, отправьте её партнёру.")
+    kb = rows([Button(_title(g, u)[:24], f"gso:{u}") for u, g in ps], 2)
+    kb.append([Button("🤝 Добавить партнёра", "pta"), Button("📘 Памятка партнёра", "ptm")])
+    kb.append([Button("👥 Гости демо", "gst")])
+    return Reply(view=v, buttons=kb)
+
+
+@screen("pta")
+def partner_add(ctx):
+    no = _deny(ctx)
+    if no:
+        return no
+    ctx.session["await"] = {"kind": "partner_name", "data": {}}
+    ctx.save()
+    prompt = "Как зовут партнёра и откуда он? Например: «Ислам, Грозный»."
+    return Reply(text=prompt, ask=prompt, buttons=[[Button("✖️ Отмена", "ptl")]])
+
+
+@text_input("partner_name")
+def on_partner_name(ctx, text, data):
+    if not _is_admin(ctx):
+        return Reply(text="Это экран администратора демо.")
+    name = " ".join((text or "").split())[:60]
+    if len(name) < 2:
+        return partner_add(ctx)
+    code = "p" + secrets.token_hex(6)
+    invites = _invites(ctx)
+    invites[code] = {"partner": True, "note": name, "created": ctx.today.isoformat()}
+    _put(ctx, invites=invites)
+    return Reply(text=f"🤝 Партнёр «{name}». Отправьте ему эту ссылку:\n\n{_link(ctx, code)}\n\n"
+                      "Ссылка одноразовая, доступ — без срока, пока вы не отключите. Внутри у партнёра «📘 Памятка» — "
+                      "что это за продукт и как его показывать.", buttons=[[Button("🤝 Партнёры", "ptl")]])
+
+
+# ---------- партнёр ----------
+
+def _deny_partner(ctx):
+    return None if is_partner(ctx) else Reply(text="Это экран партнёра.")
+
+
+@screen("ptn")
+def my_clients(ctx):
+    no = _deny_partner(ctx)
+    if no:
+        return no
+    guests = _sweep(ctx)
+    me = str(ctx.user_id)
+    cl = sorted(_clients_of(guests, me).items(), key=lambda t: (t[1].get("status") != "on", t[1].get("till", "")))
+    rq = _reqs_of(ctx, {me, *dict(cl)})
+    v = View("🤝 Мои клиенты", f"привели: {len(cl)} · смотрят сейчас: {sum(g.get('status') == 'on' for _, g in cl)} · "
+                              f"заявок: {len(rq)}")
+    v.cards([Card(_title(g, u), ST.get(g.get("status"), ""),
+                  [f"до {_dm(g.get('till'))}" if g.get("status") == "on" else f"доступ был до {_dm(g.get('till'))}",
+                   f"последний раз {_dm(g.get('last'))} · нажатий {g.get('presses', 0)}"],
+                  color="good" if g.get("status") == "on" else None) for u, g in cl[:15]])
+    if rq:
+        v.lines([f"{r['ts']} · {r['who']} · {r['set']} · {r['monthly']:,} ₽/мес".replace(",", " ") for r in rq[-5:]],
+                title="Заявки «Хочу так»")
+    if not cl:
+        v.note("Клиентов пока нет. «➕ Пригласить клиента» — бот даст ссылку: клиент сам посмотрит демо у себя в телефоне.")
+    kb = [[Button("➕ Пригласить клиента", "pti")]]
+    kb += [[Button(f"➕ 7 дн. · {_title(g, u)[:18]}", f"ptx:{u}"), Button("🚫", f"pto:{u}")]
+           for u, g in cl[:8] if g.get("status") in ("on", "end")]
+    kb.append([Button("📘 Памятка", "ptm")])
+    return Reply(view=v, buttons=kb)
+
+
+@screen("pti")
+def partner_invite(ctx, days=None):
+    no = _deny_partner(ctx)
+    if no:
+        return no
+    if not days:
+        ctx.session["await"] = {"kind": "partner_client", "data": {}}
+        ctx.save()
+        prompt = "Кому приглашение? Имя, компания и телефон клиента — например: «Ахмед, Стройбаза, 8 928 000 00 00»."
+        return Reply(text=prompt, ask=prompt, buttons=[[Button("✖️ Отмена", "ptn")]])
+    return my_clients(ctx)
+
+
+@text_input("partner_client")
+def on_partner_client(ctx, text, data):
+    no = _deny_partner(ctx)
+    if no:
+        return no
+    note = " ".join((text or "").split())[:120]
+    if len(note) < 3:
+        return partner_invite(ctx)
+    return Reply(text=f"На сколько дней открыть демо для «{note}»? Срок — с первого входа.",
+                 buttons=[[Button(days_t(d), f"ptk:{d}:{_stash(ctx, note)}") for d in DAYS], [Button("✖️ Отмена", "ptn")]])
+
+
+def _stash(ctx, note):
+    """Имя клиента до выбора срока — в сессии партнёра (в кнопку не влезет)."""
+    key = secrets.token_hex(3)
+    ctx.session.setdefault("pt_notes", {})[key] = note
+    ctx.save()
+    return key
+
+
+@screen("ptk")
+def partner_invite_make(ctx, days, key):
+    no = _deny_partner(ctx)
+    if no:
+        return no
+    note = (ctx.session.get("pt_notes") or {}).pop(key, "")
+    ctx.save()
+    code = "d" + secrets.token_hex(5)
+    invites = _invites(ctx)
+    me = partner_of(ctx.office, ctx.user_id)
+    invites[code] = {"days": int(days), "created": ctx.today.isoformat(), "by": str(ctx.user_id), "note": note}
+    _put(ctx, invites=invites)
+    out = [Reply(text=f"🎟 Приглашение для «{note or 'клиента'}» на {days_t(days)}. Отправьте ему ссылку:\n\n{_link(ctx, code)}\n\n"
+                      "Ссылка одноразовая. Когда клиент войдёт — он появится в «🤝 Мои клиенты».",
+                 buttons=[[Button("🤝 Мои клиенты", "ptn")]])]
+    out += _notify_admins(ctx, f"🤝 Партнёр {_title(me, ctx.user_id)} пригласил клиента: {note or '—'} ({days_t(days)})")
+    return out
+
+
+def _own(ctx, uid):
+    g = _guests(ctx).get(uid)
+    return g if g and str(g.get("by", "")) == str(ctx.user_id) else None
+
+
+@screen("ptx")
+def partner_extend(ctx, uid):
+    no = _deny_partner(ctx)
+    if no or not _own(ctx, uid):
+        return no or my_clients(ctx)
+
+    def fn(g):
+        start = max(date.fromisoformat(g.get("till") or ctx.today.isoformat()), ctx.today)
+        g.update(status="on", till=(start + timedelta(days=7)).isoformat())
+        return Reply(text=f"➕ Доступ к демо продлён до {_dm(g['till'])}.", to=int(uid))
+    msg = _change(ctx, uid, fn)
+    return ([msg] if msg else []) + [my_clients(ctx)]
+
+
+@screen("pto")
+def partner_off(ctx, uid):
+    no = _deny_partner(ctx)
+    if no or not _own(ctx, uid):
+        return no or my_clients(ctx)
+    _change(ctx, uid, lambda g: g.update(status="off"))
+    ctx.app.drop_guest(int(uid))
+    return my_clients(ctx)
+
+
+# ---------- памятка ----------
+
+MEMO = [
+    ("О чём это", [
+        "KPI-бот — приложение на телефоне для оптовой компании, которая работает в 1С. Бот сам берёт отчёты из 1С и каждый "
+        "день показывает каждому сотруднику его план, факт и зарплату, а руководителю — всю картину.",
+        "Клиент — оптовик или дистрибьютор от 10 до 300 человек: торговые представители, склад, водители, офис.",
+        "Боль клиента: зарплату считают вручную в Excel, торговые не знают, сколько заработали, руководитель узнаёт о провале "
+        "в конце месяца, долги клиентов растут незаметно.",
+        "Что даёт бот: каждый видит свои деньги каждый день и сам тянется к плану; зарплата считается сама; директор видит, "
+        "кто тянет и кто тонет, ещё до конца месяца; долги, склад, водители — под контролем.",
+    ]),
+    ("Как показывать (10–15 минут)", [
+        "1. «🔄 Начать заново» перед каждым клиентом — свежие цифры.",
+        "2. «🏭 Отрасль» — выберите отрасль клиента: стройматериалы, продукты, автозапчасти…",
+        "3. «🎭 Роль → Торговый»: «Мой план», «Зарплата» — главное «вау»: торговый видит свои деньги сегодня.",
+        "4. «🎭 Роль → Директор»: главная, отделы, «Фонд», «Утвердить» — директор видит всё одной кнопкой.",
+        "5. Если у клиента склад или водители — роли «Кладовщик», «Водитель», «Начальник закупок».",
+        "6. «🧩 Собрать»: включите только то, что нужно клиенту, впишите его людей — две цифры: подключение и в месяц.",
+        "7. «📄 Коммерческое предложение» — PDF, отправьте клиенту сразу.",
+    ]),
+    ("Что спросить у клиента", [
+        "Сколько человек: торговых, склад, водители, офис.",
+        "Какая 1С (обычно «Управление торговлей» 10.3 или 11) и есть ли программист 1С.",
+        "Как сейчас считают зарплату торговым и сколько времени это занимает.",
+        "Кто принимает решение и когда готовы начать.",
+    ]),
+    ("Как довести до сделки", [
+        "Клиенту понравилось — нажмите «📨 Хочу так» прямо при нём: заявка с расчётом придёт администратору, клиент закрепится за вами.",
+        "Хочет подумать — «🤝 Мои клиенты → ➕ Пригласить клиента»: он сам посмотрит демо у себя, вы увидите, заходил ли он.",
+        "Через 2–3 дня позвоните: «посмотрели? какие вопросы?» — в «Моих клиентах» видно, сколько он нажимал.",
+        "Цены и подключение — как в конструкторе. Первые 14 дней — бесплатно.",
+    ]),
+    ("Чего не делать", [
+        "Не обещайте скидки, сроки и функции, которых нет в демо, — сначала спросите администратора.",
+        "Не говорите, что цифры в демо — настоящие: все люди и суммы выдуманы.",
+        "Не пересылайте свою партнёрскую ссылку другим — она только для вас. Клиентам — только «➕ Пригласить клиента».",
+    ]),
+    ("Частые вопросы клиента", [
+        "«А у нас 1С другая» — бот читает обычные отчёты 1С, подстраиваемся под любую конфигурацию.",
+        "«Сотрудники не будут пользоваться» — торговый открывает бот ради своей зарплаты, это главное, что ему интересно.",
+        "«Дорого» — соберите в конструкторе только нужное: можно начать с продаж и добавить отделы потом.",
+        "«Наши данные?» — у каждой фирмы своё приложение и своя база, никто посторонний её не видит.",
+    ]),
+]
+
+
+def memo_view():
+    v = View("📘 Памятка партнёра", "о чём продукт и как его показывать")
+    for title, lines in MEMO:
+        v.lines(lines, title=title)
+    return v
+
+
+@screen("ptm")
+def memo(ctx):
+    if not (is_partner(ctx) or _is_admin(ctx)):
+        return Reply(text="Памятка — для партнёров.")
+    return Reply(view=memo_view(), buttons=[[Button("📄 Памятка PDF", "ptp")]] +
+                 ([[Button("🤝 Мои клиенты", "ptn")]] if is_partner(ctx) else []))
+
+
+@screen("ptp")
+def memo_pdf(ctx):
+    if not (is_partner(ctx) or _is_admin(ctx)):
+        return Reply(text="Памятка — для партнёров.")
+    from core.ui.views import to_pdf
+    return Reply(text="📄 Памятка партнёра", files=[("Памятка партнёра.pdf", to_pdf([memo_view()]))])

@@ -49,6 +49,7 @@ class App:
         self.last_sid = ""                                 # какой экран открылся последним (веб-провод: главная или нет)
         self._dbs = {}
         self._memo = {}
+        self.pending = []
         importlib.import_module("core.ui.screens")
         importlib.import_module("core.ui.tariff")
         importlib.import_module("core.demo")
@@ -194,7 +195,8 @@ class App:
         ctx.session.pop("await", None)
         ctx.session["trail"] = []
         ctx.save()
-        return self._with_keyboard(user_id, self._run(ctx, "home", ()), force=True)
+        extra, self.pending = self.pending, []         # сообщения другим людям, которые родились на входе (партнёру — «клиент вошёл»)
+        return extra + self._with_keyboard(user_id, self._run(ctx, "home", ()), force=True)
 
     def press(self, user_id, data, top=False):
         """top — нажатие из нижнего меню: путь «Назад» начинается заново."""
