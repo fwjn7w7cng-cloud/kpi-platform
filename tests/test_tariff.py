@@ -19,7 +19,7 @@ class Quote(unittest.TestCase):
         q = P.quote({"sales": "business", "stock": True}, {"sales": 5, "stock": 3}, P.DEFAULT)
         self.assertEqual([round(a) for _, a, _ in q["lines"]], [10000 + 5 * 700, 5000 + 3 * 500])
         self.assertEqual(q["monthly"], 20000)
-        self.assertEqual(q["setup"], 25000)                      # первый 15 000 + ещё один 10 000
+        self.assertEqual(q["setup"], 30000)                      # 20 000 × 1,5
         self.assertEqual(q["discount"], 0)
         self.assertEqual(q["people"], 8)
 
@@ -29,20 +29,24 @@ class Quote(unittest.TestCase):
         self.assertTrue(q["all_depts"])
         self.assertEqual(round(q["dept_sum"]), 37000 + 10500 + 10000 + 4500)
         self.assertEqual(q["monthly"], P.rnd(62000 * 0.85))
-        self.assertEqual(q["setup"], 15000 + 3 * 10000)
+        self.assertEqual(q["setup"], round(q["monthly"] * 1.5 / 1000) * 1000)
+        self.assertGreater(q["setup"], q["monthly"])
         qm = P.quote(E.PRESETS["max"]["packages"], counts, P.DEFAULT, year=True)
         self.assertEqual(qm["monthly"], q["monthly"] + 40000)
-        self.assertEqual(qm["setup"], q["setup"] + 30000)
+        self.assertEqual(qm["setup"], round(qm["monthly"] * 1.5 / 1000) * 1000)
         self.assertEqual(qm["monthly_year"], P.rnd(qm["monthly"] * 0.9))
 
     def test_empty_and_only_max(self):
         self.assertTrue(P.quote({}, {}, P.DEFAULT)["empty"])
         q = P.quote({"max": True}, {}, P.DEFAULT)
-        self.assertEqual((q["monthly"], q["setup"]), (40000, 30000))
+        self.assertEqual((q["monthly"], q["setup"]), (40000, 60000))
+        q = P.quote({"sales": "start"}, {"sales": 2}, P.DEFAULT)
+        self.assertEqual((q["monthly"], q["setup"]), (6000, 20000))            # меньше минимума — минимум
 
     def test_round_numbers_by_default(self):
         for code, value in P.DEFAULT.items():
-            self.assertEqual(value % (1 if code in ("disc_all", "disc_year", "trial_days") else 100), 0, code)
+            if code != "setup_mult":
+                self.assertEqual(value % (1 if code in ("disc_all", "disc_year", "trial_days") else 100), 0, code)
 
 
 class Base(unittest.TestCase):

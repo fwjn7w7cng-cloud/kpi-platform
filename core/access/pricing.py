@@ -1,7 +1,8 @@
 """Цены конструктора: за пакет в месяц + за каждого человека в подключённых отделах, подключение — один раз.
 
   в месяц      Σ по пакетам (пакет + люди × цена за человека) − скидка «все четыре отдела» + «Максимум»
-  подключение  первый пакет + каждый следующий (+ «Максимум» отдельно) — платится один раз
+  подключение  месячная оплата × setup_mult (1,5), но не меньше setup_min (20 000), до тысячи — платится один раз
+               (Адам 30.10: подключение должно быть выше месячной оплаты)
   за год       −disc_year % к месячной сумме
 Директор и администратор в счёт не входят. Стандартные цены — PRICES; свои администратор правит в приложении
 («💰 Цены»), они лежат в базе офиса под ключом «prices» и перекрывают стандартные.
@@ -24,9 +25,8 @@ PRICES = [
     ("office_user",         "Кадры и офис — за человека",       300,   "₽/мес за чел."),
     ("max",                 "Максимум — пакет, до 3 функций",   40000, "₽/мес"),
     ("custom_extra",        "Функция на заказ сверх трёх",      15000, "₽ за штуку"),
-    ("setup_first",         "Подключение — первый пакет",       15000, "₽ один раз"),
-    ("setup_next",          "Подключение — следующий пакет",    10000, "₽ один раз"),
-    ("setup_max",           "Подключение «Максимума»",          30000, "₽ один раз"),
+    ("setup_mult",          "Подключение — во сколько раз выше месяца", 1.5, "× месячной оплаты"),
+    ("setup_min",           "Подключение — не меньше",          20000, "₽ один раз"),
     ("disc_all",            "Скидка за все четыре отдела",      15,    "%"),
     ("disc_year",           "Скидка при оплате за год",         10,    "%"),
     ("trial_days",          "Пробный период",                   14,    "дней"),
@@ -114,13 +114,12 @@ def quote(packages, counts, pr, year=False):
         lines.append((f"{E.PACKAGES['max']['icon']} {E.PACKAGES['max']['title']}", max_sum, "бренд, 1С напрямую, филиалы, до 3 функций на заказ"))
     monthly = rnd(dept_sum - discount + max_sum)
     monthly_year = rnd(monthly * (1 - pr["disc_year"] / 100))
-    if n_pkgs:
-        setup_lines.append(("Первый пакет", pr["setup_first"]))
-        if n_pkgs > 1:
-            setup_lines.append((f"Ещё {n_pkgs - 1} × {fmt(pr['setup_next'])}", pr["setup_next"] * (n_pkgs - 1)))
-    if p["max"]:
-        setup_lines.append(("«Максимум»: бренд, связь с 1С", pr["setup_max"]))
-    setup = sum(a for _, a in setup_lines)
+    setup = 0
+    if n_pkgs or p["max"]:
+        raw = monthly * pr["setup_mult"]
+        setup = max(int(round(raw / 1000)) * 1000, int(pr["setup_min"]))
+        setup_lines.append((f"Месячная оплата × {fmt(pr['setup_mult'])}", setup) if setup > pr["setup_min"] else
+                           (f"Минимум (месяц × {fmt(pr['setup_mult'])} = {fmt(rnd(raw))})", setup))
     return {"lines": lines, "dept_sum": dept_sum, "discount": discount, "all_depts": all_depts, "monthly": monthly,
             "monthly_year": monthly_year, "year": bool(year), "year_total": monthly_year * 12, "setup_lines": setup_lines,
             "setup": setup, "people": people, "packages": p, "trial_days": int(pr["trial_days"]), "empty": not n_pkgs and not p["max"]}

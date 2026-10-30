@@ -335,8 +335,10 @@ def on_price(ctx, text, data):
     except ValueError:
         return ctx.ask("price", "Нужно число, например 5 000 или 15.", data, buttons=[[Button("✖️ Отмена", "pr")]])
     code = data["code"]
-    if x < 0 or (code.startswith("disc_") and x > 90) or (code == "trial_days" and x > 365) or x > 10_000_000:
-        return ctx.ask("price", "Так не бывает: скидка до 90%, пробный период до 365 дней, цена не меньше нуля.", data,
+    if x < 0 or (code.startswith("disc_") and x > 90) or (code == "trial_days" and x > 365) or x > 10_000_000 \
+            or (code == "setup_mult" and not 0.5 <= x <= 10):
+        return ctx.ask("price", "Так не бывает: скидка до 90%, пробный период до 365 дней, подключение — от 0,5 до 10 месяцев, "
+                                "цена не меньше нуля.", data,
                        buttons=[[Button("✖️ Отмена", "pr")]])
     P.set_price(ctx.office, code, int(x) if x == int(x) else x, who=ctx.author())
     return prices_screen(ctx)
