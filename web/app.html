@@ -114,6 +114,16 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 .tab .i { font-size: 20px; line-height: 1.1; }
 .tab .l { font-size: 11px; color: var(--ink-2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tab.on .l { color: var(--accent); font-weight: 600; }
+.viewer { position: fixed; inset: 0; z-index: 30; background: var(--bg); display: flex; flex-direction: column; }
+.viewer .vbar { display: flex; gap: 8px; align-items: center; padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px; background: var(--surface); box-shadow: 0 1px 0 var(--line); }
+.viewer .vbar b { flex: 1; min-width: 0; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.viewer .vbar button, .viewer .vbar a { border: 0; border-radius: 10px; padding: 9px 12px; font-weight: 600; font-size: 14px; cursor: pointer; text-decoration: none; }
+.viewer .close { background: var(--sunk); color: var(--ink); } .viewer .share { background: var(--accent); color: #fff; }
+.viewer iframe { flex: 1; border: 0; width: 100%; background: #fff; }
+.viewer .vpages { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.viewer .vpages img { width: 100%; max-width: 560px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.12); background: #fff; }
+.viewer .vnone { flex: 1; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--ink-2); }
+.viewer .vnone div { font-size: 48px; }
 .sheet { position: fixed; inset: 0; z-index: 20; background: rgba(10, 14, 20, .45); display: flex; align-items: flex-end; justify-content: center; }
 .sheet > div { background: var(--surface); width: 100%; max-width: 560px; border-radius: 18px 18px 0 0; padding: 16px max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 8px; max-height: 80%; overflow-y: auto; }
 .sheet h2 { font-family: var(--display); font-size: 18px; margin: 0 0 4px; }
@@ -170,7 +180,7 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 .pushbar button { border: 0; border-radius: 10px; padding: 9px 12px; font-weight: 600; cursor: pointer; }
 .pushbar .on { background: var(--accent); color: #fff; } .pushbar .no { background: transparent; color: var(--ink-2); }
 .file { display: inline-flex; gap: 6px; align-items: center; background: var(--surface); box-shadow: 0 0 0 1px var(--line); border-radius: 10px;
-  padding: 8px 12px; color: var(--accent); font-weight: 500; text-decoration: none; }
+  padding: 8px 12px; color: var(--accent); font-weight: 500; text-decoration: none; border: 0; font-family: inherit; font-size: inherit; cursor: pointer}
 .busy { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 40; background: linear-gradient(90deg, transparent, var(--accent), transparent);
   background-size: 50% 100%; background-repeat: no-repeat; animation: busy 1s linear infinite; }
 @keyframes busy { from { background-position: -50% 0; } to { background-position: 150% 0; } }
@@ -294,7 +304,7 @@ function msgHtml(m, home, first) {
   if (m.text && !m.ask) parts.push(`<div class="msg">${esc(m.text)}</div>`);
   if (m.ask) parts.push(`<div class="msg">${esc(m.ask)}</div><form class="askbar" id="askForm"><textarea id="askInput" rows="1" placeholder="Напишите ответ" required></textarea><button class="send" type="submit">Отправить</button></form>`);
   if (m.upload) parts.push(`<label class="upl">📎 Выбрать файлы из 1С<input type="file" id="upFile" multiple accept=".xls,.xlsx,.csv,.txt,.xml,.mxl,.html,.htm"></label>`);
-  if (m.files && m.files.length) parts.push(`<div class="files">${m.files.map(([n, u]) => u ? `<a class="file" href="${esc(u)}" target="_blank" rel="noopener">📎 ${esc(n)}</a>` : "").join("")}</div>`);
+  if (m.files && m.files.length) parts.push(`<div class="files">${m.files.map(([n, u]) => u ? `<button class="file" data-file="${esc(u)}" data-name="${esc(n)}">📎 ${esc(n)}</button>` : "").join("")}</div>`);
   parts.push(buttons(m.buttons, home && first));
   return parts.join("");
 }
@@ -402,7 +412,46 @@ $("tools").addEventListener("click", () => S.tools.length === 1 ? go(S.tools[0][
   sheet(`<h2>Для партнёра</h2>${S.tools.map(([l, to]) => `<button class="act" data-tab="${esc(to)}">${esc(l)}</button>`).join("")}`));
 $("back").addEventListener("click", () => { if (S.back) go(S.back); });
 $("htitle").addEventListener("click", () => go("home", true));
-$("main").addEventListener("click", e => { const b = e.target.closest("[data-to]"); if (b) go(b.dataset.to); });
+$("main").addEventListener("click", e => {
+  const f = e.target.closest("[data-file]"); if (f) { openFile(f.dataset.file, f.dataset.name); return; }
+  const b = e.target.closest("[data-to]"); if (b) go(b.dataset.to);
+});
+// Файл (PDF, Excel, Word) — в окне поверх приложения: «✕ Закрыть» возвращает назад, «📤 Поделиться» — меню телефона
+// (сохранить в «Файлы», отправить в мессенджер, напечатать). Раньше файл открывался вместо приложения и на iPhone
+// с экрана «Домой» назад было не выйти.
+let viewerFile = null, viewerUrl = null;
+async function openFile(url, name) {
+  closeFile();
+  const isPdf = /\.pdf$/i.test(name);
+  const v = document.createElement("div"); v.className = "viewer"; v.id = "viewer";
+  v.innerHTML = `<div class="vbar"><button class="close" id="vClose">✕ Закрыть</button><b>${esc(name)}</b><button class="share" id="vShare" disabled>⏳</button></div>` +
+    (isPdf ? `<div class="vpages" id="vPages"></div>` : `<div class="vnone"><div>📎</div><p>${esc(name)}</p><p>Нажмите «📤 Поделиться» — сохранить в «Файлы», открыть в Excel или Word, отправить.</p></div>`);
+  document.body.appendChild(v);
+  $("vClose").addEventListener("click", closeFile);
+  try {
+    const r = await fetch(url, {credentials: "same-origin"});
+    if (!r.ok) throw new Error(r.status);
+    const blob = await r.blob();
+    viewerFile = new File([blob], name, {type: blob.type || "application/octet-stream"});
+    viewerUrl = URL.createObjectURL(blob);
+    if (isPdf && $("vPages")) {                 // наши PDF — страницы-картинки: показываем их, это работает на любом телефоне
+      let n = 0; try { n = (await (await fetch(url + "/pages", {credentials: "same-origin"})).json()).n || 0; } catch (x) {}
+      $("vPages").innerHTML = n ? Array.from({length: n}, (_, i) => `<img src="${esc(url)}/p${i}" alt="страница ${i + 1}" loading="lazy">`).join("")
+        : `<iframe src="${viewerUrl}" title="${esc(name)}" style="width:100%;height:100%;border:0"></iframe>`;
+    }
+    const sb = $("vShare"); if (!sb) return;
+    sb.disabled = false;
+    if (navigator.canShare && navigator.canShare({files: [viewerFile]})) {
+      sb.textContent = "📤 Поделиться";
+      sb.addEventListener("click", () => navigator.share({files: [viewerFile], title: name}).catch(() => {}));
+    } else {
+      sb.textContent = "⬇️ Скачать";
+      sb.addEventListener("click", () => { const a = document.createElement("a"); a.href = viewerUrl; a.download = name; document.body.appendChild(a); a.click(); a.remove(); });
+    }
+  } catch (e) { closeFile(); toast("Файл устарел — откройте экран заново и нажмите файл ещё раз."); }
+}
+function closeFile() { const v = $("viewer"); if (v) v.remove(); if (viewerUrl) URL.revokeObjectURL(viewerUrl); viewerFile = viewerUrl = null; }
+window.addEventListener("keydown", e => { if (e.key === "Escape") closeFile(); });
 $("tabs").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   if (b.dataset.more) { const max = S.tabs.length > 5 ? 4 : S.tabs.length;

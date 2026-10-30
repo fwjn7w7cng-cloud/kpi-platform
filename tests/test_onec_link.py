@@ -88,6 +88,18 @@ class Link(unittest.TestCase):
         self.assertEqual(self.dav("PROPFIND")[0], 401)                                        # старый пароль больше не подходит
         f = self.app.press(ADMIN, "ucp")[0]
         self.assertTrue(f.files[0][1].startswith(b"%PDF"))
+        from core.ui.views import pdf_pages
+        self.assertGreaterEqual(len(pdf_pages(f.files[0][1])), 2)                            # страницы PDF — картинками в приложении
+        self.assertTrue(pdf_pages(f.files[0][1])[0].startswith(b"\xff\xd8"))
+        code, h, raw = self.api.handle("POST", "/api/start", {}, {"admin": "ключ"}, None)
+        tok = h["Set-Cookie"].split("kid=")[1].split(";")[0]
+        d = json.loads(self.api.handle("POST", "/api/press", {}, {"to": "ucp"}, tok)[2])
+        url = next(m["files"][0][1] for m in d["msgs"] if m.get("files"))
+        n = json.loads(self.api.handle("GET", url + "/pages", {}, {}, tok)[2])["n"]
+        self.assertGreaterEqual(n, 2)
+        code, h, img = self.api.handle("GET", url + "/p0", {}, {}, tok)
+        self.assertEqual((code, h["Content-Type"]), (200, "image/jpeg"))
+        self.assertEqual(self.api.handle("GET", url + f"/p{n}", {}, {}, tok)[0], 404)
         self.assertIn("администратор", self.app.press(500, "ucs")[0].text)                  # торговому — нет
 
     def test_demo(self):

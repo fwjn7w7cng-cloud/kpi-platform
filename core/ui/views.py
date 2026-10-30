@@ -924,6 +924,16 @@ def to_pdf(views):
     return _jpeg_pdf(jpgs)
 
 
+def pdf_pages(data):
+    """Страницы-картинки из PDF, который сделал to_pdf (каждая страница — один JPEG). Чужой PDF → []."""
+    import re
+    out = []
+    for m in re.finditer(rb"/Filter /DCTDecode /Length (\d+) >>\nstream\n", data or b""):
+        n = int(m.group(1))
+        out.append(data[m.end():m.end() + n])
+    return out
+
+
 def _jpeg_pdf(jpgs, dpi=150):
     """Простой PDF из готовых JPEG: каждая картинка — страница своего размера."""
     out = io.BytesIO()

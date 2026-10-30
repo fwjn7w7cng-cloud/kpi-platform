@@ -151,6 +151,16 @@ class WebApi:
             if name in self.static:
                 data, ctype = self.static[name]
                 return 200, {"Content-Type": ctype, "Cache-Control": "no-cache" if name == "sw.js" else "max-age=86400"}, data
+            if u.startswith("/api/file/") and u.count("/") == 4:   # /api/file/<id>/pages и /api/file/<id>/p<N> — страницы PDF картинками
+                from core.ui.views import pdf_pages
+                fid, part = u.split("/")[3], u.split("/")[4]
+                f = self.files.get(fid)
+                pages = pdf_pages(f[1]) if f and f[0].lower().endswith(".pdf") else []
+                if part == "pages":
+                    return self._json({"n": len(pages)})
+                if part.startswith("p") and part[1:].isdigit() and int(part[1:]) < len(pages):
+                    return 200, {"Content-Type": "image/jpeg", "Cache-Control": "max-age=3600"}, pages[int(part[1:])]
+                return 404, {"Content-Type": "text/plain; charset=utf-8"}, "Файл устарел — откройте экран заново".encode()
             if u.startswith("/api/file/"):
                 f = self.files.get(u.rsplit("/", 1)[-1])
                 if not f:
