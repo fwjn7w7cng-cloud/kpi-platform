@@ -38,6 +38,7 @@ class Reply:
     ask: str = ""               # подсказка: бот ждёт ответ текстом
     to: int = 0                 # кому (для рассылок); 0 — тому, кто нажал
     edit: bool = True           # можно заменить предыдущее сообщение
+    upload: bool = False        # под экраном — «Выбрать файлы» (приложение шлёт файлы в /api/upload)
 
     def all_buttons(self):
         return [b for row in self.buttons for b in row]

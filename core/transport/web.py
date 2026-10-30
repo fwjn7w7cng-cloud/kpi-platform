@@ -155,6 +155,14 @@ class WebApi:
                     to = str(body.get("to") or "home")[:64]
                     out = self.app.press(uid, to, top=bool(body.get("top")))
                     sid = getattr(self.app, "last_sid", to.split(":")[0])
+                elif act == "upload":                      # файл отчёта: {name, data: base64}
+                    import base64
+                    try:
+                        raw = base64.b64decode(str(body.get("data") or ""), validate=False)
+                    except ValueError:
+                        raw = b""
+                    out = self.app.upload(uid, str(body.get("name") or "")[:120], raw)
+                    sid = "up"
                 elif act == "text":
                     out = self.app.text(uid, str(body.get("text") or "")[:4000])
                     sid = getattr(self.app, "last_sid", "")
@@ -183,7 +191,8 @@ def serve(api, port=8101, host="127.0.0.1"):
         def _go(self, method):
             body = {}
             if method == "POST":
-                n = min(int(self.headers.get("Content-Length") or 0), 1_000_000)
+                limit = 22_000_000 if self.path.startswith("/api/upload") else 1_000_000   # файл отчёта до 15 МБ в base64
+                n = min(int(self.headers.get("Content-Length") or 0), limit)
                 try:
                     body = json.loads(self.rfile.read(n) or b"{}")
                 except ValueError:

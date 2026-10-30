@@ -162,6 +162,9 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 .inbox { display: flex; flex-direction: column; gap: 8px; }
 .inbox .msg { box-shadow: 0 0 0 1px var(--line), inset 3px 0 0 var(--accent); }
 .files { display: flex; flex-wrap: wrap; gap: 8px; }
+.upl { display: flex; align-items: center; justify-content: center; gap: 8px; border: 2px dashed var(--accent); border-radius: var(--r);
+  padding: 18px 12px; color: var(--accent); font-weight: 600; background: var(--accent-soft); cursor: pointer; text-align: center; }
+.upl input { display: none; }
 .file { display: inline-flex; gap: 6px; align-items: center; background: var(--surface); box-shadow: 0 0 0 1px var(--line); border-radius: 10px;
   padding: 8px 12px; color: var(--accent); font-weight: 500; text-decoration: none; }
 .busy { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 40; background: linear-gradient(90deg, transparent, var(--accent), transparent);
@@ -286,6 +289,7 @@ function msgHtml(m, home, first) {
   }
   if (m.text && !m.ask) parts.push(`<div class="msg">${esc(m.text)}</div>`);
   if (m.ask) parts.push(`<div class="msg">${esc(m.ask)}</div><form class="askbar" id="askForm"><textarea id="askInput" rows="1" placeholder="Напишите ответ" required></textarea><button class="send" type="submit">Отправить</button></form>`);
+  if (m.upload) parts.push(`<label class="upl">📎 Выбрать файлы из 1С<input type="file" id="upFile" multiple accept=".xls,.xlsx,.csv,.txt,.xml,.mxl,.html,.htm"></label>`);
   if (m.files && m.files.length) parts.push(`<div class="files">${m.files.map(([n, u]) => u ? `<a class="file" href="${esc(u)}" target="_blank" rel="noopener">📎 ${esc(n)}</a>` : "").join("")}</div>`);
   parts.push(buttons(m.buttons, home && first));
   return parts.join("");
@@ -308,6 +312,8 @@ function show(d) {
   const tb = $("tools"); tb.hidden = !S.tools.length;
   tb.textContent = S.tools.length ? (S.tools.some(([, to]) => to === "adm") ? "🛠 Пульт" : "🤝 Партнёр") : "";
   tabs();
+  const up = $("upFile");
+  if (up) up.addEventListener("change", () => uploadFiles([...up.files]));
   const f = $("askForm");
   if (f) {
     const ta = $("askInput");
@@ -333,6 +339,26 @@ async function call(act, body) {
     if (!r.ok) throw new Error(r.status);
     show(await r.json());
   } catch (e) { toast("Нет связи с сервером. Проверьте интернет и нажмите ещё раз."); }
+  finally { busy = false; $("busy").hidden = true; }
+}
+// Файлы отчётов: по одному в /api/upload (base64), ответы складываем в один экран «Что пришло».
+async function uploadFiles(files) {
+  if (!files.length || busy) return;
+  busy = true; $("busy").hidden = false;
+  const all = []; let last = null;
+  try {
+    for (const [i, file] of files.entries()) {
+      toast(`Загружаю ${i + 1} из ${files.length}: ${file.name}`);
+      if (file.size > 15 * 1024 * 1024) { all.push({text: `«${file.name}» больше 15 МБ — сохраните отчёт за месяц.`}); continue; }
+      const data = await new Promise((ok, bad) => { const r = new FileReader();
+        r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = bad; r.readAsDataURL(file); });
+      const r = await fetch("/api/upload", {method: "POST", headers: {"Content-Type": "application/json"}, credentials: "same-origin",
+        body: JSON.stringify({name: file.name, data})});
+      if (!r.ok) throw new Error(r.status);
+      last = await r.json(); all.push(...(last.msgs || []));
+    }
+    show({...(last || {}), msgs: all});
+  } catch (e) { toast("Не получилось отправить файл. Проверьте интернет и попробуйте ещё раз."); }
   finally { busy = false; $("busy").hidden = true; }
 }
 function go(to, top) { if (top) S.cur = to; call("press", {to, top: !!top}); }

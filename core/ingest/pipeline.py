@@ -92,5 +92,5 @@ def ingest(client_id, db, files, manual=False, hooks=None):
                 hooks.run("ingest_after", db, ds)
         unknown = db.unknown_keys()
         if unknown and res.ok:
-            res.skipped.append("нет в списке сотрудников: " + ", ".join(unknown[:5]) + ("…" if len(unknown) > 5 else ""))
+            res.skipped.append("нет в списке сотрудников: " + ", ".join(k.title() for k in unknown[:5]) + ("…" if len(unknown) > 5 else ""))
     return out

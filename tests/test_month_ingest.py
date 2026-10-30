@@ -90,7 +90,7 @@ class Ingest(unittest.TestCase):
     def test_template_parser_and_rules(self):
         res = ingest("_template", self.db, [("продажи.xlsx", self.file)])
         self.assertTrue(res[0].ok, res[0].text())
-        self.assertIn("сидоров олег", res[0].text())              # человека нет в списке — сказали
+        self.assertIn("Сидоров Олег", res[0].text())              # человека нет в списке — сказали
         self.assertEqual(sum(r["amount"] for r in self.db.sales("2026-10-01", "2026-10-31")), 1800)
         again = ingest("_template", self.db, [("продажи (копия).xlsx", self.file)])
         self.assertIn("уже принят", again[0].text())                 # тот же файл — не задваиваем

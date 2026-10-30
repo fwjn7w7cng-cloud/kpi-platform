@@ -422,7 +422,7 @@ def unknown_screen(ctx, key=None, emp_id=None):
             return unknown_screen(ctx, key)
         ctx.db.bind_key(key, e["id"])
         ctx.db.audit(_who(ctx), "bind", f"{key} → {e['fio']}")
-        return [Reply(text=f"🔑 «{key}» — это {e['fio']}. Его цифры из отчётов теперь считаются ему."), unknown_screen(ctx)]
+        return [Reply(text=f"🔑 «{key.title()}» — это {e['fio']}. Его цифры из отчётов теперь считаются ему."), unknown_screen(ctx)]
     if key:
         es = [e for e in ctx.db.employees() if manages(ctx, e)]
         words = key.split()
@@ -430,13 +430,13 @@ def unknown_screen(ctx, key=None, emp_id=None):
         kb = rows([Button(e["fio"], f"pak:{key}:{e['id']}") for e in (close or es)[:30]], 2)
         kb.append([Button("➕ Новый торговый с этим именем", f"pak:{key}:new")])
         kb.append([Button("‹ Назад", "pak")])
-        return Reply(text=f"«{key}» в отчётах 1С — кто это?", buttons=kb)
+        return Reply(text=f"«{key.title()}» в отчётах 1С — кто это?", buttons=kb)
     if not keys:
         return Reply(text="Все имена из отчётов привязаны к людям.", buttons=[[Button("‹ Сотрудники", "pa")]])
-    v = View("🧾 Нет в расчёте", f"{len(keys)} имён из отчётов 1С без человека")
-    v.lines([k for k in keys[:30]])
+    v = View("🧾 Нет в расчёте", f"имён из отчётов 1С без человека: {len(keys)}")
+    v.lines([k.title() for k in keys[:30]])
     v.note("Нажмите имя и выберите, кто это. Пока имя не привязано, его продажи и долги никому не считаются.")
-    return Reply(view=v, buttons=rows([Button(k, f"pak:{k}") for k in keys[:30]], 2) + [[Button("‹ Сотрудники", "pa")]])
+    return Reply(view=v, buttons=rows([Button(k.title(), f"pak:{k}") for k in keys[:30]], 2) + [[Button("‹ Сотрудники", "pa")]])
 
 
 menu("pa", "👥 Сотрудники и доступ", roles={"admin", "owner", "head"}, order=58)

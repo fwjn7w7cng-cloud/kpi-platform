@@ -54,6 +54,7 @@ class App:
         importlib.import_module("core.ui.tariff")
         importlib.import_module("core.onboard")
         importlib.import_module("core.people")
+        importlib.import_module("core.reports")
         importlib.import_module("core.demo")
         importlib.import_module("core.jobs.briefs")
         for m in MODULES:
@@ -206,6 +207,16 @@ class App:
         ctx.save()
         extra, self.pending = self.pending, []         # сообщения другим людям, которые родились на входе (партнёру — «клиент вошёл»)
         return extra + hello + self._with_keyboard(user_id, self._run(ctx, "home", ()), force=True)
+
+    def upload(self, user_id, name, data):
+        """Файл отчёта из приложения («📥 Отчёты 1С») или мессенджера: принять и показать, что пришло (core/reports.py)."""
+        from core import demo, reports
+        ctx = self.ctx(user_id)
+        g = demo.gate(ctx, press="up")
+        if g is not None:
+            return g
+        self.last_sid = "up"
+        return self._with_keyboard(user_id, self._finish(ctx, reports.receive(ctx, name, data), "up"))
 
     def press(self, user_id, data, top=False):
         """top — нажатие из нижнего меню: путь «Назад» начинается заново."""

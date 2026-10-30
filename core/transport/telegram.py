@@ -92,14 +92,10 @@ def build(app, token, mailbox=None, drive=None):
 
     async def on_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
         u = update.effective_user
-        if u.id not in app.admins or app.demo:
-            await update.message.reply_text("Файлы отчётов принимает только администратор.")
-            return
         doc = update.message.document
         f = await doc.get_file()
         data = bytes(await f.download_as_bytearray())
-        res = await asyncio.to_thread(ingest, app.client_id, app.db(), [(doc.file_name, data)], True, app.hooks)
-        await update.message.reply_text("\n".join(r.text() for r in res)[:4000])
+        await deliver(context.bot, update.effective_chat.id, await asyncio.to_thread(app.upload, u.id, doc.file_name, data))
 
     async def tick(context: ContextTypes.DEFAULT_TYPE):
         now = datetime.now(tz)
