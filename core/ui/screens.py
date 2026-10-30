@@ -104,7 +104,7 @@ MENU_MAX = 12
 MENU_GROUPS = [
     ("sales", "📈 Продажи и клиенты", {"rating", "cli", "rtd", "alerts", "fc", "cmp", "debts", "rv", "watch", "achb",
                                        "fx", "call"}),
-    ("money", "💰 Зарплата, планы, месяц", {"fund", "month", "pl", "log", "tf", "pr"}),
+    ("money", "💰 Зарплата, планы, месяц", {"fund", "month", "pl", "log", "tf"}),
     ("ops", "📦 Закупки, склад, логистика", {"sk", "sow", "sol", "lg", "lgk", "wrc", "wsh", "fu"}),
     ("team", "👥 Люди и задачи", {"people", "ts", "tasks", "qz", "rmd", "hr"}),
     ("more", "⭐ Максимум", {"direct_1c", "branches", "branding", "custom"}),
@@ -223,8 +223,9 @@ def bottom_rows(ctx):
     items = [("🏠 Главная", "home")] + [x for x in items if x != fb] + [fb]
     out = [items[i:i + 3] for i in range(0, len(items), 3)]
     if ctx.demo:
-        out.append([("🎭 Роль", "sw:role"), ("🏭 Отрасль", "sw:ind"), ("🧩 Собрать", "sw:ed")] +
-                   ([("👥 Гости демо", "gst")] if ctx.user_id in ctx.app.admins else []))
+        out.append([("🎭 Роль", "sw:role"), ("🏭 Отрасль", "sw:ind"), ("🧩 Собрать", "sw:ed")])
+        if ctx.user_id in ctx.app.admins and ctx.app.demo_gate:
+            out.append([("🛠 Пульт", "adm")])
         from core.demo import is_partner
         if is_partner(ctx):
             out.append([("🤝 Мои клиенты", "ptn"), ("📘 Памятка", "ptm"), ("🔄 Заново", "sw:reset")])
@@ -861,7 +862,8 @@ HELP = {
     "staff": ["💰 Моя зарплата — дни и начисления.", "📅 Мой табель — отметки за месяц.",
               "🚚 Мои рейсы — у водителей: рейсы, километры, точки.", "🐞 Не работает — написать администратору."],
     "admin": ["Всё, что видят остальные, плюс 👁 «Смотреть как» — бот глазами любого сотрудника.",
-              "💰 Цены — стандартные цены пакетов, за человека, подключения и скидок; правятся здесь и действуют сразу везде."],
+              "🛠 Пульт (в демо) — всё для вас в одном месте: пригласить клиента, добавить партнёра, гости, партнёры, "
+              "заявки «Хочу так», 💰 цены, памятка партнёра."],
 }
 
 

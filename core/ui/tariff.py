@@ -17,7 +17,6 @@ DEPT_ORDER = ("sales", "stock", "logistics", "office")
 REQ_KEY = "tariff_req"
 
 menu("tf", "💳 Тариф", {"owner", "admin"}, order=86, when=lambda c: not c.demo)
-menu("pr", "💰 Цены", {"admin"}, order=87)
 
 
 def is_admin(ctx):
@@ -123,8 +122,6 @@ def build(ctx):
           [Button(("• " if preset == c else "") + E.PRESETS[c]["title"], f"sw:ed:{c}") for c in E.ORDER[:3]],
           [Button(("• " if preset == c else "") + E.PRESETS[c]["title"], f"sw:ed:{c}") for c in E.ORDER[3:]],
           [Button("📨 Хочу так — отправить заявку", "sw:req")]]
-    if is_admin(ctx):
-        kb.append([Button("💰 Цены", "pr")])
     if not p["sales"] and any(p[c] for c in ("stock", "logistics", "office")):
         v.note("Без пакета «Продажи» торговые в приложение не входят — так можно: только склад или только водители.")
     return Reply(view=v, buttons=kb)
@@ -271,7 +268,7 @@ def request(ctx, client=None):
     reqs.append({"uid": ctx.user_id, "who": who, "set": ctx.cfg.set_title, "counts": counts, "setup": q["setup"],
                  "monthly": q["monthly"], "ts": datetime.now().strftime("%d.%m %H:%M"), "show": True, "partner": by})
     ctx.office.put(REQ_KEY, reqs[-100:])
-    out = [Reply(text=text, to=a, buttons=[[Button("👥 Гости демо", "gst")]]) for a in ctx.app.admins if a != ctx.user_id]
+    out = [Reply(text=text, to=a, buttons=[[Button("📨 Заявки", "rqs")]]) for a in ctx.app.admins if a != ctx.user_id]
     if by and not partner and by.isdigit():
         out.append(Reply(text="🎉 Ваш клиент нажал «Хочу так»:\n" + text, to=int(by), buttons=[[Button("🤝 Мои клиенты", "ptn")]]))
     tail = f"Клиент «{client}» закреплён за вами." if partner else "Мы свяжемся с вами в приложении."
@@ -332,7 +329,8 @@ def prices_screen(ctx):
     kb = rows([Button(f"✏️ {title.replace(' — за человека', ': чел.').replace(' — пакет', '').replace(' — ', ': ')[:28]}",
                       f"pre:{code}") for code, title, _, _ in P.PRICES], 2)
     kb.append([Button("↩️ Стандартные цены", "prx")] if ch else [])
-    kb.append([Button("🧩 Собрать", "sw:ed")] if ctx.demo else [Button("💳 Тариф", "tf")])
+    kb.append([Button("‹ Пульт", "adm")] if ctx.demo and ctx.app.demo_gate else
+              [Button("🧩 Собрать", "sw:ed")] if ctx.demo else [Button("💳 Тариф", "tf")])
     return Reply(view=v, buttons=[r for r in kb if r])
 
 

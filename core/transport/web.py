@@ -25,6 +25,7 @@ UID_START = 10 ** 12          # номера пользователей прил
 INBOX_MAX = 50
 FILES_MAX = 50
 HOME_SIDS = ("home", "mon")
+TOOLS = ("adm", "ptn", "ptm")     # «для нас» — отдельная кнопка в шапке: пульт админа, кабинет партнёра (не путать с показом)
 FILE_TYPES = {"xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
               "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
               "pdf": "application/pdf", "png": "image/png", "csv": "text/csv; charset=utf-8"}
@@ -98,12 +99,12 @@ class WebApi:
     def _answer(self, uid, out, sid=None):
         mine = self._deliver(uid, out)
         ctx = self.app.ctx(uid)
-        tabs, extra = [], []
+        tabs, extra, tools = [], [], []
         from core.demo import has_access
         allowed = has_access(self.app, self._office(), uid, ctx.today)
         for row in (screens.bottom_rows(ctx) if allowed else []):   # без доступа к демо — ни вкладок, ни меню
             for label, to in row:
-                (extra if to.startswith("sw:") or to == "gst" else tabs).append([label, to])
+                (tools if to in TOOLS else extra if to.startswith("sw:") else tabs).append([label, to])
         msgs = [reply_json(r, self._files()) for r in mine]
         first = msgs[0].get("view") if msgs else None
         home = sid in HOME_SIDS or (sid == "sw" and first and first.get("title") == ctx.cfg.name)
@@ -111,7 +112,7 @@ class WebApi:
         role_t = "" if not allowed else (ctx.position_name if ctx.role in ("staff", "head") and ctx.position_name else
                                          ctx.cfg.role_title(ctx.role) if ctx.role not in ("guest", "admin") else
                                          "Администратор" if ctx.role == "admin" else "")
-        return {"msgs": msgs, "inbox": self._inbox(uid), "home": bool(home), "tabs": tabs, "extra": extra,
+        return {"msgs": msgs, "inbox": self._inbox(uid), "home": bool(home), "tabs": tabs, "extra": extra, "tools": tools,
                 "company": ctx.cfg.name, "who": who, "role": role_t, "guest": not allowed or ctx.role == "guest"}
 
     def handle(self, method, path, query, body, token):

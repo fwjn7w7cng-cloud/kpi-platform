@@ -51,6 +51,7 @@ header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; backg
 .htitle { flex: 1; min-width: 0; }
 .htitle b { display: block; font-family: var(--display); font-weight: 700; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .htitle span { display: block; color: var(--ink-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tools { margin-right: 6px; background: var(--sunk); color: var(--ink); }
 .role { border: 0; background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 13px; padding: 8px 12px;
   border-radius: 999px; cursor: pointer; white-space: nowrap; flex: none; }
 main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
@@ -176,6 +177,7 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
   <header>
     <button class="back" id="back" hidden aria-label="Назад">‹</button>
     <div class="htitle"><b id="htitle">__NAME__</b><span id="hsub"></span></div>
+    <button class="role tools" id="tools" hidden>🛠</button>
     <button class="role" id="role" hidden>🎭</button>
   </header>
   <main id="main"><div class="screen"><div class="welcome"><div class="ic">⏳</div><p>Загружаю…</p></div></div></main>
@@ -189,7 +191,7 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 const COL = c => c ? " c-" + c : "";
-let S = {tabs: [], extra: [], cur: "home", back: null}, toastT, busy = false;
+let S = {tabs: [], extra: [], tools: [], cur: "home", back: null}, toastT, busy = false;
 
 function toast(t) { const el = $("toast"); el.textContent = t; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => el.hidden = true, 2600); }
 function splitLabel(l) { const m = String(l).match(/^(\S+)\s+(.*)$/); return m && !/[\p{L}\p{N}]/u.test(m[1]) ? [m[1], m[2]] : ["", l]; }
@@ -291,7 +293,7 @@ function msgHtml(m, home, first) {
 function backOf(msgs) { for (const m of msgs) for (const r of m.buttons || []) for (const [, to] of r) if (to.startsWith("bk:")) return to; return null; }
 
 function show(d) {
-  if (d.tabs) { S.tabs = d.tabs; S.extra = d.extra || []; }
+  if (d.tabs) { S.tabs = d.tabs; S.extra = d.extra || []; S.tools = d.tools || []; }
   const msgs = d.msgs || [], parts = [];
   if (d.inbox && d.inbox.length) parts.push(`<div class="inbox">${d.inbox.map(m => msgHtml(m, false, false)).join("")}</div>`);
   msgs.forEach((m, i) => parts.push(msgHtml(m, d.home, i === 0)));
@@ -303,6 +305,8 @@ function show(d) {
   if (d.company) $("htitle").textContent = d.company;
   $("hsub").textContent = [d.who, d.role].filter(Boolean).join(" · ");
   const rb = $("role"); rb.hidden = !S.extra.length; rb.textContent = "🎭 " + (d.role || "Демо");
+  const tb = $("tools"); tb.hidden = !S.tools.length;
+  tb.textContent = S.tools.length ? (S.tools.some(([, to]) => to === "adm") ? "🛠 Пульт" : "🤝 Партнёр") : "";
   tabs();
   const f = $("askForm");
   if (f) {
@@ -340,6 +344,8 @@ $("sheet").addEventListener("click", e => {
   if (b.dataset.tab) go(b.dataset.tab, true);
 });
 $("role").addEventListener("click", () => sheet(`<h2>Демо</h2>${S.extra.map(([l, to]) => `<button class="act" data-tab="${esc(to)}">${esc(l)}</button>`).join("")}`));
+$("tools").addEventListener("click", () => S.tools.length === 1 ? go(S.tools[0][1], true) :
+  sheet(`<h2>Для партнёра</h2>${S.tools.map(([l, to]) => `<button class="act" data-tab="${esc(to)}">${esc(l)}</button>`).join("")}`));
 $("back").addEventListener("click", () => { if (S.back) go(S.back); });
 $("htitle").addEventListener("click", () => go("home", true));
 $("main").addEventListener("click", e => { const b = e.target.closest("[data-to]"); if (b) go(b.dataset.to); });

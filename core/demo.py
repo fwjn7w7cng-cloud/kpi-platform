@@ -193,12 +193,12 @@ def guests_list(ctx):
                           color="good" if st == "on" else "warn" if st == "wait" else None))
     v.cards(cards)
     if not guests:
-        v.note("Гостей пока нет. Нажмите «➕ Пригласить» — бот даст ссылку для клиента.")
+        v.note("Гостей пока нет. Нажмите «🎟 Пригласить клиента» — бот даст ссылку.")
     free = [c for c, i in _invites(ctx).items() if not i.get("used_by")]
     if free:
         v.note(f"Неиспользованных приглашений: {len(free)}.")
     kb = rows([Button(f"{ST.get(g.get('status'), '')[:1]} {_title(g, uid)[:22]}", f"gso:{uid}") for uid, g in items[:15]], 2)
-    kb.append([Button("➕ Пригласить", "gsi"), Button(f"🤝 Партнёры ({len(names)})", "ptl")])
+    kb.append([Button("🎟 Пригласить клиента", "gsi"), Button("‹ Пульт", "adm")])
     return Reply(view=v, buttons=kb)
 
 
@@ -386,7 +386,7 @@ def partners(ctx):
         v.note("Партнёров пока нет. «🤝 Добавить партнёра» — бот даст ссылку, отправьте её партнёру.")
     kb = rows([Button(_title(g, u)[:24], f"gso:{u}") for u, g in ps], 2)
     kb.append([Button("🤝 Добавить партнёра", "pta"), Button("📘 Памятка партнёра", "ptm")])
-    kb.append([Button("👥 Гости демо", "gst")])
+    kb.append([Button("‹ Пульт", "adm")])
     return Reply(view=v, buttons=kb)
 
 
@@ -590,7 +590,7 @@ def memo(ctx):
     if not (is_partner(ctx) or _is_admin(ctx)):
         return Reply(text="Памятка — для партнёров.")
     return Reply(view=memo_view(), buttons=[[Button("📄 Памятка PDF", "ptp")]] +
-                 ([[Button("🤝 Мои клиенты", "ptn")]] if is_partner(ctx) else []))
+                 ([[Button("🤝 Мои клиенты", "ptn")]] if is_partner(ctx) else [[Button("‹ Пульт", "adm")]] if _is_admin(ctx) else []))
 
 
 @screen("ptp")
@@ -599,3 +599,46 @@ def memo_pdf(ctx):
         return Reply(text="Памятка — для партнёров.")
     from core.ui.views import to_pdf
     return Reply(text="📄 Памятка партнёра", files=[("Памятка партнёра.pdf", to_pdf([memo_view()]))])
+
+
+# ======================= пульт админа демо =======================
+# Всё «для нас» — в одном месте, отдельно от кнопок показа (роль, отрасль, собрать): гости, партнёры, заявки, цены, памятка.
+
+@screen("adm")
+def panel(ctx):
+    no = _deny(ctx)
+    if no:
+        return no
+    guests = _sweep(ctx)
+    gs = [g for g in guests.values() if not g.get("partner")]
+    ps = [g for g in guests.values() if g.get("partner")]
+    reqs = ctx.office.get("tariff_req") or []
+    v = View("🛠 Пульт", "только для вас: клиенты в демо, партнёры, заявки, цены")
+    v.tiles([("Смотрят демо", str(sum(g.get("status") == "on" for g in gs)), None),
+             ("Ждут ответа", str(sum(g.get("status") == "wait" for g in gs)), "warn" if any(g.get("status") == "wait" for g in gs) else None),
+             ("Партнёров", str(sum(g.get("status") == "on" for g in ps)), None),
+             ("Заявок «Хочу так»", str(len(reqs)), "good" if reqs else None)])
+    v.lines(["🎟 Пригласить клиента — ссылка на демо на 3, 7 или 14 дней.",
+             "🤝 Добавить партнёра — ссылка без срока: партнёр показывает демо и приглашает своих клиентов.",
+             "👥 Гости — кто смотрит демо, до какого числа, сколько нажимал.",
+             "📨 Заявки — кто нажал «Хочу так», какой набор и сколько стоит.",
+             "💰 Цены — меняете здесь, действуют сразу у всех."])
+    return Reply(view=v, buttons=[[Button("🎟 Пригласить клиента", "gsi"), Button("🤝 Добавить партнёра", "pta")],
+                                  [Button("👥 Гости", "gst"), Button(f"🤝 Партнёры ({len(ps)})", "ptl")],
+                                  [Button(f"📨 Заявки ({len(reqs)})", "rqs"), Button("💰 Цены", "pr")],
+                                  [Button("📘 Памятка партнёра", "ptm")]])
+
+
+@screen("rqs")
+def requests_list(ctx):
+    no = _deny(ctx)
+    if no:
+        return no
+    reqs = list(reversed(ctx.office.get("tariff_req") or []))
+    v = View("📨 Заявки «Хочу так»", f"всего {len(reqs)}")
+    v.cards([Card(r.get("who", "—"), f"{r.get('monthly', 0):,} ₽/мес".replace(",", " "),
+                  [r.get("set", ""), f"подключение {r.get('setup', 0):,} ₽".replace(",", " "), r.get("ts", "")])
+             for r in reqs[:20]])
+    if not reqs:
+        v.note("Заявок пока нет. Они появляются, когда клиент или партнёр жмёт «📨 Хочу так» в «🧩 Собрать».")
+    return Reply(view=v, buttons=[[Button("‹ Пульт", "adm")]])

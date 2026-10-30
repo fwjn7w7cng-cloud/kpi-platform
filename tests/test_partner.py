@@ -84,6 +84,19 @@ class Partner(unittest.TestCase):
         self.assertEqual(self.guest(STRANGER)["till"], "2026-11-05")
         self.assertTrue(g)
 
+    def test_panel_is_separate(self):
+        rows = screens.bottom_rows(self.app.ctx(ADMIN))
+        self.assertIn([("🛠 Пульт", "adm")], rows)
+        self.assertNotIn("gst", [t for row in rows for _, t in row])
+        tos = [b.to for b in self.app.press(ADMIN, "adm")[0].all_buttons()]
+        for to in ("gsi", "pta", "gst", "ptl", "rqs", "pr", "ptm"):
+            self.assertIn(to, tos)
+        self.assertNotIn(("🛠 Пульт", "adm"), [x for row in screens.bottom_rows(self.app.ctx(PARTNER)) for x in row])
+        self.assertIn("администратора", self.app.press(PARTNER, "adm")[0].text)
+        self.app.press(PARTNER, "sw:req")
+        self.app.text(PARTNER, "Магомед, Автодеталь")
+        self.assertIn("всего 1", self.app.press(ADMIN, "rqs")[0].view.subtitle)
+
     def test_admin_sees_and_switches_off(self):
         r = self.app.press(ADMIN, "ptl")[0]
         self.assertIn("работают: 1", r.view.subtitle)
