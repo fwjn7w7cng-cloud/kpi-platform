@@ -23,9 +23,10 @@ from core.ui import screens                    # noqa: E402
 from core.ui.web import reply_json, static_files  # noqa: E402
 
 ROLES = [("owner", "Директор"), ("head", "Руководитель продаж"), ("sv", "Супервайзер"), ("rep", "Торговый"),
-         ("staff", "Склад / водитель"), ("accountant", "Бухгалтер")]
+         ("pos:buy_head", "Начальник закупок"), ("pos:buyer", "Менеджер по закупкам"), ("pos:storekeeper", "Кладовщик"),
+         ("pos:dispatcher", "Диспетчер"), ("pos:driver", "Водитель"), ("pos:hr", "Кадры"), ("accountant", "Бухгалтер")]
 SKIP = ("sw:", "mon:", "bk:", "viewas", "home")
-MAXN = {"owner": 900, "head": 600, "sv": 500, "rep": 400, "staff": 120, "accountant": 300}
+MAXN = {"owner": 900, "head": 600, "sv": 500, "rep": 400, "accountant": 300}     # остальные — 150
 NAME = "Опт-Партнёр KPI"
 
 
@@ -48,13 +49,13 @@ def export(today=None, roles=None, limit=None):
             if roles and role not in roles:
                 continue
             uid = 500 + i
-            app.press(uid, "sw:ed:control")
-            app.press(uid, f"sw:role:{role}")
+            app.press(uid, "sw:ed:max")
+            app.press(uid, f"sw:{role}" if role.startswith("pos:") else f"sw:role:{role}")
             ctx = app.ctx(uid)
             bottom = [[lab, to] for row in screens.bottom_rows(ctx) for lab, to in row if not to.startswith("sw:")]
             scr, seen = {}, set()
             q = deque([("home", 0)] + [(to, 1) for _, to in bottom if to != "home"])
-            cap = limit or MAXN[role]
+            cap = limit or MAXN.get(role, 150)
             while q and len(scr) < cap:
                 to, depth = q.popleft()
                 if to in seen:

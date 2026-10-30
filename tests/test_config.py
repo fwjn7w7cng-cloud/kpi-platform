@@ -20,7 +20,7 @@ class DemoConfig(unittest.TestCase):
     def test_demo_loads(self):
         cfg = load_client("demo")
         self.assertEqual(cfg.id, "demo")
-        self.assertEqual(cfg.edition, "control")
+        self.assertEqual(cfg.edition, "max")
         self.assertEqual(cfg.weekend, ["sun"])
         self.assertEqual(cfg.salary_days, 26)
         self.assertTrue(cfg.dept("sales"))
@@ -34,8 +34,8 @@ class DemoConfig(unittest.TestCase):
         self.assertTrue(cfg.has_module("debts"))      # старт (с 29.10)
         self.assertTrue(cfg.has_module("route"))      # бизнес
         self.assertTrue(cfg.has_module("approval"))   # контроль
-        self.assertTrue(cfg.has_module("stock"))      # докуплен
-        self.assertFalse(cfg.has_module("miniapp"))   # не куплен
+        self.assertTrue(cfg.has_module("stock"))      # компания
+        self.assertTrue(cfg.has_module("custom"))     # максимум
 
 
 class Errors(unittest.TestCase):
@@ -47,7 +47,7 @@ class Errors(unittest.TestCase):
         return "\n".join(ctx.exception.problems)
 
     def test_bad_edition(self):
-        self.assertIn("edition", self.broken(lambda r: r.update(edition="max")))
+        self.assertIn("edition", self.broken(lambda r: r.update(edition="mega")))
 
     def test_unknown_addon(self):
         self.assertIn("нет такого модуля", self.broken(lambda r: r.update(addons=["teleport"])))
@@ -83,14 +83,18 @@ class Errors(unittest.TestCase):
 
     def test_start_edition_has_payroll_and_debts(self):
         raw = demo_raw()
-        raw.update(edition="start", addons=["route"])
+        raw.update(edition="start", addons=["stock"])
         cfg = parse("demo", raw)
         self.assertTrue(cfg.has_module("payroll"))
         self.assertTrue(cfg.has_module("debts"))
-        self.assertTrue(cfg.has_module("route"))       # докуплен к Старту
+        self.assertTrue(cfg.has_module("stock"))       # докуплен к Старту
         self.assertFalse(cfg.has_module("clients"))
         self.assertEqual(E.lock_text("clients"), "Доступно в Бизнес")
-        self.assertEqual(E.lock_text("miniapp"), "Подключается отдельно")
+        self.assertEqual(E.lock_text("custom"), "Доступно в Максимум")
+        raw.update(addons=["route"])
+        with self.assertRaises(ConfigError) as e:
+            parse("demo", raw)
+        self.assertIn("отдельно не продаётся", str(e.exception))
 
 
 class HumanNumbers(unittest.TestCase):
@@ -126,9 +130,11 @@ class HumanNumbers(unittest.TestCase):
 
 class Editions(unittest.TestCase):
     def test_nested(self):
-        s, b, c = (E.edition_modules(x) for x in E.ORDER)
-        self.assertTrue(s < b < c)
-        self.assertFalse(E.ADDON_ONLY & c)
+        eds = [E.edition_modules(x) for x in E.ORDER]
+        for a, b in zip(eds, eds[1:]):
+            self.assertTrue(a < b)
+        self.assertFalse(E.ADDON_ONLY & eds[-1])
+        self.assertEqual(eds[-1], set(E.MODULES))           # в «Максимум» входит всё
 
     def test_requirements_inside_editions(self):
         for ed in E.ORDER:

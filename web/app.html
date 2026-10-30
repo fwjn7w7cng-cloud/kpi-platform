@@ -284,7 +284,7 @@ function msgHtml(m, home, first) {
   }
   if (m.text && !m.ask) parts.push(`<div class="msg">${esc(m.text)}</div>`);
   if (m.ask) parts.push(`<div class="msg">${esc(m.ask)}</div><form class="askbar" id="askForm"><textarea id="askInput" rows="1" placeholder="Напишите ответ" required></textarea><button class="send" type="submit">Отправить</button></form>`);
-  if (m.files && m.files.length) parts.push(`<div class="files">${m.files.map(([n, u]) => u ? `<a class="file" href="${esc(u)}">📎 ${esc(n)}</a>` : "").join("")}</div>`);
+  if (m.files && m.files.length) parts.push(`<div class="files">${m.files.map(([n, u]) => u ? `<a class="file" href="${esc(u)}" target="_blank" rel="noopener">📎 ${esc(n)}</a>` : "").join("")}</div>`);
   parts.push(buttons(m.buttons, home && first));
   return parts.join("");
 }

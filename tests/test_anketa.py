@@ -100,8 +100,8 @@ class Problems(unittest.TestCase):
         def ch(t):
             for r in t["Компания"]:
                 if r[0] == "Редакция":
-                    r[1] = "Максимум"
-        self.assertIn("Старт, Бизнес, Премиум", A.problems_text(self.broken(ch)))
+                    r[1] = "Мега"
+        self.assertIn("Старт, Бизнес, Премиум, Компания, Максимум", A.problems_text(self.broken(ch)))
 
     def test_check_file_marks_rows(self):
         t = demo_tables()

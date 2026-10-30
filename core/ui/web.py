@@ -36,10 +36,12 @@ def view_json(v):
                         "rows": [{"cells": [_cell(c) for c in r.cells], "sub": r.sub, "mark": r.mark} for r in rows]})
         elif k == "cards":
             title, items = data
+            mx = max([float(c.bar) for c in items if isinstance(c.bar, (int, float)) and c.bar] or [1])
             out.append({"k": "cards", "title": title, "items": [
                 {"title": c.title, "value": c.value, "lines": [str(x) for x in c.lines], "phone": c.phone,
                  "color": c.color, "note": c.note, "nc": c.note_color,
-                 "bar": [float(x) for x in c.bar] if c.bar else None} for c in items]})
+                 "bar": ([float(c.bar) / mx] if isinstance(c.bar, (int, float)) else [float(x) for x in c.bar])
+                 if c.bar else None} for c in items]})
         elif k == "matrix":
             title, names, rows = data
             out.append({"k": "matrix", "title": title, "names": names,

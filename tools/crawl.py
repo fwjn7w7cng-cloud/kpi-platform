@@ -28,8 +28,14 @@ class Errors(logging.Handler):
 
 
 def crawl(app, uid, depth=4, png_dir=None, tag="", limit=500):
+    from core.ui.screens import bottom_rows
     seen, errors, shots = set(), [], 0
     queue = [(r, 0, "start") for r in app.start(uid)]
+    for row in bottom_rows(app.ctx(uid)):                 # нижнее меню — тоже входы
+        for _, to in row:
+            if to not in ("home",) and not to.startswith("sw:") and to not in seen:
+                seen.add(to)
+                queue += [(r, 1, to) for r in app.press(uid, to)]
     while queue and len(seen) < limit:
         reply, d, path = queue.pop(0)
         if reply.view is not None:
@@ -64,12 +70,13 @@ def run(client="demo", png=None, today=None):
         png_dir.mkdir(parents=True, exist_ok=True)
     total, errs, shots = 0, [], 0
     roles = ["rep", "sv", "head", "owner", "accountant", "staff", "admin"]
-    for ed in ("control", "start"):
+    roles += [f"pos:{p['id']}" for p in app.cfg.positions if p["dept"] != "sales" and p["role"] in ("head", "staff")]
+    for ed in ("max", "start"):
         for i, role in enumerate(roles):
             uid = 1000 + i + (100 if ed == "start" else 0)
             app.press(uid, f"sw:ed:{ed}")
-            app.press(uid, f"sw:role:{role}")
-            seen, e, s = crawl(app, uid, png_dir=png_dir if ed == "control" else None, tag=f"{ed}-{role}")
+            app.press(uid, f"sw:{role}" if role.startswith("pos:") else f"sw:role:{role}")
+            seen, e, s = crawl(app, uid, png_dir=png_dir if ed == "max" else None, tag=f"{ed}-{role.replace(':', '-')}")
             total += len(seen)
             errs += e
             shots += s

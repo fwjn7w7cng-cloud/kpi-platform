@@ -150,4 +150,8 @@ CREATE INDEX returns_day ON returns(day);
     (4, "дебиторка: готовая просрочка сверх порога клиента", """
 ALTER TABLE debts ADD COLUMN over REAL;
 """),
+    (5, "заказы поставщикам: кто оформил, согласование, приёмка на складе", """
+ALTER TABLE stock_orders ADD COLUMN emp_id INTEGER;
+ALTER TABLE stock_orders ADD COLUMN extra TEXT NOT NULL DEFAULT '{}';
+"""),
 ]

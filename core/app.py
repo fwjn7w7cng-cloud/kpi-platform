@@ -26,7 +26,7 @@ log = logging.getLogger("kpi")
 
 MODULES = ["debts", "reminders", "achievements", "staff", "payroll", "tasks", "approval",
            "audit", "watchdog", "forecast", "call_today", "formulas", "feedback", "clients", "route", "plans",
-           "quiz", "stock", "logistics", "returns", "ramadan", "locked"]
+           "quiz", "stock", "logistics", "returns", "warehouse", "fuel", "hr", "ramadan", "maximum"]
 
 
 RESET = {"home", "mon"}          # главная и смена месяца: путь «Назад» начинается заново
@@ -73,10 +73,17 @@ class App:
         db = self._dbs.pop(key, None)
         if db is not None:
             self._dbs[key] = db                       # самая свежая — в конец (закрываем самые старые)
-        meta = db.get("seeded") if db else None
-        if db is None or not meta or meta.get("months", [""])[-1] != month_of(self.today()):
+        if db is None or not self._fresh(db.get("seeded")):
             db = self._reseed(industry, guest)
         return db
+
+    def _seed_module(self):
+        return importlib.import_module(f"clients.{self.client_id}.seed")
+
+    def _fresh(self, meta):
+        """Демо-база годится: заполнена в этом месяце и той же версией наполнителя (seed.VERSION)."""
+        return bool(meta) and meta.get("months", [""])[-1] == month_of(self.today()) \
+            and meta.get("v", 0) == getattr(self._seed_module(), "VERSION", 0)
 
     def _demo_base(self):
         return self.data_dir / self.client_id if self.data_dir else client_db_path(self.client_id).parent
@@ -100,7 +107,7 @@ class App:
             self._memo.clear()
 
     def _reseed(self, industry, guest=None):
-        seed = importlib.import_module(f"clients.{self.client_id}.seed").seed   # наполнитель — в папке клиента
+        seed = self._seed_module().seed                                         # наполнитель — в папке клиента
         path = self._demo_path(industry, guest)
         key = (guest, industry)
         self._memo.clear()
@@ -110,8 +117,7 @@ class App:
         self._close_old(MAX_OPEN - 1)
         if path.exists():
             db = DB.open(path)
-            meta = db.get("seeded")
-            if meta and meta.get("months", [""])[-1] == month_of(self.today()):
+            if self._fresh(db.get("seeded")):
                 self._dbs[key] = db
                 return db
             db.close()

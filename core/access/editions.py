@@ -26,13 +26,18 @@ MODULES = {
     "forecast":     ("Прогноз плана и сравнение отделов", "control"),
     "call_today":   ("«Кому позвонить сегодня»", "control"),
     "formulas":     ("Свои формулы KPI", "control"),
-    "stock":        ("Склад для закупок", None),
-    "logistics":    ("Логистика: рейсы водителей", None),
-    "returns":      ("Возвраты и чья ошибка", None),
-    "miniapp":      ("Mini App-дашборд", None),
-    "direct_1c":    ("Прямой обмен с 1С вместо почты", None),
-    "branches":     ("Несколько филиалов с общим рейтингом", None),
-    "branding":     ("Брендирование", None),
+    # «Компания» — вся фирма, а не только продажи (первые три можно докупить к Премиуму отдельно)
+    "stock":        ("Закупки: остатки, заказы поставщикам, согласование", "company"),
+    "logistics":    ("Логистика: рейсы, «Мой день» водителя, сдельная оплата", "company"),
+    "returns":      ("Возвраты и чья ошибка", "company"),
+    "warehouse":    ("Склад: приёмка поставок, отгрузки, ошибки", "company"),
+    "hr":           ("Кадры: приём, перевод, увольнение, приказы", "company"),
+    "fuel":         ("ГСМ водителей: топливо против карты", "company"),
+    # «Максимум» — всё и сверх того
+    "branding":     ("Свой бренд: логотип и название на значке, свой адрес", "max"),
+    "direct_1c":    ("Прямая связь с 1С без файлов", "max"),
+    "branches":     ("Несколько филиалов и юрлиц в одном приложении", "max"),
+    "custom":       ("Функции на заказ: до 3 в месяц", "max"),
 }
 
 # Порядок редакций: каждая включает всё из предыдущих
@@ -40,16 +45,22 @@ EDITIONS = {
     "start":    {"title": "Старт",    "users": 15},
     "business": {"title": "Бизнес",   "users": 50},
     "control":  {"title": "Премиум",  "users": 150},
+    "company":  {"title": "Компания", "users": 300},
+    "max":      {"title": "Максимум", "users": None},     # без предела
 }
 ORDER = list(EDITIONS)
 
 ADDON_ONLY = {code for code, (_, since) in MODULES.items() if since is None}
+# Модули, которые можно докупить к редакции ниже их собственной (остальные — только редакцией)
+ADDONS = {"stock", "logistics", "returns"}
 
 # Модули, без которых другой модуль не работает
 REQUIRES = {
     "approval": {"payroll"},
     "audit": {"payroll"},
     "call_today": {"debts"},
+    "fuel": {"logistics"},
+    "warehouse": {"stock"},
 }
 
 
@@ -71,3 +82,8 @@ def lock_text(module):
     """Подпись на закрытой кнопке: «Доступно в Бизнес» / «Подключается отдельно»."""
     since = min_edition(module)
     return f"Доступно в {EDITIONS[since]['title']}" if since else "Подключается отдельно"
+
+
+def users_text(edition):
+    n = EDITIONS[edition]["users"]
+    return f"до {n} чел." if n else "без предела"

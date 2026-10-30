@@ -36,6 +36,8 @@ UNIT_TITLES = {
     "km": ("Пробег, км", "logistics"), "kg": ("Вес, кг", "logistics"), "m3": ("Объём, м³", "logistics"),
     "points": ("Точки доставки", "logistics"), "trips": ("Рейсы", "logistics"),
     "ret_own": ("Возвраты по своей вине, ₽", "returns"), "ret_err": ("Ошибки в возвратах", "returns"),
+    "nights": ("Ночёвки в рейсе, ноч.", "logistics"), "overtime": ("Переработка, мин.", "logistics"),
+    "cash": ("Деньги с клиентов, клиентов", "logistics"), "pickup": ("Привоз от поставщика, ед.", "logistics"),
 }
 UNITS = {}
 

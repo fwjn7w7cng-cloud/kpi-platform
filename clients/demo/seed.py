@@ -17,6 +17,8 @@ from core.calendar import Month, first_day, last_day, month_of, shift_month
 from core.data.model import (Client, Dataset, Debt, Group, ItemSale, Payment, Return, Sale, Stock, Trip, TripStop,
                              Visit)
 
+VERSION = 2          # поменялся наполнитель — поднять: демо-базы пересоздадутся сами при следующем открытии (30.10: вся фирма)
+
 # команда → (сколько торговых, характеры: множитель темпа к плану)
 TEAMS = {"north": [1.22, 1.06, 0.98, 0.93, 0.74], "south": [1.12, 1.01, 0.95, 0.88, 0.79], "key": [1.04, 0.97]}
 STAFF = [("rop", "sales", "", 1), ("director", "office", "", 1), ("accountant", "office", "", 1),
@@ -229,10 +231,11 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=4):
     _route_marks(db, R, cfg, today)
     _stock(db, R, groups, months_list, today)
     _quiz(db, R, today)
+    _company(db, cfg, random.Random(rnd_seed + 100), today, months_list, newbie, start_new)
     for m in months_list:
         db.put(f"planst:{m}", {"status": "ok", "note": "", "hist": [{"ts": f"{m}-01T09:00", "who": "Директор",
                                                                      "status": "ok", "note": ""}]})
-    db.put("seeded", {"industry": industry, "seeded": today.isoformat(), "months": months_list})
+    db.put("seeded", {"industry": industry, "seeded": today.isoformat(), "months": months_list, "v": VERSION})
     return {"reps": len(reps), "clients": len(clients), "months": months_list}
 
 
@@ -332,6 +335,175 @@ def _stock(db, R, groups, months_list, today):
     db.x("INSERT INTO stock_orders (supplier, items, status, author, ts, sent_ts, came_ts) VALUES (?,?,?,?,?,?,?)", SUPPLIERS[1],
          json.dumps([[items[1][0], 120]]), "came", "Начальник закупок", (today - timedelta(days=20)).isoformat(),
          (today - timedelta(days=20)).isoformat(), (today - timedelta(days=12)).isoformat())
+
+
+# Люди, которых добавили позже (30.10): со своим генератором случайностей, чтобы прежние цифры демо не сдвинулись.
+EXTRA_STAFF = [("dispatcher", "logistics"), ("hr", "office")]
+
+
+def _company(db, cfg, R, today, months_list, newbie, start_new):
+    """Вся фирма, а не только продажи: диспетчер и кадры, менеджеры закупок за поставщиками, заказы на всех этапах,
+    отметки водителей, ГСМ, кадровые процессы, функции на заказ."""
+    import json
+    have = {" ".join(e["fio"].split()[:2]).lower() for e in db.employees(active=None)}
+    names = _names(R)
+
+    def fresh():
+        for fio, key in names:
+            if key.lower() not in have:
+                have.add(key.lower())
+                return fio, key
+    for pos, dept in EXTRA_STAFF:
+        if cfg.position(pos) and not any(e["position"] == pos for e in db.employees()):
+            fio, key = fresh()
+            db.add_employee(fio, dept, position=pos, role=cfg.position(pos)["role"], keys=[key],
+                            hired=today - timedelta(days=R.randint(300, 1500)))
+    es = db.employees()
+    by_pos = {}
+    for e in es:
+        by_pos.setdefault(e["position"], []).append(e)
+    buyers, heads = by_pos.get("buyer", []), by_pos.get("buy_head", [])
+
+    # ---------- закупки: кто за каких поставщиков, заказы на всех этапах ----------
+    on = db.one('SELECT MAX("on") AS d FROM stock')["d"]
+    items = db.q('SELECT code, name, supplier, qty FROM stock WHERE "on" = ?', on) if on else []
+    sups = sorted({x["supplier"] for x in items})
+    if buyers:
+        db.put("stock_owners", {s: buyers[i % len(buyers)]["id"] for i, s in enumerate(sups)})
+    owner_of = {s: buyers[i % len(buyers)] for i, s in enumerate(sups)} if buyers else {}
+    price = {x["code"]: x["a"] / x["q"] for x in db.q("SELECT code, SUM(qty) AS q, SUM(amount) AS a FROM item_sales "
+                                                    "WHERE day > ? GROUP BY code HAVING q > 0",
+                                                    (today - timedelta(days=50)).isoformat())}
+    limit = float((cfg.raw.get("stock") or {}).get("approve_limit") or 300000)
+    for o in db.q("SELECT id, supplier FROM stock_orders"):
+        b = owner_of.get(o["supplier"]) or (heads[0] if heads else None)
+        if b:
+            db.x("UPDATE stock_orders SET emp_id = ?, author = ? WHERE id = ?", b["id"], b["fio"], o["id"])
+    by_sup = {}
+    for x in items:
+        if x["code"] in price:
+            by_sup.setdefault(x["supplier"], []).append(x)
+    stamp = lambda d, t: f"{d.strftime('%d.%m')} {t}"                          # noqa: E731
+    plan = [("draft", 3, 0, None), ("wait", 4, 0, None), ("wait", 6, 0, "big"), ("back", 3, 0, "back"), ("ok", 4, 0, None)]
+    used = {o["supplier"] for o in db.q("SELECT supplier FROM stock_orders WHERE status IN ('sent', 'draft', 'back')")}
+    free = [s for s in sups if s not in used and by_sup.get(s)]
+    for (st, n, q, mark), sup in zip(plan, free):
+        b = owner_of.get(sup)
+        goods = sorted(by_sup[sup], key=lambda x: x["qty"])[:n]
+        # обычный заказ — на 15–35% порога (согласует начальник закупок), крупный — на 130% (согласует директор)
+        share = 1.3 if mark == "big" else R.uniform(0.15, 0.35)
+        per = limit * share / sum(price[x["code"]] for x in goods)
+        lines_ = [[x["code"], max(round(per * (1 + 0.2 * (i % 2))), 1)] for i, x in enumerate(goods)]
+        d = today - timedelta(days=R.randint(0, 2))
+        hist = [[stamp(d, "10:15"), b["fio"] if b else "", "создан"]]
+        extra = {}
+        if st in ("wait", "back", "ok"):
+            hist.append([stamp(d, "11:40"), b["fio"] if b else "", "на согласование"])
+        if st == "back":
+            extra["note"] = "Позицию с наименьшим остатком возьмите вдвое больше — скоро сезон"
+            hist.append([stamp(d, "15:05"), heads[0]["fio"] if heads else "Директор", "возвращён: " + extra["note"]])
+        if st == "ok":
+            hist.append([stamp(d, "14:20"), heads[0]["fio"] if heads else "Директор", "согласован"])
+        extra["hist"] = hist
+        db.x("INSERT INTO stock_orders (supplier, items, status, author, ts, emp_id, extra) VALUES (?,?,?,?,?,?,?)",
+             sup, json.dumps(lines_), st, b["fio"] if b else "", d.isoformat(), b["id"] if b else None,
+             json.dumps(extra, ensure_ascii=False))
+
+    # ---------- дальние полупустые рейсы: пара в месяц (далеко, 2 точки, мало груза) ----------
+    for m in months_list:
+        ts_ = db.q("SELECT t.rowid AS r, t.day, t.trip, COUNT(s.client) AS n FROM trips t JOIN trip_stops s "
+                   "ON s.day = t.day AND s.trip = t.trip WHERE t.day LIKE ? GROUP BY t.rowid ORDER BY n, t.day LIMIT 2", f"{m}%")
+        for t in ts_:
+            keep = [x["rowid"] for x in db.q("SELECT rowid FROM trip_stops WHERE day = ? AND trip = ? LIMIT 2", t["day"], t["trip"])]
+            db.x(f"DELETE FROM trip_stops WHERE day = ? AND trip = ? AND rowid NOT IN ({','.join('?' * len(keep))})",
+                 t["day"], t["trip"], *keep)
+            db.x("UPDATE trips SET km = ?, kg = ?, m3 = ? WHERE rowid = ?", R.randint(170, 280), R.randint(150, 600),
+                 round(R.uniform(0.6, 2.5), 1), t["r"])
+
+    # ---------- водители: отметки «Мой день» и ГСМ ----------
+    drivers = [e for e in es if (cfg.position(e["position"]) or {}).get("duty") == "driver"]
+    keys = {r["key"]: r["emp_id"] for r in db.q("SELECT key, emp_id FROM emp_keys")}
+    days = {}
+    km = {}
+    for r in db.q("SELECT day, emp_key, km FROM trips"):
+        e = keys.get(r["emp_key"])
+        if e and r["day"] < today.isoformat():
+            days.setdefault((r["day"][:7], e), set()).add(r["day"])
+            km[(r["day"][:7], e)] = km.get((r["day"][:7], e), 0) + r["km"]
+    norm0 = float(str((cfg.raw.get("fuel") or {}).get("norm", 12)).replace(",", "."))
+    lit = float((cfg.raw.get("fuel") or {}).get("price", 60))
+    norms = {e["id"]: round(norm0 + R.choice([-1.5, 0, 0, 1, 2.5]), 1) for e in drivers}
+    db.put("fuel_norms", {str(k): v for k, v in norms.items()})
+    for m in months_list:
+        marks, cards = {}, {}
+        for i, e in enumerate(drivers):
+            mine = {}
+            for d in sorted(days.get((m, e["id"]), ())):
+                x = {"out": f"0{R.randint(6, 7)}:{R.choice(['05', '20', '35', '50'])}",
+                     "back": f"{R.choice([17, 18, 18, 19, 19, 20])}:{R.choice(['00', '15', '30', '45'])}"}
+                if R.random() < 0.04:
+                    x = {"out": x["out"], "night": 1}
+                if R.random() < 0.3:
+                    x["cash"] = R.randint(1, 4)
+                if R.random() < 0.07:
+                    x["pick"] = [[round(R.uniform(0.5, 5), 1), R.randint(80, 900), R.choice(["трубы", "фитинги", "коробки", ""])]]
+                mine[d] = x
+            if mine:
+                marks[str(e["id"])] = mine
+            if km.get((m, e["id"])):
+                due = km[(m, e["id"])] * norms[e["id"]] / 100 * lit
+                cards[str(e["id"])] = round(due * (1.14 if i == 0 else R.uniform(0.93, 1.04)), -1)
+        if m == month_of(today):                    # сегодня утром уже выехали трое
+            for e in drivers[:3]:
+                marks.setdefault(str(e["id"]), {})[today.isoformat()] = {"out": f"07:{R.choice(['10', '25', '40', '55'])}"}
+        db.put(f"dm:{m}", marks)
+        db.put(f"fuel_card:{m}", cards)
+
+    # ---------- кадры ----------
+    hrs = by_pos.get("hr", [])
+    hr_name = " ".join(hrs[0]["fio"].split()[:2]) if hrs else "Кадры"
+    owner = next((e for e in es if e["role"] == "owner"), None)
+    boss = " ".join(owner["fio"].split()[:2]) if owner else "Директор"
+    ts = lambda d: d.strftime("%d.%m 10:00")                                  # noqa: E731
+    from modules.hr import ITEMS as HR_ITEMS
+    nb = db.employee(newbie)
+    head_of = {e["dept"]: " ".join(e["fio"].split()[:2]) for e in es if e["role"] == "head"}
+    signer = lambda w, dept: boss if w == "owner" else head_of.get(dept, boss) if w == "head" else hr_name  # noqa: E731
+    procs = [{"id": 1, "kind": "hire", "fio": nb["fio"], "emp": newbie, "pos": nb["position"], "dept": nb["dept"],
+              "team": nb["team"], "from_dept": None, "day": start_new.isoformat(), "salary": None, "status": "done",
+              "items": [[t, w, signer(w, nb["dept"]), ts(start_new - timedelta(days=2))]
+                        for t, w in HR_ITEMS["hire"]], "author": hr_name, "author_id": hrs[0]["id"] if hrs else None,
+              "created": (start_new - timedelta(days=4)).strftime("%d.%m.%Y"), "order": "1-п"}]
+    nxt = today + timedelta(days=(7 - today.weekday()) % 7 or 7)
+    fio, _ = fresh()
+    drv_pos = next((p for p in cfg.positions if p.get("duty") == "driver"), None)
+    if drv_pos:
+        it = [[t, w, "", ""] for t, w in HR_ITEMS["hire"]]
+        it[0][2:], it[1][2:] = [boss, ts(today - timedelta(days=1))], [hr_name, ts(today)]
+        procs.append({"id": 2, "kind": "hire", "fio": fio, "emp": None, "pos": drv_pos["id"], "dept": drv_pos["dept"], "team": "",
+                      "from_dept": None, "day": nxt.isoformat(), "salary": 35000, "status": "open", "items": it,
+                      "author": hr_name, "author_id": hrs[0]["id"] if hrs else None,
+                      "created": (today - timedelta(days=1)).strftime("%d.%m.%Y")})
+    store = by_pos.get("storekeeper", [])
+    if store:
+        x = store[-1]
+        it = [[t, w, "", ""] for t, w in HR_ITEMS["fire"]]
+        it[0][2:], it[1][2:] = [boss, ts(today - timedelta(days=3))], [hr_name, ts(today - timedelta(days=2))]
+        procs.append({"id": 3, "kind": "fire", "fio": x["fio"], "emp": x["id"], "pos": x["position"], "dept": x["dept"],
+                      "team": "", "from_dept": x["dept"], "day": last_day(month_of(today)).isoformat(), "salary": None,
+                      "status": "open", "items": it, "author": hr_name, "author_id": hrs[0]["id"] if hrs else None,
+                      "created": (today - timedelta(days=3)).strftime("%d.%m.%Y")})
+    db.put("hr_procs", procs)
+    db.put("hr_seq", {str(start_new.year): 1})
+
+    # ---------- функции на заказ ----------
+    prev = shift_month(month_of(today), -1)
+    db.put("custom_req", [
+        {"id": 1, "month": prev, "text": "Утром начальнику склада — список вчерашних заявок, которые не отгрузили",
+         "author": owner["fio"] if owner else "Директор", "status": "done", "ts": f"12.{prev[5:]} 10:40",
+         "note": "Готово: «📦 Не отгружено вчера» в 08:30"},
+        {"id": 2, "month": month_of(today), "text": "Бонус торговому за новые точки: 500 ₽ за клиента, который купил впервые",
+         "author": owner["fio"] if owner else "Директор", "status": "work", "ts": today.strftime("%d.%m 09:15"), "note": ""}])
 
 
 def _route_marks(db, R, cfg, today):

@@ -66,10 +66,10 @@ def dept_view(ctx, dept_id=None):
     v.table(["Сотрудник", "Дней", "Зарплата"], [Row([e["fio"], f"{p.worked_days(e):g}",
                                                      money(p.calc(e).total, "") if ctx.can("payroll") else "—"]) for e in es])
     kb = rows([Button(short(e["fio"]), f"staffcard:{e['id']}") for e in es], 3)
-    extra = [Button("📅 Табель отдела", "ts")]
-    if d.kind in ("warehouse", "purchasing"):          # склад и закупки — остатки и заказы
-        extra.append(mod_button(ctx, "📦 Остатки", "sk", "stock"))
-    if d.kind == "logistics":
-        extra.append(mod_button(ctx, "🚚 Рейсы", "lg", "logistics"))
-    kb.append(extra)
+    extra = {"purchasing": [("📦 Склад и заказы", "sk", "stock"), ("🛒 Заказы", "sol", "stock")],
+             "warehouse": [("📥 Приёмка", "wrc", "warehouse"), ("📦 Отгрузки", "wsh", "warehouse")],
+             "logistics": [("🚚 Рейсы", "lg", "logistics"), ("📝 Отметки", "lgk", "logistics"), ("⛽ ГСМ", "fu", "fuel")],
+             }.get(d.kind, [])
+    kb += rows([mod_button(ctx, a, b, c) for a, b, c in extra] + [Button("📅 Табель отдела", "ts"),
+                                                                    mod_button(ctx, "👤 Кадры", "hr", "hr")], 2)
     return Reply(view=v, buttons=kb)

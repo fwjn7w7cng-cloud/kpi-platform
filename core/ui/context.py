@@ -109,6 +109,17 @@ class Ctx:
         d = self.cfg.dept(self.me["dept"]) if self.me else None
         return d.kind if d else ""
 
+    @property
+    def duty(self):
+        """Обязанность по должности: driver / dispatcher / hr / ''."""
+        pos = self.cfg.position(self.me["position"]) if self.me else None
+        return (pos or {}).get("duty", "")
+
+    @property
+    def position_name(self):
+        pos = self.cfg.position(self.me["position"]) if self.me else None
+        return (pos or {}).get("name", "")
+
     def name(self):
         if self.me:
             return self.me["fio"]

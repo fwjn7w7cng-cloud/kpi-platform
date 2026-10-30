@@ -26,7 +26,7 @@ class Base(unittest.TestCase):
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def as_(self, uid, role=None, emp=None):
-        self.app.press(uid, "sw:ed:control")
+        self.app.press(uid, "sw:ed:company")
         if emp:
             self.app.press(uid, f"sw:as:{emp}")
         else:
@@ -186,15 +186,17 @@ class Stock(Base):
         for c, xs in cats.items():
             self.assertTrue(xs, c)
         sups = s.suppliers()
-        i = next(n for n, (_, codes) in enumerate(sups) if any(s.need(c) > 0 for c in codes))
-        r = self.app.press(601, f"son:{i}")
-        oid = ctx.db.one("SELECT MAX(id) AS i FROM stock_orders")["i"]
+        busy = {o["supplier"] for o in ctx.db.q("SELECT supplier FROM stock_orders WHERE status IN ('draft', 'back')")}
+        i = next(n for n, (sup, codes) in enumerate(sups) if sup not in busy and any(s.need(c) > 0 for c in codes))
+        self.app.press(601, f"son:{i}")
+        oid = ctx.db.one("SELECT id FROM stock_orders WHERE supplier = ? AND status = 'draft'", sups[i][0])["id"]
         code = json.loads(ctx.db.one("SELECT items FROM stock_orders WHERE id = ?", oid)["items"])[0][0]
         need0 = s.need(code)
         self.app.press(601, f"soe:{oid}")
         self.app.text(601, f"{code} {need0}")
         x = self.app.press(601, f"sox:{oid}")
         self.assertTrue(x[0].files[0][0].endswith(".xlsx"))
+        self.assertIn("согласован", self.app.press(601, f"sop:{oid}")[0].text)   # директор — согласован сразу
         self.app.press(601, f"sos:{oid}")
         self.assertEqual(S(ctx).need(code), 0)
         found = self.app.text(601, code)
@@ -230,7 +232,7 @@ class LogisticsReturns(Base):
         self.app.press(703, "sw:ed:business")
         self.app.press(703, "sw:role:owner")
         r = self.app.press(703, "lg")
-        self.assertIn("Подключается отдельно", r[0].view.subtitle)
+        self.assertIn("Доступно в Компания", r[0].view.subtitle)
         ctx = self.app.ctx(703)
         drv = next(e for e in ctx.db.employees() if e["position"] == "driver")
         self.assertNotIn("Пробег", {r[0] for r in ctx.pay().calc(drv).rows})

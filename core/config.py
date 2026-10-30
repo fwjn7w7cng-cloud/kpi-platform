@@ -159,6 +159,10 @@ def _money(v, where, p):
         return v
 
 
+# Обязанности внутри отдела — чтобы бот знал, кому какой экран (водитель и диспетчер — оба «сотрудник логистики»)
+DUTIES = {"driver": "Водитель", "dispatcher": "Диспетчер", "hr": "Кадры"}
+
+
 def human_numbers(raw, p):
     """Перевести человеческую запись в анкете (проценты со знаком %, суммы с пробелами) в числа.
     Меняет копию анкеты; ошибки дописывает в p."""
@@ -188,6 +192,10 @@ def human_numbers(raw, p):
                     d[k] = _money(d[k], f"{sec}.{k}", p)
                 elif k in PCT_KEYS:
                     d[k] = _pct(d[k], f"{sec}.{k}", p)
+    for sec, k in (("stock", "approve_limit"), ("fuel", "price")):
+        d = raw.get(sec)
+        if isinstance(d, dict) and k in d:
+            d[k] = _money(d[k], f"{sec}.{k}", p)
     ts = raw.get("timesheet") or {}
     if isinstance(ts.get("late"), list):
         ts["late"] = [[x[0], _money(x[1], "timesheet.late", p)] if isinstance(x, (list, tuple)) and len(x) == 2 else x
@@ -226,6 +234,8 @@ def parse(client_id, raw, hooks=None):
         for a in addons:
             if a in E.edition_modules(edition):
                 p.append(f"addons: «{a}» уже входит в редакцию {edition} — убрать из addons")
+            elif a in E.MODULES and a not in E.ADDONS and a not in E.ADDON_ONLY:
+                p.append(f"addons: «{a}» отдельно не продаётся — только в редакции «{E.EDITIONS[E.min_edition(a)]['title']}»")
         for mod, need in E.REQUIRES.items():
             if mod in have and not need <= have:
                 p.append(f"модуль «{mod}» требует {', '.join(sorted(need - have))}")
@@ -317,8 +327,11 @@ def parse(client_id, raw, hooks=None):
             p.append(f"должность «{pid}»: нет роли «{pos.get('role')}» — роли: {', '.join(R.ROLES)}")
         if pos.get("pay", "none") not in schemes and pos.get("pay", "none") != "none":
             p.append(f"должность «{pid}»: нет схемы зарплаты «{pos.get('pay')}» в pay_schemes")
+        duty = pos.get("duty") or ""
+        if duty and duty not in DUTIES:
+            p.append(f"должность «{pid}»: обязанность «{duty}» — допустимо: {', '.join(DUTIES)}")
         positions.append({"id": pid, "name": pos.get("name", pid), "dept": pos.get("dept"),
-                          "role": pos.get("role"), "pay": pos.get("pay", "none")})
+                          "role": pos.get("role"), "pay": pos.get("pay", "none"), "duty": duty})
     _dupes(p, "должности", [x["id"] for x in positions])
 
     from core.kpi import formula

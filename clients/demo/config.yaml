@@ -9,8 +9,8 @@ company:
   industry: building          # отрасль: building food auto apparel electronics cosmetics pharma household
   timezone: Europe/Moscow
 
-edition: control              # start | business | control (в демо переключается кнопкой)
-addons: [stock, logistics, returns]   # модули сверх редакции
+edition: max                  # start | business | control | company | max (в демо переключается кнопкой)
+addons: []                    # модули сверх редакции (к Премиуму: stock, logistics, returns)
 
 work_week:
   weekend: [sun]              # выходные дни: mon tue wed thu fri sat sun
@@ -33,17 +33,20 @@ teams:
   - {id: south, name: "Команда Юг",        dept: sales, line: main}
   - {id: key,   name: "Ключевые клиенты",  dept: sales, line: main}
 
-# Должности: кто в какой роли и по какой схеме получает зарплату
+# Должности: кто в какой роли и по какой схеме получает зарплату; duty — обязанность внутри отдела
+# (driver — «Мой день» водителя, dispatcher — отметки водителей и ГСМ, hr — кадры)
 positions:
   - {id: rep,        name: "Торговый представитель", dept: sales,     role: rep,        pay: rep}
   - {id: sv,         name: "Супервайзер",            dept: sales,     role: sv,         pay: sv}
   - {id: rop,        name: "Руководитель продаж",    dept: sales,     role: head,       pay: rop}
   - {id: storekeeper, name: "Кладовщик",             dept: warehouse, role: staff,      pay: warehouse}
   - {id: wh_head,    name: "Заведующий складом",     dept: warehouse, role: head,       pay: salary}
-  - {id: driver,     name: "Водитель",               dept: logistics, role: staff,      pay: driver}
+  - {id: driver,     name: "Водитель",               dept: logistics, role: staff,      pay: driver, duty: driver}
   - {id: log_head,   name: "Начальник логистики",    dept: logistics, role: head,       pay: salary}
   - {id: buy_head,   name: "Начальник закупок",      dept: purchasing, role: head,      pay: salary}
   - {id: buyer,      name: "Менеджер по закупкам",   dept: purchasing, role: staff,     pay: salary}
+  - {id: dispatcher, name: "Диспетчер логистики",    dept: logistics, role: staff,      pay: salary, duty: dispatcher}
+  - {id: hr,         name: "Специалист по кадрам",   dept: office,    role: staff,      pay: salary, duty: hr}
   - {id: accountant, name: "Бухгалтер",              dept: office,    role: accountant, pay: salary}
   - {id: manager,    name: "Офис-менеджер",          dept: office,    role: staff,      pay: salary}
   - {id: director,   name: "Директор",               dept: office,    role: owner,      pay: none}
@@ -99,6 +102,10 @@ pay_schemes:
     - {type: salary, amount: "30 000"}
     - {type: per_unit, unit: km, price: "4"}
     - {type: per_unit, unit: points, price: "25"}
+    - {type: per_unit, unit: nights, price: "1 500", name: "Ночёвки в рейсе"}
+    - {type: per_unit, unit: overtime, price: "3", name: "Переработка, минуты"}
+    - {type: per_unit, unit: cash, price: "70", name: "Деньги с клиентов"}
+    - {type: per_unit, unit: pickup, price: "200", name: "Привоз от поставщика"}
     - {type: fixed_bonus, name: "Без ошибок и пропусков", amount: "5 000", cut_per_miss: "1 000"}
     - {type: per_unit, unit: ret_err, price: "1 000", cut: true, name: "Ошибки при доставке"}
     - {type: timesheet}
@@ -116,7 +123,13 @@ formulas:
 quiz: {day: sun, time: "10:00", count: 10, pass: "80%"}
 
 # Склад для закупок: окно скорости продаж, «скоро закончится», «залежалось», на сколько дней заказывать
-stock: {window: 60, low_days: 14, stale_days: 90, cover_days: 30}
+stock: {window: 60, low_days: 14, stale_days: 90, cover_days: 30, approve_limit: "300 000"}
+
+# Логистика: рабочий день водителя (переработка — до начала и после конца), «дальний рейс»
+logistics: {day_start: "08:00", day_end: "18:00", far_km: 150, far_points: 3}
+
+# ГСМ: литров на 100 км по умолчанию (у каждого водителя можно своё) и цена литра
+fuel: {norm: 12, price: "65"}
 
 # Маршрут: во сколько руководителям сводка отчётов дня
 route: {close: "21:00"}

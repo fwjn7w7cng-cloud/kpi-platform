@@ -39,6 +39,8 @@ def home(ctx):
         return ctx.ask("register", "👋 Здравствуйте! Вас пока нет в списке сотрудников.\n\n"
                                    "Напишите в ответ свои фамилию и имя — администратор подключит вас.", buttons=[])
     role_t = ctx.cfg.role_title(ctx.role) if ctx.role in R.ROLES else "Администратор"
+    if ctx.role in ("staff", "head") and ctx.position_name:
+        role_t = ctx.position_name
     v = View(ctx.cfg.name, f"{ctx.name()} · {role_t} · {month_title(ctx.month).lower()}")
     v.tiles(_home_tiles(ctx))
     lines = _home_lines(ctx)
@@ -83,9 +85,9 @@ MENU_GROUPS = [
     ("sales", "📈 Продажи и клиенты", {"rating", "cli", "rtd", "alerts", "fc", "cmp", "debts", "rv", "watch", "achb",
                                        "fx", "call"}),
     ("money", "💰 Зарплата, планы, месяц", {"fund", "month", "pl", "log"}),
-    ("ops", "📦 Склад и логистика", {"sk", "lg"}),
-    ("team", "👥 Люди и задачи", {"people", "ts", "tasks", "qz", "rmd"}),
-    ("more", "➕ Ещё модули", {"miniapp", "direct_1c", "branches", "branding"}),
+    ("ops", "📦 Закупки, склад, логистика", {"sk", "sow", "sol", "lg", "lgk", "wrc", "wsh", "fu"}),
+    ("team", "👥 Люди и задачи", {"people", "ts", "tasks", "qz", "rmd", "hr"}),
+    ("more", "⭐ Максимум", {"direct_1c", "branches", "branding", "custom"}),
 ]
 TOP_FOR_SELLERS = {"call", "cli"}         # торговому это нужно каждый день — не прятать в группу
 
@@ -109,7 +111,7 @@ def _group_of(ctx, m):
     return next((g for g, _, tos in MENU_GROUPS if m.to in tos), None)
 
 
-HOME_SKIP = {"sales", "deptv", "sk", "lg"}   # у владельца и админа они внутри кнопок отделов
+HOME_SKIP = {"sales", "deptv", "sk", "lg", "wrc", "fu"}   # у владельца и админа они внутри кнопок отделов
 
 
 def _home_items(ctx):
@@ -159,6 +161,29 @@ BOTTOM = {
     "admin": [("💬 Отзывы", "fbl"), ("🗓 Месяц", "month"), ("👁 Смотреть как", "viewas")],
 }
 HEAD_OTHER = [("👤 Люди", "people"), ("📅 Табель", "ts"), ("📌 Задачи", "tasks")]
+# Отделы вне продаж: у начальника и у сотрудника — своё, по виду отдела и обязанности (водитель, диспетчер, кадры).
+# Пункт закрытого модуля открывает замок с объяснением — как и на главной.
+BOTTOM_DEPT = {
+    ("head", "purchasing"): [("📦 Склад", "sk"), ("✅ Согласовать", "sow"), ("🛒 Заказы", "sol"), ("📅 Табель", "ts")],
+    ("staff", "purchasing"): [("📦 Мои поставщики", "sk"), ("🛒 Заказы", "sol"), ("💰 Зарплата", "pay")],
+    ("head", "warehouse"): [("📥 Приёмка", "wrc"), ("📦 Отгрузки", "wsh"), ("📅 Табель", "ts"), ("👤 Люди", "people")],
+    ("staff", "warehouse"): [("📥 Приёмка", "wrc"), ("📦 Отгрузки", "wsh"), ("💰 Зарплата", "pay")],
+    ("head", "logistics"): [("🚚 Рейсы", "lg"), ("📝 Отметки", "lgk"), ("⛽ ГСМ", "fu"), ("📅 Табель", "ts")],
+    ("dispatcher", ""): [("🚚 Рейсы", "lg"), ("📝 Отметки", "lgk"), ("⛽ ГСМ", "fu")],
+    ("driver", ""): [("🚚 Мой день", "dm"), ("📋 Мои рейсы", "lgd"), ("💰 Зарплата", "pay")],
+    ("hr", ""): [("👤 Кадры", "hr"), ("🧑‍🔧 Кабинет", "cab"), ("💰 Зарплата", "pay")],
+}
+MODULE_OF = {"sk": "stock", "sow": "stock", "sol": "stock", "wrc": "warehouse", "wsh": "warehouse", "lg": "logistics",
+             "lgk": "logistics", "fu": "fuel", "dm": "logistics", "lgd": "logistics", "hr": "hr", "cab": "staff",
+             "pay": "payroll"}
+
+
+def _dept_bottom(ctx):
+    if ctx.role not in ("head", "staff") or ctx.dept_kind == "sales":
+        return None
+    if ctx.role == "staff" and ctx.duty:
+        return BOTTOM_DEPT.get((ctx.duty, ""))
+    return BOTTOM_DEPT.get((ctx.role, ctx.dept_kind))
 
 
 def bottom_rows(ctx):
@@ -166,7 +191,9 @@ def bottom_rows(ctx):
     if ctx.role == "guest":
         return []
     role = "rep" if ctx.role == "newbie" else ctx.role
-    items = HEAD_OTHER if role == "head" and ctx.dept_kind != "sales" else BOTTOM.get(role, BOTTOM["staff"])
+    items = _dept_bottom(ctx) or (HEAD_OTHER if role == "head" and ctx.dept_kind != "sales" else BOTTOM.get(role, BOTTOM["staff"]))
+    if ctx.role == "owner" and ctx.can("hr"):
+        items = items + [("👤 Кадры", "hr")]
     if ctx.role == "newbie":
         items = [("🎓 Обучение", "qz")] + items[:3]
     fb = ("💬 Отзывы", "fbl") if ctx.role == "admin" else \
@@ -655,13 +682,16 @@ LOCK_TEXT = {
     "route": "Маршрут на день по точкам и отчёт торгового вечером: продал, был без заказа, не застал — СВ видит всё сразу.",
     "quiz": "Тест по продукции раз в неделю и курс для новичка: уроки, вопросы, результаты у руководителя.",
     "plans": "Руководитель продаж готовит планы — директор утверждает — каждый получает свой план 1-го числа.",
-    "stock": "Что закончилось, что скоро закончится, что лежит без движения; заказ поставщику Excel-файлом.",
-    "logistics": "Рейсы водителей: пробег, вес, точки, двойные заезды; сдельная оплата водителей.",
+    "stock": "Закупки: что закончилось и скоро закончится, что лежит; заказ поставщику сам из «нужно», согласование по сумме, Excel поставщику.",
+    "logistics": "Рейсы водителей: пробег, вес, точки, двойные и дальние рейсы, доставка к продажам; «Мой день» водителя и сдельная оплата.",
     "returns": "Возвраты по причинам: чья ошибка — торгового, склада, водителя; удержания в зарплате.",
-    "miniapp": "Красивая панель с графиками внутри мессенджера, как отдельное приложение.",
-    "direct_1c": "Данные из 1С напрямую, почти в реальном времени, без выгрузок на почту.",
-    "branches": "Несколько филиалов с общим рейтингом и сводкой по компании.",
-    "branding": "Бот в цветах и с логотипом компании.",
+    "warehouse": "Склад: приёмка поставок по заказу (пришло / недостача), отгрузки и ошибки сборки, бонус «без ошибок».",
+    "hr": "Кадры: приём, перевод и увольнение по чек-листу, кто за какой пункт отвечает, приказ файлом.",
+    "fuel": "ГСМ: сколько топлива положено водителю по километрам и сколько ушло по топливной карте.",
+    "direct_1c": "Данные из 1С напрямую, почти в реальном времени, без выгрузок файлов; заказ поставщику — сразу в 1С.",
+    "branches": "Несколько филиалов и юрлиц в одном приложении: общий рейтинг и сводка по всей компании.",
+    "branding": "Приложение в цветах компании: свой логотип и название на значке телефона, свой адрес.",
+    "custom": "До 3 новых функций в месяц под вашу компанию — сделаем с нуля, каждая до одного рабочего дня.",
 }
 
 
@@ -675,17 +705,20 @@ def demo(ctx, what=None, value=None):
             ctx.session["as"] = int(ctx.session.pop("pick"))
         ctx.save()
         return home(ctx.app.ctx(ctx.user_id))
+    if what == "pos" and value:
+        e = next((x for x in ctx.db.employees() if x["position"] == value), None)
+        if e:
+            ctx.session["role"], ctx.session["as"] = (e["role"] if e["role"] != "newbie" else "rep"), e["id"]
+            ctx.save()
+        return home(ctx.app.ctx(ctx.user_id))
     if what == "as" and value:
         e = ctx.db.employee(int(value))
         ctx.session["role"], ctx.session["as"] = (e["role"] if e["role"] != "newbie" else "rep"), e["id"]
         ctx.save()
         return home(ctx.app.ctx(ctx.user_id))
     if what == "role":
-        roles = [("rep", "Торговый"), ("sv", "Супервайзер"), ("head", "Руководитель продаж"), ("owner", "Директор"),
-                 ("accountant", "Бухгалтер"), ("staff", "Склад / водитель"), ("admin", "Администратор")]
-        kb = rows([Button(t, f"sw:role:{r}") for r, t in roles], 2)
-        kb.append([Button("👤 Выбрать конкретного человека", "sw:who")])
-        return Reply(text="🎭 Чьими глазами смотрим?", buttons=kb)
+        return Reply(text="🎭 Чьими глазами смотрим?\n\nПродажи и руководство — по ролям, остальные отделы — по должностям.",
+                     buttons=_role_picker(ctx))
     if what == "who":
         es = ctx.db.employees()
         return Reply(text="Выберите сотрудника:", buttons=rows([Button(f"{_short(e['fio'])} · "
@@ -705,7 +738,7 @@ def demo(ctx, what=None, value=None):
         lines = []
         for code in E.ORDER:
             mods = E.edition_modules(code) - (E.edition_modules(E.ORDER[E.ORDER.index(code) - 1]) if E.ORDER.index(code) else set())
-            lines.append(f"{E.EDITIONS[code]['title']} (до {E.EDITIONS[code]['users']} чел.): "
+            lines.append(f"{E.EDITIONS[code]['title']} ({E.users_text(code)}): "
                          + ", ".join(E.MODULES[m][0] for m in sorted(mods)))
         v = View("💼 Редакции", "что входит в каждую")
         v.lines(lines)
@@ -717,6 +750,53 @@ def demo(ctx, what=None, value=None):
         ctx.save()
         return [Reply(text="🔄 Демо заполнено заново."), home(ctx.app.ctx(ctx.user_id))]
     return home(ctx)
+
+
+def _role_picker(ctx):
+    """Кнопки выбора роли в демо: продажи и руководство — ролями; другие отделы — каждой должностью, где есть люди."""
+    kb = [[Button("🧑‍💼 Торговый", "sw:role:rep"), Button("👥 Супервайзер", "sw:role:sv")],
+          [Button("🏢 Руководитель продаж", "sw:role:head"), Button("👔 Директор", "sw:role:owner")],
+          [Button("🧾 Бухгалтер", "sw:role:accountant"), Button("🛠 Администратор", "sw:role:admin")]]
+    have = {e["position"] for e in ctx.db.employees()}
+    for d in ctx.cfg.departments:
+        if d.kind == "sales":
+            continue
+        ps = [p for p in ctx.cfg.positions if p["dept"] == d.id and p["id"] in have
+              and p["role"] not in ("owner", "accountant", "sv", "rep", "newbie")]
+        if ps:
+            kb += rows([Button(f"{DEPT_ICON.get(d.kind, '🏬')} {p['name']}", f"sw:pos:{p['id']}") for p in ps], 2)
+    kb.append([Button("👤 Выбрать конкретного человека", "sw:who")])
+    return kb
+
+
+HELP_DEPT = {
+    ("head", "purchasing"): ["📦 Склад — все поставщики: что закончилось, что скоро, что залежалось, сколько заказать.",
+                             "🛒 Заказ — бот сам кладёт в черновик всё, что нужно; поправьте строками «код количество».",
+                             "✅ Согласовать — заказы менеджеров до порога согласуете вы, крупнее — директор.",
+                             "👥 Кто за каких поставщиков — назначьте менеджеров, каждый увидит только своих.",
+                             "🔎 Поиск товара — напишите код или часть названия."],
+    ("staff", "purchasing"): ["📦 Мои поставщики — остатки и «нужно заказать» только по вашим поставщикам.",
+                              "🛒 Заказ: черновик → «📨 На согласование» → согласовали → «📨 Отправлен поставщику».",
+                              "↩️ Если заказ вернули — в нём комментарий, что поправить.",
+                              "📥 Excel — файл заказа для поставщика.", "🔎 Поиск товара — напишите код или часть названия."],
+    ("head", "warehouse"): ["📥 Приёмка — какие поставки едут; пришло всё или недостача по строкам.",
+                            "📦 Отгрузки — сколько точек отгружено по дням и ошибки склада из возвратов.",
+                            "📅 Табель — опоздания и пропуски склада; 👤 Люди — карточки кладовщиков."],
+    ("staff", "warehouse"): ["📥 Приёмка — примите поставку: «пришло всё» или впишите недостачу.",
+                             "📦 Отгрузки — отгрузки и ваши ошибки за месяц (каждая режет бонус).",
+                             "💰 Зарплата — оклад, бонус «без ошибок» и удержания."],
+    ("head", "logistics"): ["🚚 Рейсы — рейтинг водителей, дальние рейсы, двойные заезды, доставка к продажам.",
+                            "📝 Отметки — выезд, возврат, ночёвки, деньги и привозы всех водителей за день.",
+                            "⛽ ГСМ — сколько топлива положено по километрам против топливной карты."],
+    ("dispatcher", ""): ["📝 Отметки — заполните день за водителей: выезд, возврат, ночёвка, деньги, привоз.",
+                         "🚚 Рейсы — что развезли, двойные заезды и дальние рейсы.",
+                         "⛽ ГСМ — нормы водителей и суммы по топливным картам."],
+    ("driver", ""): ["🚚 Мой день — «Выехал» утром и «Вернулся» вечером, ночёвка, деньги с клиентов, привоз.",
+                     "Переработка — минуты до начала и после конца рабочего дня, платится по ставке.",
+                     "📋 Мои рейсы — километры, вес, точки; 💰 Зарплата — всё по строкам."],
+    ("hr", ""): ["👤 Кадры — приём, перевод, увольнение: чек-лист, кто за какой пункт, приказ файлом.",
+                 "Когда все пункты закрыты — «✅ Провести»: человек появится в расчёте (или уйдёт из него) с нужной даты."],
+}
 
 
 HELP = {
@@ -747,7 +827,8 @@ HELP = {
 def help_screen(ctx):
     role = "rep" if ctx.role == "newbie" else ctx.role
     v = View("❓ Как пользоваться", ctx.cfg.role_title(role) if role in R.ROLES else "Администратор")
-    v.lines(HELP.get(role, HELP["staff"]) + ["🏠 — всегда вернёт на главную.",
+    dept = HELP_DEPT.get((ctx.duty, "")) if ctx.role == "staff" and ctx.duty else HELP_DEPT.get((ctx.role, ctx.dept_kind))
+    v.lines((dept or HELP.get(role, HELP["staff"])) + ["🏠 — всегда вернёт на главную.",
                                              "◀ Месяц — посмотреть прошлые месяцы.",
                                              "🔒 — раздел есть, но не входит в вашу редакцию: нажмите, чтобы узнать, что в нём."])
     return Reply(view=v)

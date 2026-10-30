@@ -28,6 +28,7 @@ DAYS_RU = {"Понедельник": "mon", "Вторник": "tue", "Среда
 KIND_RU = {"Продажи": "sales", "Склад": "warehouse", "Логистика": "logistics", "Закупки": "purchasing", "Офис": "office"}
 ROLE_RU = {"Менеджер": "rep", "Супервайзер": "sv", "Начальник отдела": "head", "Руководитель компании": "owner",
            "Бухгалтер": "accountant", "Сотрудник": "staff", "Новичок": "newbie"}
+DUTY_RU = {"Водитель": "driver", "Диспетчер": "dispatcher", "Кадры": "hr"}
 CUBE_RU = {"Оклад": ("salary", None), "% от продаж": ("sales_percent", None),
            "Бонус за план — ступени": ("plan_bonus", "steps"), "Бонус за план — пропорционально": ("plan_bonus", "linear"),
            "Фикс-бонус": ("fixed_bonus", None), "Удержание за просрочку": ("debt_penalty", None),
@@ -61,7 +62,7 @@ COMPANY = [
     ("Название компании", "company.name", "text", ""),
     ("Отрасль", "company.industry", "industry", "выбор из списка"),
     ("Часовой пояс", "company.timezone", "text", "обычно Europe/Moscow"),
-    ("Редакция", "edition", "edition", "Старт / Бизнес / Премиум"),
+    ("Редакция", "edition", "edition", "Старт / Бизнес / Премиум / Компания / Максимум"),
     ("Доп. модули", "addons", "modules", "сверх редакции, через запятую; пусто — нет"),
     ("Выходные дни", "work_week.weekend", "days", "через запятую: Воскресенье или Пятница"),
     ("Делитель оклада, дней", "work_week.salary_days", "int", "оклад ÷ это число × отработанные дни; обычно 26"),
@@ -81,7 +82,7 @@ HEADS = {
     "Компания": ["Параметр", "Значение", "Подсказка"],
     "Отделы": ["Отдел", "Вид", "Код"],
     "Команды": ["Команда", "Отдел", "Линия", "Код"],
-    "Должности": ["Должность", "Отдел", "Роль", "Код"],
+    "Должности": ["Должность", "Отдел", "Роль", "Код", "Обязанность"],
     "Зарплата": ["Должность", "Кубик", "Показатель", "Чей", "Значение", "Порог", "Потолок", "Сверх плана",
                  "Минус за пропуск", "Название"],
     "Опоздания": ["Опоздание от, мин", "Штраф, ₽"],
@@ -93,7 +94,7 @@ HEADS = {
 # что предлагать в выпадающих списках: лист → {колонка: варианты}
 CHOICES = {
     "Отделы": {"Вид": list(KIND_RU)},
-    "Должности": {"Роль": list(ROLE_RU)},
+    "Должности": {"Роль": list(ROLE_RU), "Обязанность": list(DUTY_RU)},
     "Зарплата": {"Кубик": list(CUBE_RU), "Показатель": list(METRIC_RU) + list(UNIT_RU) + DEBT_EXAMPLES, "Чей": list(WHOSE_RU)},
     "Праздники": {"Оплачивается": ["Да", "Нет"]},
     "Формулы": {"Единица": ["₽", "%", "шт."]},
@@ -246,8 +247,9 @@ def to_raw(tables):
     for n, d in _rows(tables, "Должности"):
         pid = d.get("Код") or slug(d.get("Должность"))
         role = pick(ROLE_RU, d.get("Роль", ""), "Должности", n, "Роль")
+        duty = pick(DUTY_RU, d.get("Обязанность", ""), "Должности", n, "Обязанность") if d.get("Обязанность") else ""
         positions.append({"id": pid, "name": d.get("Должность", ""), "dept": dept_of(d.get("Отдел", ""), "Должности", n),
-                          "role": role or "", "pay": "none"})
+                          "role": role or "", "pay": "none", **({"duty": duty} if duty else {})})
         pos_by_name[d.get("Должность", "").lower()] = pid
         where[f"pos:{pid}"] = ("Должности", n, d.get("Должность", ""))
     raw["positions"] = positions
@@ -518,7 +520,8 @@ def from_raw(raw):
     roles = _inv(ROLE_RU)
     pname = {}
     for p_ in raw.get("positions", []):
-        t["Должности"].append([p_["name"], dname.get(p_["dept"], p_["dept"]), roles.get(p_["role"], p_["role"]), p_["id"]])
+        t["Должности"].append([p_["name"], dname.get(p_["dept"], p_["dept"]), roles.get(p_["role"], p_["role"]), p_["id"],
+                               _inv(DUTY_RU).get(p_.get("duty"), "")])
         pname[p_["id"]] = (p_["name"], p_.get("pay"))
     cubes = {v: k for k, v in CUBE_RU.items()}
     metrics, whose = _inv(METRIC_RU), _inv(WHOSE_RU)
