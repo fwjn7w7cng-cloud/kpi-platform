@@ -3,6 +3,13 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-10-30 17:34 (Альфред) — шаг 6: служба kpi-web@demo запущена на 127.0.0.1:8101 (Caddy не трогал)
+Код b43c1be (requirements без изменений). clients/demo/.env: дописаны WEB_URL, WEB_PORT=8101, WEB_ADMIN_KEY (openssl rand -hex 16,
+не показывал); первые две строки не тронуты, 600. deploy/kpi-web@.service → /etc/systemd/system, enable --now kpi-web@demo 17:33:16:
+active, NRestarts 0, память 17 МБ, слушает только 127.0.0.1:8101 (в ufw 8101 нет). GET / → 200; POST /api/start {} → JSON
+«👋 Здравствуйте! Это демо KPI…», ошибок в логе нет. kpi@demo (Telegram) работает дальше на старом коде в памяти, не перезапускался.
+Админская ссылка отдана Адаму отдельно. Соседи и Caddy не трогались.
+
 ## 30.10.2026 17:50 — Джарвис
 - Живое демо-приложение (этап 1): `core/transport/web.py` (веб-провод, /api/start|press|text|poll, cookie «kid» → свой номер пользователя, сообщения другим — в их ленту), `core/ui/web.py` (экран → JSON, manifest/значки/sw.js), `web/app.html`, `run.py <код> --web [порт]`, `deploy/kpi-web@.service` (127.0.0.1:WEB_PORT, по умолчанию 8101, MemoryMax 200M). Админ: один раз `/?admin=<WEB_ADMIN_KEY>` (ключ только в .env на сервере). Приглашения ведут на WEB_URL/?start=<код>.
 - Дальше (Альфред, по шагам): .env демо (WEB_URL, WEB_PORT, WEB_ADMIN_KEY), служба kpi-web@demo, Caddy demo.kpibotsmith.ru → reverse_proxy; после проверки Адамом — остановить kpi@demo (Telegram).
