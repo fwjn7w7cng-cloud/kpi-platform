@@ -3,6 +3,12 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-10-30 17:44 (Альфред) — шаг 7: demo.kpibotsmith.ru переключён на живое приложение (reverse_proxy 127.0.0.1:8101)
+Копия /etc/caddy/Caddyfile.bak-2026-10-30-1543 (имя по часам сервера, CET). Новый Caddyfile: kpibotsmith.ru без изменений,
+demo → encode gzip + reverse_proxy 127.0.0.1:8101. validate ок, reload, active, ошибок в логе нет. Снаружи: страница 200
+(«Опт-Партнёр · демо»), icon-192.png 200, POST /api/start → «👋 Здравствуйте!…», kpibotsmith.ru 200. kpi-web@demo 18 МБ, без
+перезапусков. Снимок /var/www/kpi/demo оставлен запасной копией. kpi@demo и соседи не трогались.
+
 ## 2026-10-30 17:34 (Альфред) — шаг 6: служба kpi-web@demo запущена на 127.0.0.1:8101 (Caddy не трогал)
 Код b43c1be (requirements без изменений). clients/demo/.env: дописаны WEB_URL, WEB_PORT=8101, WEB_ADMIN_KEY (openssl rand -hex 16,
 не показывал); первые две строки не тронуты, 600. deploy/kpi-web@.service → /etc/systemd/system, enable --now kpi-web@demo 17:33:16:
