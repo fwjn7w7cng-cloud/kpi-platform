@@ -41,7 +41,7 @@ def on_text(ctx, text, data):
                    ctx.user_id, ctx.me["id"] if ctx.me else None, kind, text[:2000], ctx.photo or "", ctx.today)
     out = [Reply(text="✅ Отправлено администратору. Ответ придёт сюда." +
                       ("\n\nВ демо сообщение видно в роли «Администратор» → «💬 Отзывы»." if ctx.demo else ""))]
-    for a in ctx.app.admins:
+    for a in ctx.app.admin_ids(ctx.db):
         out.append(Reply(text=f"{KINDS[kind]} · {ctx.name()}\n{text}"[:1000], photo=ctx.photo or "", to=a,
                          buttons=[[Button("✍️ Ответить", f"fba:{fid}"), Button("✅ Сделано", f"fbd:{fid}")]]))
     return out

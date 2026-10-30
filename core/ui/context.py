@@ -75,6 +75,8 @@ class Ctx:
             self.me, self.role = emp, (emp["role"] if emp else role)
             return
         emp = self.db.employee_by_tg(self.user_id)
+        if emp and emp["active"] and emp["role"] == "admin":
+            self.admin = True                          # «завхоз» бота у клиента: ведёт людей, доступ и данные
         view_as = self.session.get("as") if self.admin else None
         if view_as:
             emp = self.db.employee(view_as)

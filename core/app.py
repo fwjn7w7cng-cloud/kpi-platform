@@ -53,6 +53,7 @@ class App:
         importlib.import_module("core.ui.screens")
         importlib.import_module("core.ui.tariff")
         importlib.import_module("core.onboard")
+        importlib.import_module("core.people")
         importlib.import_module("core.demo")
         importlib.import_module("core.jobs.briefs")
         for m in MODULES:
@@ -192,12 +193,19 @@ class App:
         g = demo.gate(ctx, arg=arg)
         if g is not None:
             return g
+        hello = []
+        if arg and not self.demo:                    # настоящий клиент: ссылка-приглашение сотруднику (core/people.py)
+            from core import people
+            emp = people.redeem(ctx, arg)
+            hello = [Reply(text=f"✅ Здравствуйте, {emp['fio']}! Вы вошли в приложение — добавьте его на экран «Домой», "
+                                "чтобы открывать одним нажатием." if emp else
+                                "Ссылка-приглашение недействительна или устарела — попросите у администратора новую.")]
         ctx = self.ctx(user_id)                      # доступ мог только что открыться — уже со своей копией фирмы
         ctx.session.pop("await", None)
         ctx.session["trail"] = []
         ctx.save()
         extra, self.pending = self.pending, []         # сообщения другим людям, которые родились на входе (партнёру — «клиент вошёл»)
-        return extra + self._with_keyboard(user_id, self._run(ctx, "home", ()), force=True)
+        return extra + hello + self._with_keyboard(user_id, self._run(ctx, "home", ()), force=True)
 
     def press(self, user_id, data, top=False):
         """top — нажатие из нижнего меню: путь «Назад» начинается заново."""
@@ -304,6 +312,13 @@ class App:
         return out
 
     # ---------- рассылки ----------
+
+    def admin_ids(self, db):
+        """Кому идут сообщения администратору: ключ приложения (мы) + сотрудники с ролью «Администратор» у клиента."""
+        out = set(self.admins)
+        if not self.demo:
+            out |= {e["tg_id"] for e in db.employees() if e["role"] == "admin" and e["tg_id"]}
+        return sorted(out)
 
     def recipients(self, roles=None):
         """Сотрудники с привязанным мессенджером (для рассылок)."""
