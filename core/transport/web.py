@@ -212,6 +212,28 @@ class WebApi:
             headers["Set-Cookie"] = f"kid={tok}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax; Secure"
         return code, headers, raw
 
+    # ---------- 1С: сетевая папка и прямая отправка (core/onec_link.py) ----------
+
+    def handle_raw(self, method, path, headers, body):
+        """Запросы без cookie и JSON: /dav/… (сетевая папка) и /api/1c (файл от 1С). → (код, заголовки, байты)."""
+        from core import onec_link as L
+        if self.app.demo:
+            return 404, {"Content-Type": "text/plain; charset=utf-8"}, "В демо отчёты не принимаются".encode()
+        u = path.split("?")[0]
+        if u == "/dav" or u.startswith("/dav/"):
+            with self.lock:
+                return L.dav(self.app, method, path, headers, body)
+        if u == "/api/1c":
+            if method != "POST":
+                return 405, {"Content-Type": "text/plain; charset=utf-8"}, "POST с файлом в теле".encode()
+            q = parse_qs(urlparse(path).query)
+            with self.lock:
+                if not L.check_key(self.app.db(), headers.get("X-Key") or (q.get("key") or [""])[0]):
+                    return 403, {"Content-Type": "text/plain; charset=utf-8"}, "неверный ключ".encode()
+                code, text = L.receive_direct(self.app, (q.get("name") or [""])[0], body, lambda out: self._deliver(0, out))
+            return code, {"Content-Type": "text/plain; charset=utf-8"}, text.encode()
+        return 404, {"Content-Type": "text/plain; charset=utf-8"}, b""
+
     @staticmethod
     def _json(data):
         return 200, {"Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store"}, \
@@ -222,7 +244,26 @@ def serve(api, port=8101, host="127.0.0.1"):
     class Handler(BaseHTTPRequestHandler):
         server_version = "kpi"
 
+        def _raw(self, method):
+            n = min(int(self.headers.get("Content-Length") or 0), 16 * 1024 * 1024)
+            body = self.rfile.read(n) if n else b""
+            code, headers, raw = api.handle_raw(method, self.path, self.headers, body)
+            self.send_response(code)
+            for k, v in headers.items():
+                if k != "Content-Length":
+                    self.send_header(k, v)
+            self.send_header("Content-Length", str(len(raw) if method != "HEAD" else int(headers.get("Content-Length", 0))))
+            self.end_headers()
+            if method != "HEAD":
+                self.wfile.write(raw)
+
+        def _is_raw(self):
+            u = self.path.split("?")[0]
+            return u == "/dav" or u.startswith("/dav/") or u == "/api/1c"
+
         def _go(self, method):
+            if self._is_raw():
+                return self._raw(method)
             body = {}
             if method == "POST":
                 limit = 22_000_000 if self.path.startswith("/api/upload") else 1_000_000   # файл отчёта до 15 МБ в base64
@@ -249,6 +290,15 @@ def serve(api, port=8101, host="127.0.0.1"):
 
         def do_POST(self):
             self._go("POST")
+
+        def do_OPTIONS(self):
+            self._raw("OPTIONS") if self._is_raw() else self.send_error(405)
+
+        def do_HEAD(self):
+            self._raw("HEAD") if self._is_raw() else self.send_error(405)
+
+    for _m in ("PROPFIND", "PROPPATCH", "PUT", "DELETE", "MOVE", "LOCK", "UNLOCK", "MKCOL"):    # сетевая папка (WebDAV)
+        setattr(Handler, f"do_{_m}", lambda self, m=_m: self._raw(m) if self._is_raw() else self.send_error(405))
 
         def log_message(self, fmt, *args):     # адреса и ключи в журнал не пишем
             pass

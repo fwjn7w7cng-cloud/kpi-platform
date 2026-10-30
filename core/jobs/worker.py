@@ -26,12 +26,10 @@ def sources(app, env=None):
     src = app.cfg.source or {}
     kind = src.get("kind")
     out = []
-    if kind == "folder":
+    if kind != "seed":                    # своя папка есть у каждого клиента: сетевая папка и курьер кладут файлы в неё
         from core.ingest.folder import InboxFolder
-        from core.data.db import client_db_path
-        base = app.data_dir / app.client_id if app.data_dir else Path(client_db_path(app.client_id)).parent
-        path = src.get("path") or env.get("INBOX_DIR") or (base / "inbox")
-        out.append(("папка", InboxFolder(path)))
+        from core.onec_link import inbox_dir
+        out.append(("папка", InboxFolder(inbox_dir(app))))
     if kind == "mail" and env.get("MAIL_USER"):
         from core.ingest.mail import Mailbox
         out.append(("почта", Mailbox(env["MAIL_USER"], env.get("MAIL_PASSWORD", ""), env.get("MAIL_HOST", "imap.gmail.com"),

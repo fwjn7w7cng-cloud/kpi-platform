@@ -194,7 +194,7 @@ class Folder(unittest.TestCase):
         self.assertEqual(s[0][0], "папка")
         self.assertEqual(s[0][1].path, self.tmp / "_template" / "inbox")
         self.app.cfg.source = {"kind": "mail"}
-        self.assertEqual(sources(self.app, env={}), [])                       # почты нет в .env — источника нет
+        self.assertEqual([t for t, _ in sources(self.app, env={})], ["папка"])   # почты нет в .env — только своя папка
 
 
 if __name__ == "__main__":

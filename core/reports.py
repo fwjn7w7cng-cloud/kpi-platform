@@ -109,13 +109,15 @@ def upload_screen(ctx):
     v.note("Как: в 1С сформируйте отчёт → «Сохранить как» Excel → здесь «Выбрать файлы». Можно сразу несколько. "
            "Тот же файл второй раз не примется; новый файл за тот же период заменит прежний. Утверждённый месяц закрыт.")
     kind = (ctx.cfg.source or {}).get("kind")
-    auto = {"folder": "из папки на сервере (1С или курьер кладёт файлы)", "mail": "с почты бота", "drive": "с Google Диска"}.get(kind)
-    if auto:
-        v.note(f"🔄 Автоматически: раз в 10 минут бот забирает отчёты {auto}. Кнопка ниже — для разовых файлов.")
+    extra = {"mail": " и с почты бота", "drive": " и с Google Диска"}.get(kind, "")
+    v.note(f"🔄 Автоматически: отчёты, которые 1С кладёт в сетевую папку{extra}, бот забирает сам — настройка в «🔌 Связь с 1С». "
+           "Кнопка ниже — для разовых файлов.")
     st = ctx.db.month_status(month_of(ctx.today))
     if st == "review":
         v.note(f"{month_title(month_of(ctx.today))} на согласовании — файлы за него принимаются только отсюда, не автоматически.")
     kb = [[Button("🧪 Все загрузки", "upl")]]
+    if ctx.admin or ctx.role == "owner":
+        kb[0].append(Button("🔌 Связь с 1С", "ucs"))
     if ctx.db.unknown_keys():
         kb.append([Button("🧾 Нет в расчёте", "pak")])
     return Reply(view=v, buttons=kb, upload=True)
@@ -143,3 +145,4 @@ def log_screen(ctx, n=None):
 
 
 menu("up", "📥 Отчёты 1С", roles=set(ROLES), order=57)
+menu("ucs", "🔌 Связь с 1С", roles={"admin", "owner"}, order=57)

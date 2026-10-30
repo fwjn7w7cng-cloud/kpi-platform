@@ -55,6 +55,7 @@ class App:
         importlib.import_module("core.onboard")
         importlib.import_module("core.people")
         importlib.import_module("core.reports")
+        importlib.import_module("core.onec_link")
         importlib.import_module("core.demo")
         importlib.import_module("core.jobs.briefs")
         for m in MODULES:
