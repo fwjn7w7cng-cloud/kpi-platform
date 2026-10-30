@@ -1,0 +1,21 @@
+# Веб-приложение клиента (своё приложение вместо мессенджера). Установка на сервере:
+#   cp deploy/kpi-web@.service /etc/systemd/system/ && systemctl daemon-reload
+#   systemctl enable --now kpi-web@demo     # порт — WEB_PORT в clients/demo/.env (по умолчанию 8101)
+# Слушает только 127.0.0.1 — снаружи в него ходит Caddy (адрес клиента → reverse_proxy 127.0.0.1:<порт>).
+[Unit]
+Description=KPI-приложение клиента %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/root/kpi-platform
+ExecStart=/root/kpi-platform/venv/bin/python run.py %i --web
+Restart=always
+RestartSec=5
+MemoryMax=200M
+MemorySwapMax=100M
+CPUQuota=25%
+Environment=MALLOC_ARENA_MAX=2
+
+[Install]
+WantedBy=multi-user.target

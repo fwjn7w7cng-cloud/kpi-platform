@@ -45,6 +45,8 @@ class App:
         self.data_dir = data_dir
         self.demo_gate = bool(demo_gate) and self.demo     # демо по приглашению / заявке (core/demo.py)
         self.bot_username = ""                             # ставит транспорт — для ссылок-приглашений
+        self.web_url = ""                                  # адрес веб-приложения (веб-провод) — тоже для ссылок
+        self.last_sid = ""                                 # какой экран открылся последним (веб-провод: главная или нет)
         self._dbs = {}
         self._memo = {}
         importlib.import_module("core.ui.screens")
@@ -267,6 +269,7 @@ class App:
         if sid not in REG.SCREENS:
             sid, args = "home", ()
         fn, module = REG.SCREENS[sid]
+        self.last_sid = sid
         if module and not ctx.can(module):
             sid, args, fn = "lock", (module,), REG.SCREENS["lock"][0]
         try:

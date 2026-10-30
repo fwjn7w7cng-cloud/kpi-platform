@@ -109,7 +109,7 @@ def gate(ctx, arg="", press=None, text=None):
         why = f"Доступ к демо закончился {_dm(me.get('till'))}." if st == "end" else "Доступ к демо закрыт."
         return [Reply(text=f"{why}\n\nХотите посмотреть ещё — попросите снова.",
                       buttons=[[Button("🙋 Попросить доступ", "dmq")]])]
-    return _ask(ctx, "👋 Здравствуйте! Это демо-бот KPI и зарплаты для оптовых компаний.\n\n"
+    return _ask(ctx, "👋 Здравствуйте! Это демо KPI и зарплаты для оптовых компаний.\n\n"
                      "Демо открывается по приглашению. Напишите в ответ, как вас зовут и из какой вы компании — "
                      "администратор откроет доступ.")
 
@@ -133,7 +133,7 @@ def _request(ctx, guests, text):
     ctx.session.pop("await", None)
     ctx.save()
     out = [Reply(text="✅ Заявка отправлена. Как только администратор откроет доступ — придёт сообщение сюда.")]
-    out += _notify_admins(ctx, f"🙋 Заявка в демо\n{text}" + (f"\nTelegram: {me['name']}" if me.get("name") else ""),
+    out += _notify_admins(ctx, f"🙋 Заявка в демо\n{text}" + (f"\nИмя в мессенджере: {me['name']}" if me.get("name") else ""),
                           [[Button(f"✅ {d} дн.", f"gsa:{uid}:{d}") for d in DAYS], [Button("❌ Отказать", f"gsn:{uid}")]])
     return out
 
@@ -203,7 +203,12 @@ def invite(ctx, days=None):
     invites = _invites(ctx)
     invites[code] = {"days": int(days), "created": ctx.today.isoformat()}
     _put(ctx, invites=invites)
-    link = f"https://t.me/{ctx.app.bot_username}?start={code}" if ctx.app.bot_username else f"/start {code}"
+    if ctx.app.web_url:
+        link = f"{ctx.app.web_url}/?start={code}"
+    elif ctx.app.bot_username:
+        link = f"https://t.me/{ctx.app.bot_username}?start={code}"
+    else:
+        link = f"/start {code}"
     return Reply(text=f"🎟 Приглашение на {days_t(days)}. Отправьте клиенту эту ссылку:\n\n{link}\n\n"
                       "Ссылка одноразовая: по ней войдёт один человек. Кто вошёл — увидите в «👥 Гости демо».",
                  buttons=[[Button("👥 Гости демо", "gst")]])
@@ -219,7 +224,7 @@ def guest_card(ctx, uid):
         return guests_list(ctx)
     st = g.get("status")
     v = View(_title(g, uid), ST.get(st, ""))
-    lines = [f"Telegram: {g.get('name') or '—'}", f"Вошёл: {g.get('via', '—')}, с {_dm(g.get('since'))}",
+    lines = [f"Имя в мессенджере: {g.get('name') or '—'}", f"Вошёл: {g.get('via', '—')}, с {_dm(g.get('since'))}",
              f"Доступ до: {_dm(g.get('till'))}" if g.get("till") else "Доступа ещё не было",
              f"Последний раз: {_dm(g.get('last'))} · нажатий {g.get('presses', 0)}"]
     v.lines(lines)

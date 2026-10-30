@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT))
 from core.app import App                       # noqa: E402
 from core.calendar import month_of, month_title  # noqa: E402
 from core.ui import screens                    # noqa: E402
-from core.ui.views import Grid                 # noqa: E402
+from core.ui.web import reply_json, static_files  # noqa: E402
 
 ROLES = [("owner", "Директор"), ("head", "Руководитель продаж"), ("sv", "Супервайзер"), ("rep", "Торговый"),
          ("staff", "Склад / водитель"), ("accountant", "Бухгалтер")]
@@ -29,64 +29,9 @@ MAXN = {"owner": 900, "head": 600, "sv": 500, "rep": 400, "staff": 120, "account
 NAME = "Опт-Партнёр KPI"
 
 
-def _cell(c):
-    d = {"t": c.text}
-    if c.color:
-        d["c"] = c.color
-    if c.bar:
-        d["b"] = [round(float(x), 3) if x is not None else None for x in c.bar]
-    if c.chip:
-        d["chip"] = 1
-    if c.bold:
-        d["w"] = 1
-    return d
-
-
-def _view(v):
-    out = []
-    for k, data in v.blocks:
-        if k == "tiles":
-            out.append({"k": "tiles", "items": [[a, b, c] for a, b, c in data]})
-        elif k == "table":
-            title, head, rows = data
-            out.append({"k": "table", "title": title, "head": [str(h) for h in head], "even": isinstance(head, Grid),
-                        "first": getattr(head, "first", None),
-                        "rows": [{"cells": [_cell(c) for c in r.cells], "sub": r.sub, "mark": r.mark} for r in rows]})
-        elif k == "cards":
-            title, items = data
-            out.append({"k": "cards", "title": title, "items": [
-                {"title": c.title, "value": c.value, "lines": [str(x) for x in c.lines], "phone": c.phone,
-                 "color": c.color, "note": c.note, "nc": c.note_color,
-                 "bar": [float(x) for x in c.bar] if c.bar else None} for c in items]})
-        elif k == "matrix":
-            title, names, rows = data
-            out.append({"k": "matrix", "title": title, "names": names,
-                        "rows": [[lab, [_cell(c) for c in cs]] for lab, cs in rows]})
-        elif k == "medals":
-            title, items = data
-            out.append({"k": "medals", "title": title, "items": [list(x) for x in items]})
-        elif k == "lines":
-            title, items = data
-            out.append({"k": "lines", "title": title, "items": [str(x) for x in items]})
-        elif k == "note":
-            text, where = data
-            if where != "txt":
-                out.append({"k": "note", "text": text})
-    return {"title": v.title, "sub": v.subtitle, "blocks": out}
-
-
 def _reply(r):
-    d = {}
-    if r.view:
-        d["view"] = _view(r.view)
-    if r.text:
-        d["text"] = r.text
-    if r.ask:
-        d["ask"] = r.ask
-    if r.files:
-        d["files"] = [f[0] for f in r.files]
-    rows = [[[b.label, b.to] for b in row if b.to != "home" and not b.to.startswith("bk:")] for row in r.buttons]
-    d["buttons"] = [row for row in rows if row]
+    d = reply_json(r)
+    d["buttons"] = [row for row in ([[l, to] for l, to in row if not to.startswith("bk:")] for row in d["buttons"]) if row]
     return d
 
 
@@ -140,48 +85,14 @@ def export(today=None, roles=None, limit=None):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def _icon(size, path):
-    from PIL import Image, ImageDraw, ImageFont
-    img = Image.new("RGB", (size, size), "#1F5FD1")
-    d = ImageDraw.Draw(img)
-    for y in range(size):                           # мягкий градиент сверху вниз
-        t = y / size
-        d.line([(0, y), (size, y)], fill=(int(31 + 28 * t), int(95 + 44 * t), int(209 + 8 * t)))
-    try:
-        f = ImageFont.truetype(str(ROOT / "assets" / "fonts" / "Inter-Bold.otf"), int(size * 0.34))
-    except OSError:
-        f = ImageFont.load_default()
-    d.text((size / 2, size / 2), "KPI", fill="white", font=f, anchor="mm")
-    img.save(path)
-
-
-MANIFEST = {"name": NAME, "short_name": "KPI демо", "start_url": "./", "scope": "./", "display": "standalone",
-            "background_color": "#F3F5F8", "theme_color": "#1F5FD1", "lang": "ru",
-            "icons": [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
-                      {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}]}
-
-SW = """// Демо-приложение: последняя открытая версия доступна и без сети.
-const C = "kpi-demo";
-self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(C).then(c => c.addAll(["./", "manifest.webmanifest", "icon-192.png"]))); });
-self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
-self.addEventListener("fetch", e => {
-  if (e.request.method !== "GET") return;
-  e.respondWith(fetch(e.request).then(r => { const copy = r.clone(); caches.open(C).then(c => c.put(e.request, copy)); return r; })
-    .catch(() => caches.match(e.request)));
-});
-"""
-
-
 def build(out, data):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     tpl = (ROOT / "web" / "app_template.html").read_text(encoding="utf-8")
     js = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     (out / "index.html").write_text(tpl.replace("__DATA__", js), encoding="utf-8")
-    (out / "manifest.webmanifest").write_text(json.dumps(MANIFEST, ensure_ascii=False, indent=1), encoding="utf-8")
-    (out / "sw.js").write_text(SW, encoding="utf-8")
-    for s in (180, 192, 512):
-        _icon(s, out / f"icon-{s}.png")
+    for name, (data_, _) in static_files(NAME, "KPI демо").items():
+        (out / name).write_bytes(data_)
     return out / "index.html"
 
 

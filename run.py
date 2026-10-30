@@ -27,7 +27,7 @@ def load_env(path):
             os.environ.setdefault(k.strip(), v.strip().strip('"'))
 
 
-def main(client):
+def main(client, web_port=None):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     for noisy in ("httpx", "httpcore", "telegram.ext.Updater"):     # их адреса запросов содержат токен бота
         logging.getLogger(noisy).setLevel(logging.WARNING)
@@ -35,6 +35,11 @@ def main(client):
     from core.app import App
     admins = [a for a in os.environ.get("ADMIN_IDS", "").replace(" ", "").split(",") if a]
     app = App(client, admins=admins, demo_gate=True)       # демо — только по приглашению или заявке (core/demo.py)
+    if web_port:                                           # своё приложение вместо мессенджера (core/transport/web.py)
+        from core.transport.web import WebApi, serve
+        api = WebApi(app, admin_key=os.environ.get("WEB_ADMIN_KEY", ""), base_url=os.environ.get("WEB_URL", ""))
+        serve(api, port=web_port)
+        return
     token = os.environ.get("BOT_TOKEN")
     if not token:
         sys.exit(f"Нет BOT_TOKEN в clients/{client}/.env")
@@ -57,6 +62,10 @@ def main(client):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        sys.exit("Запуск: python3 run.py <код_клиента>")
-    main(sys.argv[1])
+    args = sys.argv[1:]
+    if len(args) == 1:
+        main(args[0])
+    elif len(args) in (2, 3) and args[1] == "--web":
+        main(args[0], web_port=int(args[2]) if len(args) == 3 else int(os.environ.get("WEB_PORT", "8101")))
+    else:
+        sys.exit("Запуск: python3 run.py <код_клиента>  или  python3 run.py <код_клиента> --web [порт]")

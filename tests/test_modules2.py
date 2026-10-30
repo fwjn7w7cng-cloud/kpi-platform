@@ -397,3 +397,52 @@ class WebDemo(unittest.TestCase):
                 self.assertTrue((out / f).exists(), f)
         finally:
             shutil.rmtree(out, ignore_errors=True)
+
+
+class WebTransport(unittest.TestCase):
+    """Своё приложение: вход по приглашению, нажатия, ввод текста, сообщения другим — в их ленту."""
+    def setUp(self):
+        from core.transport.web import WebApi
+        self.tmp = Path(tempfile.mkdtemp())
+        self.app = App("demo", today=TODAY, admins=[], data_dir=self.tmp, demo_gate=True)
+        self.api = WebApi(self.app, admin_key="секрет", base_url="https://demo.example.ru")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def post(self, act, body, token=None):
+        code, headers, raw = self.api.handle("POST", f"/api/{act}", {}, body, token)
+        self.assertEqual(code, 200)
+        tok = token or headers.get("Set-Cookie", "").split("kid=")[1].split(";")[0]
+        return json.loads(raw), tok
+
+    def test_page_and_static(self):
+        code, h, raw = self.api.handle("GET", "/", {}, {}, None)
+        self.assertIn("text/html", h["Content-Type"])
+        self.assertNotIn(b"__NAME__", raw)
+        for f in ("manifest.webmanifest", "sw.js", "icon-192.png"):
+            self.assertEqual(self.api.handle("GET", "/" + f, {}, {}, None)[0], 200)
+
+    def test_admin_invite_guest_and_press(self):
+        d, admin = self.post("start", {"admin": "секрет"})
+        self.assertTrue(d["home"])
+        self.assertTrue(any(to == "gst" for _, to in d["extra"]))      # админу — «Гости демо»
+        d, _ = self.post("press", {"to": "gsi:3"}, admin)
+        link = d["msgs"][0]["text"]
+        self.assertIn("https://demo.example.ru/?start=", link)
+        code = link.split("start=")[1].split()[0]
+        d, guest = self.post("start", {"arg": code})                   # гость по ссылке — сразу внутри
+        self.assertTrue(d["home"] and d["tabs"])
+        d, _ = self.post("press", {"to": "pl", "top": True}, guest)    # нажатие — настоящий экран
+        self.assertIn("Планы", d["msgs"][0]["view"]["title"])
+        d, stranger = self.post("start", {})                           # чужой — просят представиться
+        self.assertTrue(d["msgs"][0].get("ask"))
+        self.assertFalse(d["tabs"])
+        d, _ = self.post("text", {"text": "Ислам, Стройбаза"}, stranger)
+        self.assertIn("Заявка отправлена", d["msgs"][0]["text"])
+        d, _ = self.post("press", {"to": "home"}, admin)               # заявка пришла админу в ленту
+        self.assertTrue(any("Стройбаза" in m.get("text", "") for m in d["inbox"]))
+
+    def test_wrong_admin_key(self):
+        d, tok = self.post("start", {"admin": "не тот"})
+        self.assertFalse(d["tabs"])                                    # обычный гость без приглашения

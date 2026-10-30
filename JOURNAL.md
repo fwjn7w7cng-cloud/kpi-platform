@@ -3,6 +3,10 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 30.10.2026 17:50 — Джарвис
+- Живое демо-приложение (этап 1): `core/transport/web.py` (веб-провод, /api/start|press|text|poll, cookie «kid» → свой номер пользователя, сообщения другим — в их ленту), `core/ui/web.py` (экран → JSON, manifest/значки/sw.js), `web/app.html`, `run.py <код> --web [порт]`, `deploy/kpi-web@.service` (127.0.0.1:WEB_PORT, по умолчанию 8101, MemoryMax 200M). Админ: один раз `/?admin=<WEB_ADMIN_KEY>` (ключ только в .env на сервере). Приглашения ведут на WEB_URL/?start=<код>.
+- Дальше (Альфред, по шагам): .env демо (WEB_URL, WEB_PORT, WEB_ADMIN_KEY), служба kpi-web@demo, Caddy demo.kpibotsmith.ru → reverse_proxy; после проверки Адамом — остановить kpi@demo (Telegram).
+
 ## 2026-10-30 16:48 (Альфред) — шаг 5: 80/443 открыты, сертификаты получены — kpibotsmith.ru и demo.kpibotsmith.ru работают
 ufw allow 80/tcp и 443/tcp (v4+v6, с комментариями), 22/tcp без изменений. restart caddy 16:46 → оба сертификата Let's Encrypt
 за ~20 с (kpibotsmith.ru — YE2, demo — YE1, до 28.01.2027; Caddy продлевает сам). https оба → HTTP/2 200; manifest отдаётся;
