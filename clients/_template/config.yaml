@@ -9,8 +9,11 @@ company:
   industry: building          # отрасль: building food auto apparel electronics cosmetics pharma household
   timezone: Europe/Moscow
 
-edition: business             # start | business | control
-addons: []                    # модули сверх редакции, например [debts] для Старта
+# Что куплено — готовый набор или свой из пакетов (можно и то и другое: пакеты поправят набор):
+#   edition: start | business | control (Премиум) | company | max
+#   packages: {sales: business, stock: true, logistics: false, office: false, max: false}
+# sales — уровень продаж start / business / control или false; остальные пакеты — true / false.
+edition: business
 
 work_week:
   weekend: [sun]              # выходные дни: mon tue wed thu fri sat sun

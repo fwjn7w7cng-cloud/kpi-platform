@@ -10,6 +10,7 @@
 """
 from datetime import datetime
 
+from core.access import pricing as P
 from core.calendar import month_of, month_title
 from core.ui.kit import Button, Reply, money, pct
 from core.ui.registry import menu, screen, text_input
@@ -40,10 +41,12 @@ def custom(ctx):
     rs = requests(ctx.db)
     this = [r for r in rs if r["month"] == month and r["status"] != "later"]
     left = max(CUSTOM_MAX - len(this), 0)
-    v = View("🧩 Функции на заказ", f"{month_title(month)} · осталось {left} из {CUSTOM_MAX}")
+    extra = P.prices(ctx.office)["custom_extra"]
+    v = View("🧩 Функции на заказ", f"{month_title(month)} · осталось {left} из {CUSTOM_MAX} бесплатных")
     v.lines(["Опишите своими словами, чего не хватает: новый отчёт, экран, напоминание, расчёт бонуса.",
              "Разработчик сделает с нуля под вашу компанию — каждая функция до одного рабочего дня.",
-             "Больше одного дня — разобьём на части или посчитаем отдельно; не использованные заявки не переносятся."])
+             f"Три в месяц входят в «Максимум», каждая следующая — {P.fmt(extra)} ₽; не использованные не переносятся.",
+             "Больше одного дня работы — разобьём на части или посчитаем отдельно."])
     v.cards([Card(f"Заявка №{r['id']}", ST[r["status"]], [r["text"], f"{r['author']} · {r['ts']}"] + ([r["note"]] if r.get("note") else []),
                   color="good" if r["status"] == "done" else "warn" if r["status"] == "work" else None)
              for r in reversed(rs[-8:])], title="Заявки")
@@ -51,7 +54,7 @@ def custom(ctx):
         v.note("Заявок пока нет.")
     kb = []
     if ctx.role in ("owner", "admin"):
-        kb.append([Button("➕ Заказать функцию", "cuq")] if left else [])
+        kb.append([Button("➕ Заказать функцию", "cuq")] if left else [Button(f"➕ Заказать за {P.fmt(extra)} ₽", "cuq:paid")])
     if _admin(ctx):
         kb += [[Button(f"🛠 №{r['id']}", f"cus:{r['id']}:work"), Button(f"✅ №{r['id']}", f"cus:{r['id']}:done")]
                for r in rs if r["status"] in ("new", "work")]
@@ -59,30 +62,39 @@ def custom(ctx):
 
 
 @screen("cuq", module="custom")
-def ask(ctx):
+def ask(ctx, paid=None):
     if ctx.role not in ("owner", "admin"):
         return Reply(text="Заказывает директор.")
     month = month_of(ctx.today)
-    if sum(1 for r in requests(ctx.db) if r["month"] == month and r["status"] != "later") >= CUSTOM_MAX:
-        return Reply(text=f"В этом месяце уже {CUSTOM_MAX} заявки — следующая с 1-го числа.")
-    return ctx.ask("custom_req", "Что сделать? Опишите, кто будет пользоваться и что должен видеть или получать.\n\n"
-                                 "Например: «Утром начальнику склада — список вчерашних заявок, которые не отгрузили».",
-                   buttons=[[Button("✖️ Отмена", "custom")]])
+    full = sum(1 for r in requests(ctx.db) if r["month"] == month and r["status"] != "later") >= CUSTOM_MAX
+    extra = P.prices(ctx.office)["custom_extra"]
+    if full and not paid:
+        return Reply(text=f"В этом месяце уже {CUSTOM_MAX} бесплатные заявки. Следующая — {P.fmt(extra)} ₽ за функцию, "
+                          "или подождите 1-го числа.", buttons=[[Button(f"➕ Заказать за {P.fmt(extra)} ₽", "cuq:paid")],
+                                                                 [Button("‹ Назад", "custom")]])
+    return ctx.ask("custom_req", ("💳 Платная заявка: " + P.fmt(extra) + " ₽ — сверх трёх бесплатных в этом месяце.\n\n" if full else "")
+                   + "Что сделать? Опишите, кто будет пользоваться и что должен видеть или получать.\n\n"
+                     "Например: «Утром начальнику склада — список вчерашних заявок, которые не отгрузили».",
+                   {"paid": bool(full)}, buttons=[[Button("✖️ Отмена", "custom")]])
 
 
 @text_input("custom_req")
 def on_request(ctx, text, data):
     t = " ".join((text or "").split())[:500]
     if len(t) < 10:
-        return ctx.ask("custom_req", "Опишите чуть подробнее — хотя бы одно предложение.", buttons=[[Button("✖️ Отмена", "custom")]])
+        return ctx.ask("custom_req", "Опишите чуть подробнее — хотя бы одно предложение.", data,
+                       buttons=[[Button("✖️ Отмена", "custom")]])
     rs = requests(ctx.db)
     rid = max([r["id"] for r in rs] or [0]) + 1
+    paid = bool((data or {}).get("paid"))
+    price = P.prices(ctx.office)["custom_extra"] if paid else 0
     rs.append({"id": rid, "month": month_of(ctx.today), "text": t, "author": ctx.name(), "status": "new",
-               "ts": datetime.now().strftime("%d.%m %H:%M"), "note": ""})
+               "ts": datetime.now().strftime("%d.%m %H:%M"), "note": f"платная: {P.fmt(price)} ₽" if paid else ""})
     ctx.db.put("custom_req", rs)
-    ctx.db.audit(ctx.author(), "custom_req", t[:120])
-    out = [Reply(text=f"🧩 Заявка №{rid} принята. Разработчик ответит здесь же — статус виден в «Функции на заказ».")]
-    out += [Reply(text=f"🧩 {ctx.cfg.name}: заявка №{rid} от {ctx.name()}\n\n{t}", to=a,
+    ctx.db.audit(ctx.author(), "custom_req", ("платная " if paid else "") + t[:120])
+    out = [Reply(text=f"🧩 Заявка №{rid} принята{' — платная, ' + P.fmt(price) + ' ₽' if paid else ''}. "
+                      "Разработчик ответит здесь же — статус виден в «Функции на заказ».")]
+    out += [Reply(text=f"🧩 {ctx.cfg.name}: заявка №{rid} от {ctx.name()}{' · ПЛАТНАЯ ' + P.fmt(price) + ' ₽' if paid else ''}\n\n{t}", to=a,
                   buttons=[[Button("🛠 В работу", f"cus:{rid}:work"), Button("✅ Готово", f"cus:{rid}:done")]])
             for a in sorted(ctx.app.admins) if a != ctx.user_id]
     return out + [custom(ctx)]

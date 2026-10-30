@@ -204,7 +204,7 @@ class Maximum(Base):
         r = self.app.press(42, "custom")
         self.assertIn("Максимум", r[0].view.subtitle)
         self.role(43, "owner", ed="business")
-        self.assertIn("Компания", self.app.press(43, "hr")[0].view.subtitle)
+        self.assertIn("Кадры и офис", self.app.press(43, "hr")[0].view.subtitle)
 
 
 class Roles(Base):

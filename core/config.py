@@ -59,8 +59,8 @@ class ClientConfig:
     name: str
     industry: str
     timezone: str
-    edition: str
-    addons: list
+    edition: str                 # код готового набора или E.CUSTOM («свой набор»)
+    packages: dict               # набор пакетов: {sales: уровень|None, stock: bool, logistics: bool, office: bool, max: bool}
     weekend: list
     salary_days: int
     departments: list
@@ -75,8 +75,8 @@ class ClientConfig:
 
     @property
     def modules(self):
-        """Все модули, доступные клиенту: редакция + докупленные."""
-        return E.edition_modules(self.edition) | set(self.addons)
+        """Все модули, доступные клиенту по его набору пакетов."""
+        return E.modules_of(self.packages)
 
     def has_module(self, code):
         return code in self.modules
@@ -84,13 +84,27 @@ class ClientConfig:
     def position(self, pos_id):
         return next((p for p in self.positions if p["id"] == pos_id), None)
 
-    def with_edition(self, edition, addons=None):
-        """Копия анкеты с другой редакцией (демо: переключатель редакций)."""
+    def with_packages(self, packages):
+        """Копия анкеты с другим набором пакетов (демо: конструктор)."""
         import copy
         c = copy.copy(self)
-        c.edition = edition
-        c.addons = list(self.addons if addons is None else addons)
+        c.packages = E.normalize(packages)
+        c.edition = E.preset_of(c.packages)
         return c
+
+    def with_edition(self, edition):
+        """Копия анкеты с готовым набором."""
+        return self.with_packages(E.PRESETS[edition]["packages"])
+
+    def dept_on(self, dept_id):
+        """Подключён ли отдел: куплен пакет его вида (директор и админ работают всегда)."""
+        d = self.dept(dept_id)
+        pkg = E.dept_package(d.kind) if d else None
+        return bool(pkg and self.packages.get(pkg))
+
+    @property
+    def set_title(self):
+        return E.title_of(self.packages)
 
     def role_title(self, role):
         return self.role_titles.get(role) or R.ROLES[role]["title"]
@@ -100,10 +114,6 @@ class ClientConfig:
 
     def teams_of(self, dept_id):
         return [t for t in self.teams if t.dept == dept_id]
-
-    @property
-    def users_limit(self):
-        return E.EDITIONS[self.edition]["users"]
 
 
 def client_dir(client_id):
@@ -161,6 +171,37 @@ def _money(v, where, p):
 
 # Обязанности внутри отдела — чтобы бот знал, кому какой экран (водитель и диспетчер — оба «сотрудник логистики»)
 DUTIES = {"driver": "Водитель", "dispatcher": "Диспетчер", "hr": "Кадры"}
+
+
+def _packages(raw, p):
+    """Набор пакетов из анкеты: готовый набор (edition) и/или свой (packages); старые addons понимаются и переводятся.
+    → (словарь пакетов, код набора или E.CUSTOM)."""
+    edition = raw.get("edition", "")
+    if edition and edition not in E.PRESETS and edition != E.CUSTOM:
+        p.append(f"edition «{edition}» — допустимо: {', '.join(E.PRESETS)} или {E.CUSTOM}")
+        edition = ""
+    base = dict(E.PRESETS[edition]["packages"]) if edition in E.PRESETS else {}
+    own = raw.get("packages")
+    if own is not None and not isinstance(own, dict):
+        p.append("packages — словарь вида {sales: business, stock: true, logistics: false, office: true, max: false}")
+        own = {}
+    for k, v in (own or {}).items():
+        if k not in E.PACKAGES:
+            p.append(f"packages: нет такого пакета «{k}» — есть: {', '.join(E.PACKAGES)}")
+        elif k == "sales" and v not in (None, False, True) and v not in E.LEVELS and str(v).lower() not in ("нет", "no", "да", "yes"):
+            p.append(f"packages.sales «{v}» — уровень: {', '.join(E.LEVELS)} или false")
+    base.update({k: v for k, v in (own or {}).items() if k in E.PACKAGES})
+    for a in raw.get("addons") or []:                       # старая запись: докупленные модули → их пакеты
+        if a not in E.MODULES:
+            p.append(f"addons: нет такого модуля «{a}»")
+            continue
+        pkg, _ = E.package_of(a)
+        if pkg in E.PACKAGES and pkg != "sales":
+            base[pkg] = True
+    packages = E.normalize(base)
+    if not any(packages.values()):
+        p.append("не подключён ни один пакет: укажите edition (start / business / control / company / max) или packages")
+    return packages, E.preset_of(packages)
 
 
 def human_numbers(raw, p):
@@ -222,23 +263,7 @@ def parse(client_id, raw, hooks=None):
     except Exception:
         p.append(f"company.timezone «{tz}» — нет такого часового пояса")
 
-    edition = raw.get("edition", "")
-    if edition not in E.EDITIONS:
-        p.append(f"edition «{edition}» — допустимо: {', '.join(E.EDITIONS)}")
-    addons = list(raw.get("addons") or [])
-    for a in addons:
-        if a not in E.MODULES:
-            p.append(f"addons: нет такого модуля «{a}»")
-    if edition in E.EDITIONS:
-        have = E.edition_modules(edition) | set(addons)
-        for a in addons:
-            if a in E.edition_modules(edition):
-                p.append(f"addons: «{a}» уже входит в редакцию {edition} — убрать из addons")
-            elif a in E.MODULES and a not in E.ADDONS and a not in E.ADDON_ONLY:
-                p.append(f"addons: «{a}» отдельно не продаётся — только в редакции «{E.EDITIONS[E.min_edition(a)]['title']}»")
-        for mod, need in E.REQUIRES.items():
-            if mod in have and not need <= have:
-                p.append(f"модуль «{mod}» требует {', '.join(sorted(need - have))}")
+    packages, edition = _packages(raw, p)
 
     week = raw.get("work_week") or {}
     weekend = list(week.get("weekend") or ["sun"])
@@ -363,7 +388,7 @@ def parse(client_id, raw, hooks=None):
     if p:
         raise ConfigError(client_id, p)
     return ClientConfig(
-        id=client_id, name=name, industry=industry, timezone=tz, edition=edition, addons=addons,
+        id=client_id, name=name, industry=industry, timezone=tz, edition=edition, packages=packages,
         weekend=weekend, salary_days=salary_days, departments=depts, teams=teams, role_titles=titles,
         lines=lines, source=source, pay=pay, holidays={str(k): v for k, v in holidays.items()},
         positions=positions, raw=raw)

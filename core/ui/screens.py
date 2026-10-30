@@ -38,6 +38,8 @@ def home(ctx):
     if ctx.role == "guest":
         return ctx.ask("register", "👋 Здравствуйте! Вас пока нет в списке сотрудников.\n\n"
                                    "Напишите в ответ свои фамилию и имя — администратор подключит вас.", buttons=[])
+    if ctx.me and ctx.role not in ("owner", "admin") and not ctx.cfg.dept_on(ctx.me["dept"]):
+        return _dept_off(ctx)
     role_t = ctx.cfg.role_title(ctx.role) if ctx.role in R.ROLES else "Администратор"
     if ctx.role in ("staff", "head") and ctx.position_name:
         role_t = ctx.position_name
@@ -52,8 +54,7 @@ def home(ctx):
         v.note(f"🌙 Рамадан мубарак! До {_dm(r['end'])}: рассылки в {r['morning']} и {r['evening']}"
                + (", опоздания без штрафа." if r.get("late_free") else "."))
     if ctx.demo:
-        v.note(f"Демо · {INDUSTRIES[ctx.industry].lower()} · редакция «{E.EDITIONS[ctx.cfg.edition]['title']}». "
-               "Все люди и цифры выдуманы.")
+        v.note(f"Демо · {INDUSTRIES[ctx.industry].lower()} · набор «{ctx.cfg.set_title}». Все люди и цифры выдуманы.")
     # Что уже есть в нижнем меню, на главной не повторяем (переключатели демо, «Смотреть как», отзывы — тоже там).
     kb = rows(_dept_buttons(ctx), 2) + rows(_home_buttons(ctx), 2)
     kb.append(_month_switch(ctx))
@@ -61,6 +62,19 @@ def home(ctx):
 
 
 DEPT_ICON = {"sales": "🏢", "warehouse": "📦", "logistics": "🚚", "purchasing": "🛒", "office": "🏛"}
+PKG_MODULE = {"sales": "kpi", "stock": "stock", "logistics": "logistics", "office": "hr"}   # замок отдела → его пакет
+
+
+def _dept_off(ctx):
+    """Сотрудник отдела, чей пакет не куплен: в приложение не входит."""
+    d = ctx.cfg.dept(ctx.me["dept"])
+    pkg = E.dept_package(d.kind) if d else None
+    title = E.PACKAGES[pkg]["title"] if pkg else "этого отдела"
+    v = View(ctx.cfg.name, f"{ctx.name()} · {ctx.position_name or ctx.cfg.role_title(ctx.role)}")
+    v.lines([f"Отдел «{d.name if d else ''}» пока не подключён к приложению: пакет «{title}» не куплен.",
+             "Как только директор подключит пакет, здесь появятся ваши экраны: табель, зарплата, задачи."])
+    kb = [[Button("🧩 Собрать", "sw:ed")]] if ctx.demo else []
+    return Reply(view=v, buttons=kb)
 
 
 def _dept_buttons(ctx):
@@ -71,7 +85,9 @@ def _dept_buttons(ctx):
     out = []
     for d in ctx.cfg.departments:
         label = f"{DEPT_ICON.get(d.kind, '🏬')} {d.name}"
-        if d.kind == "sales":
+        if not ctx.cfg.dept_on(d.id):
+            out.append(Button(label, lock=PKG_MODULE.get(E.dept_package(d.kind), "staff")))
+        elif d.kind == "sales":
             out.append(Button(label, "sales"))
         else:
             out.append(_mod(ctx, label, f"deptv:{d.id}", "staff"))
@@ -84,7 +100,7 @@ MENU_MAX = 12
 MENU_GROUPS = [
     ("sales", "📈 Продажи и клиенты", {"rating", "cli", "rtd", "alerts", "fc", "cmp", "debts", "rv", "watch", "achb",
                                        "fx", "call"}),
-    ("money", "💰 Зарплата, планы, месяц", {"fund", "month", "pl", "log"}),
+    ("money", "💰 Зарплата, планы, месяц", {"fund", "month", "pl", "log", "tf", "pr"}),
     ("ops", "📦 Закупки, склад, логистика", {"sk", "sow", "sol", "lg", "lgk", "wrc", "wsh", "fu"}),
     ("team", "👥 Люди и задачи", {"people", "ts", "tasks", "qz", "rmd", "hr"}),
     ("more", "⭐ Максимум", {"direct_1c", "branches", "branding", "custom"}),
@@ -192,6 +208,8 @@ def bottom_rows(ctx):
         return []
     role = "rep" if ctx.role == "newbie" else ctx.role
     items = _dept_bottom(ctx) or (HEAD_OTHER if role == "head" and ctx.dept_kind != "sales" else BOTTOM.get(role, BOTTOM["staff"]))
+    if ctx.me and ctx.role not in ("owner", "admin") and not ctx.cfg.dept_on(ctx.me["dept"]):
+        items = []                                    # отдел не подключён — только главная и «не работает»
     if ctx.role == "owner" and ctx.can("hr"):
         items = items + [("👤 Кадры", "hr")]
     if ctx.role == "newbie":
@@ -201,7 +219,7 @@ def bottom_rows(ctx):
     items = [("🏠 Главная", "home")] + [x for x in items if x != fb] + [fb]
     out = [items[i:i + 3] for i in range(0, len(items), 3)]
     if ctx.demo:
-        out.append([("🎭 Роль", "sw:role"), ("🏭 Отрасль", "sw:ind"), ("💼 Редакция", "sw:ed")] +
+        out.append([("🎭 Роль", "sw:role"), ("🏭 Отрасль", "sw:ind"), ("🧩 Собрать", "sw:ed")] +
                    ([("👥 Гости демо", "gst")] if ctx.user_id in ctx.app.admins else []))
     return out
 
@@ -653,15 +671,29 @@ def on_reopen(ctx, text, data):
 
 @screen("lock")
 def lock(ctx, module):
+    from core.access import pricing as P
     title = E.MODULES.get(module, (module,))[0]
-    since = E.min_edition(module) if module in E.MODULES else None
     v = View(f"🔒 {title}", E.lock_text(module) if module in E.MODULES else "")
-    v.lines([LOCK_TEXT.get(module, "Этот раздел подключается отдельно."),
-             f"Входит в редакцию «{E.EDITIONS[since]['title']}» и выше." if since else
-             "Не входит в редакции — подключается отдельным модулем."])
+    lines = [LOCK_TEXT.get(module, "Этот раздел подключается отдельно.")]
+    if module in E.MODULES:
+        pkg, level = E.package_of(module)
+        pr = P.prices(ctx.office)
+        if pkg == "sales":
+            lines.append(f"Пакет «Продажи» уровня «{E.LEVELS[level]}»: {P.fmt(pr['sales_' + level])} ₽ в месяц "
+                         f"+ {P.fmt(pr['sales_' + level + '_user'])} ₽ за человека.")
+        elif pkg == "max":
+            lines.append(f"Пакет «Максимум»: {P.fmt(pr['max'])} ₽ в месяц — всё сразу, вместе с функциями на заказ.")
+        elif pkg in ("stock", "logistics", "office"):
+            lines.append(f"Пакет «{E.PACKAGES[pkg]['title']}»: {P.fmt(pr[pkg])} ₽ в месяц "
+                         f"+ {P.fmt(pr[pkg + '_user'])} ₽ за человека в отделе.")
+        elif pkg == "ops":
+            lines.append("Входит в пакеты «Склад и закупки», «Логистика» и «Кадры и офис».")
+    v.lines(lines)
     kb = []
     if ctx.demo:
-        kb.append([Button("💼 Сменить редакцию", "sw:ed")])
+        kb.append([Button("🧩 Собрать", "sw:ed")])
+    elif ctx.role in ("owner", "admin"):
+        kb.append([Button("💳 Тариф", "tf")])
     return Reply(view=v, buttons=kb)
 
 
@@ -696,7 +728,7 @@ LOCK_TEXT = {
 
 
 @screen("sw")
-def demo(ctx, what=None, value=None):
+def demo(ctx, what=None, value=None, *more):
     if not ctx.demo:
         return home(ctx)
     if what == "role" and value:
@@ -730,20 +762,21 @@ def demo(ctx, what=None, value=None):
     if what == "ind":
         return Reply(text="🏭 Отрасль демо-фирмы:", buttons=rows([Button(("• " if k == ctx.industry else "") + t, f"sw:ind:{k}")
                                                                    for k, t in INDUSTRIES.items()], 2))
-    if what == "ed" and value:
-        ctx.session["edition"] = value
-        ctx.save()
-        return home(ctx.app.ctx(ctx.user_id))
+    from core.ui import tariff as T
+    if what == "ed" and value in E.PRESETS:
+        return T.set_packages(ctx, E.PRESETS[value]["packages"])
     if what == "ed":
-        lines = []
-        for code in E.ORDER:
-            mods = E.edition_modules(code) - (E.edition_modules(E.ORDER[E.ORDER.index(code) - 1]) if E.ORDER.index(code) else set())
-            lines.append(f"{E.EDITIONS[code]['title']} ({E.users_text(code)}): "
-                         + ", ".join(E.MODULES[m][0] for m in sorted(mods)))
-        v = View("💼 Редакции", "что входит в каждую")
-        v.lines(lines)
-        return Reply(view=v, buttons=[[Button(("• " if c == ctx.cfg.edition else "") + E.EDITIONS[c]["title"], f"sw:ed:{c}")
-                                       for c in E.ORDER], [Button("🔄 Начать демо заново", "sw:reset")]])
+        return T.build(ctx)
+    if what == "pk" and value:
+        return T.toggle(ctx, value, more[0] if more else None)
+    if what == "pn":
+        return T.reset_counts(ctx) if value == "reset" else T.ask_counts(ctx)
+    if what == "yr":
+        return T.toggle_year(ctx)
+    if what == "pdf":
+        return T.pdf(ctx)
+    if what == "req":
+        return T.request(ctx)
     if what == "reset":
         ctx.app.reset_demo(ctx.industry, ctx.user_id)
         ctx.session = {"industry": ctx.industry}
@@ -814,12 +847,14 @@ HELP = {
              "📋 Планы — подготовить планы месяца и отправить директору на утверждение.",
              "🗓 Месяц — отправить месяц на согласование."],
     "owner": ["🏢 Отдел продаж — вся картина: команды, прогноз, сторож.", "💰 Фонд — зарплата по отделам.",
+              "💳 Тариф — что подключено и сколько стоит; подключить отдел или уровень — одной кнопкой, заявка уйдёт администратору.",
               "📋 Планы — утвердить или вернуть планы; 📦 Склад, 🚚 Рейсы, ↩️ Возвраты — если подключены.",
               "🗓 Месяц — утвердить месяц: правки решены, ведомость уходит бухгалтеру."],
     "accountant": ["🗓 Месяц → 📑 Ведомость Excel — расчёт всех сотрудников.", "💰 Фонд — суммы по отделам."],
     "staff": ["💰 Моя зарплата — дни и начисления.", "📅 Мой табель — отметки за месяц.",
               "🚚 Мои рейсы — у водителей: рейсы, километры, точки.", "🐞 Не работает — написать администратору."],
-    "admin": ["Всё, что видят остальные, плюс 👁 «Смотреть как» — бот глазами любого сотрудника."],
+    "admin": ["Всё, что видят остальные, плюс 👁 «Смотреть как» — бот глазами любого сотрудника.",
+              "💰 Цены — стандартные цены пакетов, за человека, подключения и скидок; правятся здесь и действуют сразу везде."],
 }
 
 

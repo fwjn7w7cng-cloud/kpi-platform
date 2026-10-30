@@ -15,8 +15,8 @@ class RoundTrip(unittest.TestCase):
         before = load_client("demo")
         cfg, problems = A.check(demo_tables())
         self.assertEqual(problems, [])
-        self.assertEqual((cfg.id, cfg.name, cfg.edition, cfg.addons, cfg.weekend, cfg.salary_days),
-                         (before.id, before.name, before.edition, before.addons, before.weekend, before.salary_days))
+        self.assertEqual((cfg.id, cfg.name, cfg.edition, cfg.packages, cfg.weekend, cfg.salary_days),
+                         (before.id, before.name, before.edition, before.packages, before.weekend, before.salary_days))
         self.assertEqual([d.id for d in cfg.departments], [d.id for d in before.departments])
         self.assertEqual([(t.id, t.dept) for t in cfg.teams], [(t.id, t.dept) for t in before.teams])
         self.assertEqual(cfg.raw["kpi"], before.raw["kpi"])

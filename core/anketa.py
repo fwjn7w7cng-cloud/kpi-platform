@@ -21,8 +21,9 @@ from core.pay.components import UNIT_TITLES
 # ---------- словари «как пишет человек» → «как понимает бот» ----------
 
 INDUSTRY_RU = {v: k for k, v in INDUSTRIES.items()}
-EDITION_RU = {E.EDITIONS[k]["title"]: k for k in E.ORDER}
-MODULE_RU = {t: k for k, (t, _) in E.MODULES.items()}
+EDITION_RU = {E.PRESETS[k]["title"]: k for k in E.ORDER}
+LEVEL_RU = {"Нет": False, **{t: k for k, t in E.LEVELS.items()}}
+YESNO_RU = {"Да": True, "Нет": False}
 DAYS_RU = {"Понедельник": "mon", "Вторник": "tue", "Среда": "wed", "Четверг": "thu", "Пятница": "fri",
            "Суббота": "sat", "Воскресенье": "sun"}
 KIND_RU = {"Продажи": "sales", "Склад": "warehouse", "Логистика": "logistics", "Закупки": "purchasing", "Офис": "office"}
@@ -62,8 +63,12 @@ COMPANY = [
     ("Название компании", "company.name", "text", ""),
     ("Отрасль", "company.industry", "industry", "выбор из списка"),
     ("Часовой пояс", "company.timezone", "text", "обычно Europe/Moscow"),
-    ("Редакция", "edition", "edition", "Старт / Бизнес / Премиум / Компания / Максимум"),
-    ("Доп. модули", "addons", "modules", "сверх редакции, через запятую; пусто — нет"),
+    ("Редакция", "edition", "edition", "готовый набор: Старт / Бизнес / Премиум / Компания / Максимум; пусто — собрать пакетами ниже"),
+    ("Пакет «Продажи»", "packages.sales", "level", "Нет / Старт / Бизнес / Премиум; пусто — как в наборе"),
+    ("Пакет «Склад и закупки»", "packages.stock", "yesno", "Да / Нет; пусто — как в наборе"),
+    ("Пакет «Логистика»", "packages.logistics", "yesno", "Да / Нет; пусто — как в наборе"),
+    ("Пакет «Кадры и офис»", "packages.office", "yesno", "Да / Нет; пусто — как в наборе"),
+    ("Пакет «Максимум»", "packages.max", "yesno", "Да / Нет; пусто — как в наборе"),
     ("Выходные дни", "work_week.weekend", "days", "через запятую: Воскресенье или Пятница"),
     ("Делитель оклада, дней", "work_week.salary_days", "int", "оклад ÷ это число × отработанные дни; обычно 26"),
     ("Порог АКБ, ₽", "kpi.akb_min", "money", "клиент входит в АКБ, если купил за месяц на эту сумму"),
@@ -101,7 +106,7 @@ CHOICES = {
     "Роли": {"Роль": list(ROLE_RU)},
 }
 COMPANY_CHOICES = {"industry": list(INDUSTRY_RU), "edition": list(EDITION_RU), "source": list(SOURCE_RU),
-                   "debtbase": list(DEBT_BASE_RU)}
+                   "debtbase": list(DEBT_BASE_RU), "level": list(LEVEL_RU), "yesno": list(YESNO_RU)}
 
 GUIDE = [
     "Как заполнять анкету",
@@ -193,8 +198,10 @@ def to_raw(tables):
             v = pick(SOURCE_RU, v, "Компания", n, "Откуда отчёты")
         elif kind == "debtbase":
             v = pick(DEBT_BASE_RU, v, "Компания", n, "База нормы просрочки")
-        elif kind == "modules":
-            v = [pick(MODULE_RU, x, "Компания", n, "Модуль") for x in _list(v)]
+        elif kind == "level":
+            v = pick(LEVEL_RU, v, "Компания", n, label)
+        elif kind == "yesno":
+            v = pick(YESNO_RU, v, "Компания", n, label)
         elif kind == "days":
             v = [pick(DAYS_RU, x, "Компания", n, "День") for x in _list(v)]
         elif kind in ("int", "ints"):
@@ -410,7 +417,8 @@ def to_raw(tables):
             titles[r] = d["Как называют в компании"]
     if titles:
         raw["roles"] = titles
-    raw.setdefault("edition", "start")
+    if not raw.get("edition") and not raw.get("packages"):
+        raw["edition"] = "start"
     raw.setdefault("source", {"kind": "mail"})
     return raw, p, where
 
@@ -484,7 +492,7 @@ def problems_text(p):
 def from_raw(raw):
     """Анкета (config.yaml) → листы таблицы со всеми значениями по-русски."""
     inv = {"industry": _inv(INDUSTRY_RU), "edition": _inv(EDITION_RU), "source": _inv(SOURCE_RU),
-           "debtbase": _inv(DEBT_BASE_RU)}
+           "debtbase": _inv(DEBT_BASE_RU), "level": _inv(LEVEL_RU), "yesno": _inv(YESNO_RU)}
     t = {k: [list(v)] for k, v in HEADS.items()}
 
     def get(path):
@@ -497,10 +505,10 @@ def from_raw(raw):
 
     for label, path, kind, hint in COMPANY:
         v = get(path)
-        if kind in inv:
-            v = inv[kind].get(v, v)
-        elif kind == "modules":
-            v = ", ".join(E.MODULES[m][0] for m in v or [] if m in E.MODULES)
+        if kind in ("level", "yesno"):
+            v = inv[kind].get(bool(v) if kind == "yesno" and v != "" else v, "") if v != "" else ""
+        elif kind in inv:
+            v = inv[kind].get(v, "" if kind == "edition" else v)
         elif kind == "days":
             v = ", ".join(_inv(DAYS_RU).get(d, d) for d in v or [])
         elif kind == "ints":

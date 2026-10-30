@@ -50,6 +50,7 @@ class App:
         self._dbs = {}
         self._memo = {}
         importlib.import_module("core.ui.screens")
+        importlib.import_module("core.ui.tariff")
         importlib.import_module("core.demo")
         importlib.import_module("core.jobs.briefs")
         for m in MODULES:
@@ -173,7 +174,7 @@ class App:
                ("feedback", "🐞 Не работает / предложение", "fb")]
         if self.demo:
             out += [("role", "🎭 Сменить роль", "sw:role"), ("industry", "🏭 Сменить отрасль", "sw:ind"),
-                    ("edition", "💼 Сменить редакцию", "sw:ed"), ("restart", "🔄 Начать демо заново", "sw:reset")]
+                    ("build", "🧩 Собрать бота и цена", "sw:ed"), ("restart", "🔄 Начать демо заново", "sw:reset")]
         return out
 
     def command(self, user_id, cmd):

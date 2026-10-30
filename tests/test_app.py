@@ -47,11 +47,15 @@ class Demo(unittest.TestCase):
         self.assertIn("💵 Долги", labels)                       # дебиторка — уже в Старте
         self.assertIn("💰 Зарплата", kb)                        # и зарплата
         r = self.app.press(10, "cli")                          # закрытый экран не открывается — объясняет
-        self.assertIn("Доступно в Бизнес", r[0].view.subtitle)
+        self.assertIn("уровень Бизнес", r[0].view.subtitle)
 
     def test_long_home_is_grouped(self):
         self.app.press(15, "sw:ed:control")
         self.app.press(15, "sw:role:owner")
+        tos = [b.to for r in self.app.start(15) for b in r.all_buttons()]
+        self.assertIn("lock:stock", tos)                         # Премиум — только продажи: склад под замком пакета
+        self.assertNotIn("deptv:warehouse", tos)
+        self.app.press(15, "sw:ed:company")
         menu = [b for r in self.app.start(15) for b in r.all_buttons() if not b.to.startswith(("sw:", "mon:"))]
         self.assertLessEqual(len(menu), 12)
         self.assertIn("mg:money", [b.to for b in menu])

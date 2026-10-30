@@ -232,7 +232,7 @@ class LogisticsReturns(Base):
         self.app.press(703, "sw:ed:business")
         self.app.press(703, "sw:role:owner")
         r = self.app.press(703, "lg")
-        self.assertIn("Доступно в Компания", r[0].view.subtitle)
+        self.assertIn("Пакет «Логистика»", r[0].view.subtitle)
         ctx = self.app.ctx(703)
         drv = next(e for e in ctx.db.employees() if e["position"] == "driver")
         self.assertNotIn("Пробег", {r[0] for r in ctx.pay().calc(drv).rows})

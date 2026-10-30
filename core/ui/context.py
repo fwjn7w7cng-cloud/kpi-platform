@@ -26,8 +26,11 @@ class Ctx:
             guest = user_id if has_access(app, self.office, user_id, self.today) else None   # без доступа — без копии
         self.db = app.db(self.industry, guest=guest)
         cfg = app.cfg
-        if self.demo and self.session.get("edition") in E.EDITIONS:
-            cfg = cfg.with_edition(self.session["edition"], app.cfg.addons if self.session["edition"] == app.cfg.edition else [])
+        if self.demo:                                 # конструктор демо: набор пакетов живёт в сессии зрителя
+            if isinstance(self.session.get("packages"), dict):
+                cfg = cfg.with_packages(self.session["packages"])
+            elif self.session.get("edition") in E.PRESETS:
+                cfg = cfg.with_edition(self.session["edition"])
         self.cfg = cfg
         self.month = self.session.get("month") or month_of(self.today)
         if self.month > month_of(self.today):

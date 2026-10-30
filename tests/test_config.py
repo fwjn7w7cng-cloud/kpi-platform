@@ -52,8 +52,10 @@ class Errors(unittest.TestCase):
     def test_unknown_addon(self):
         self.assertIn("нет такого модуля", self.broken(lambda r: r.update(addons=["teleport"])))
 
-    def test_addon_already_in_edition(self):
-        self.assertIn("уже входит", self.broken(lambda r: r.update(addons=["route"])))
+    def test_bad_package(self):
+        self.assertIn("нет такого пакета", self.broken(lambda r: r.update(packages={"teleport": True})))
+        self.assertIn("packages.sales", self.broken(lambda r: r.update(packages={"sales": "mega"})))
+        self.assertIn("ни один пакет", self.broken(lambda r: (r.pop("edition"), r.update(packages={"stock": False}))))
 
     def test_team_without_dept(self):
         def ch(r):
@@ -83,18 +85,28 @@ class Errors(unittest.TestCase):
 
     def test_start_edition_has_payroll_and_debts(self):
         raw = demo_raw()
-        raw.update(edition="start", addons=["stock"])
+        raw.update(edition="start", addons=["stock"])          # старая запись: докупленный модуль → его пакет
         cfg = parse("demo", raw)
         self.assertTrue(cfg.has_module("payroll"))
         self.assertTrue(cfg.has_module("debts"))
-        self.assertTrue(cfg.has_module("stock"))       # докуплен к Старту
+        self.assertTrue(cfg.has_module("stock"))
+        self.assertTrue(cfg.has_module("warehouse"))           # весь пакет «Склад и закупки»
         self.assertFalse(cfg.has_module("clients"))
-        self.assertEqual(E.lock_text("clients"), "Доступно в Бизнес")
-        self.assertEqual(E.lock_text("custom"), "Доступно в Максимум")
-        raw.update(addons=["route"])
-        with self.assertRaises(ConfigError) as e:
-            parse("demo", raw)
-        self.assertIn("отдельно не продаётся", str(e.exception))
+        self.assertEqual(cfg.edition, E.CUSTOM)
+        self.assertEqual(cfg.set_title, "Продажи Старт + Склад и закупки")
+        self.assertEqual(E.lock_text("clients"), "Продажи — уровень Бизнес и выше")
+        self.assertEqual(E.lock_text("custom"), "Пакет «Максимум»")
+
+    def test_own_packages_over_preset(self):
+        raw = demo_raw()
+        raw.update(edition="business", packages={"logistics": True, "sales": False})
+        cfg = parse("demo", raw)
+        self.assertEqual(cfg.packages, {"sales": None, "stock": False, "logistics": True, "office": False, "max": False})
+        self.assertTrue(cfg.has_module("logistics") and cfg.has_module("payroll") and cfg.has_module("staff"))
+        self.assertFalse(cfg.has_module("kpi"))
+        self.assertTrue(cfg.dept_on("logistics"))
+        self.assertFalse(cfg.dept_on("sales"))
+        self.assertFalse(cfg.dept_on("warehouse"))
 
 
 class HumanNumbers(unittest.TestCase):
@@ -133,8 +145,10 @@ class Editions(unittest.TestCase):
         eds = [E.edition_modules(x) for x in E.ORDER]
         for a, b in zip(eds, eds[1:]):
             self.assertTrue(a < b)
-        self.assertFalse(E.ADDON_ONLY & eds[-1])
         self.assertEqual(eds[-1], set(E.MODULES))           # в «Максимум» входит всё
+        self.assertEqual(E.preset_of({"sales": "control", "stock": True, "logistics": True, "office": True}), "company")
+        self.assertEqual(E.preset_of({"stock": True}), E.CUSTOM)
+        self.assertEqual(E.title_of({}), "ничего не подключено")
 
     def test_requirements_inside_editions(self):
         for ed in E.ORDER:
