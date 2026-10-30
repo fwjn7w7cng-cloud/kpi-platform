@@ -135,5 +135,73 @@ class Visibility(Base):
         self.assertIn("Анкеты", str([b.label for b in self.app.press(ADMIN, "adm")[0].all_buttons()]))
 
 
+class CreateClient(Base):
+    """«🚀 Создать клиента»: админ из анкеты делает папку клиента — config.yaml по набору и .env с портом, адресом и ключом."""
+    def setUp(self):
+        super().setUp()
+        from core import config as C
+        self.clients = self.tmp / "clients"
+        self.clients.mkdir()
+        shutil.copytree(C.CLIENTS / "_template", self.clients / "_template")
+        shutil.copytree(C.CLIENTS / "demo", self.clients / "demo")
+        self._real = C.CLIENTS
+        C.CLIENTS = self.clients
+        self.app.web_url = "https://demo.example.ru"                             # адреса клиентов — <код>.example.ru
+
+    def tearDown(self):
+        from core import config as C
+        C.CLIENTS = self._real
+        super().tearDown()
+
+    def test_create_from_card(self):
+        from core import config as C
+        uid = str(CLIENT)
+        self.app.press(CLIENT, "sw:ed:company")                                   # клиент собрал «Компанию»
+        self.app.press(CLIENT, "cd")
+        r = self.app.press(ADMIN, f"cdc:{uid}")[0]
+        self.assertIn("название компании", r.text)                                # без названия — не создаём
+        self.app.press(ADMIN, f"cdf:{uid}:company")
+        self.app.text(ADMIN, "Стройбаза Юг")
+        r = self.app.press(ADMIN, f"cdc:{uid}")[0]
+        self.assertEqual(r.view.title, "🚀 Создать клиента")
+        lines = [x for k, b in r.view.blocks if k == "lines" for x in b[1]]
+        self.assertTrue(any("stroybaza_yug" in x and "stroybaza-yug" in x for x in lines))
+        self.assertTrue(any("Склад" in x for x in lines))
+        out = self.app.press(ADMIN, f"cdc:{uid}:go")
+        self.assertEqual(out[-1].view.title, "🚀 Клиент создан")
+        folder = self.clients / "stroybaza_yug"
+        self.assertTrue((folder / "config.yaml").exists() and (folder / "parser.py").exists())
+        env = (folder / ".env").read_text(encoding="utf-8")
+        self.assertIn("WEB_PORT=8102", env)                                       # 8101 — демо
+        self.assertIn("WEB_URL=https://stroybaza-yug.example.ru", env)            # домен — от адреса демо, дефис вместо _
+        self.assertIn("WEB_ADMIN_KEY=", env)
+        cfg = C.load_client("stroybaza_yug")
+        self.assertEqual((cfg.name, cfg.edition), ("Стройбаза Юг", "company"))
+        self.assertEqual({d.kind for d in cfg.departments}, {"sales", "warehouse", "purchasing", "logistics", "office"})
+        info = O.card(self.office(), uid)["client"]
+        self.assertEqual(info["port"], 8102)
+        self.assertIn(info["key"], self.app.press(ADMIN, f"cdk:{uid}")[0].text)  # ссылка администратора — с ключом
+        r = self.app.press(ADMIN, f"cd:{uid}")[0]
+        self.assertIn(f"cdw:{uid}", [b.to for b in r.all_buttons()])            # вместо «Создать» — «Что дальше»
+        self.assertNotIn(f"cdc:{uid}", [b.to for b in r.all_buttons()])
+        r = self.app.press(ADMIN, f"cdc:{uid}:go")[0]                             # повторно не создаёт
+        self.assertEqual(r.view.title, "📋 Анкета для подключения")
+        app2 = App("stroybaza_yug", today=TODAY, admins=[ADMIN], data_dir=self.tmp)   # новый клиент стартует
+        self.assertEqual(app2.cfg.name, "Стройбаза Юг")
+        # второй клиент с тем же названием — код занят
+        self.app.press(ADMIN, f"cdf:{OTHER}:company")
+        self.app.text(ADMIN, "Стройбаза Юг")
+        r = self.app.press(ADMIN, f"cdc:{OTHER}:go")[0]
+        self.assertIn("уже занят", str([x for k, b in r.view.blocks if k == "lines" for x in b[1]]))
+        self.assertFalse(O.card(self.office(), str(OTHER)).get("client"))
+
+    def test_partner_and_client_cannot_create(self):
+        uid = str(CLIENT)
+        self.app.press(CLIENT, "cd")
+        for who in (PARTNER, CLIENT):
+            self.assertIn("администратор", self.app.press(who, f"cdc:{uid}:go")[0].text)
+        self.assertFalse(list(self.clients.glob("stroy*")))
+
+
 if __name__ == "__main__":
     unittest.main()

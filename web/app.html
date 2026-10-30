@@ -15,27 +15,27 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Onest:wght@600;700&display=swap">
 <style>
-/* Layout: одно окно приложения — шапка сверху, экран посередине, панель вкладок снизу (как нижняя панель бота). */
+/* Цвета — от логотипа «Алапа»: тёмно-синий #15284F. Layout: одно окно приложения — шапка сверху, экран посередине, панель вкладок снизу (как нижняя панель бота). */
 :root {
   --bg: #F3F5F8; --surface: #FFFFFF; --sunk: #EEF1F5; --line: #E2E6EC;
-  --ink: #18202B; --ink-2: #5D6878; --accent: #1F5FD1; --accent-soft: #E6EEFC;
+  --ink: #18202B; --ink-2: #5D6878; --accent: #1B3B78; --accent-soft: #E7ECF5;
   --good: #1E8E52; --good-soft: #E3F4EA; --warn: #B87A00; --warn-soft: #FBF0D7;
   --bad: #CF3A3A; --bad-soft: #FBE7E7; --muted: #6B7280; --muted-soft: #EEF0F3;
   --display: "Onest", "Golos Text", system-ui, sans-serif;
   --body: "Golos Text", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --ic1: #E6EEFC; --ic2: #E3F4EA; --ic3: #FBF0D7; --ic4: #F3E8FB; --ic5: #FBE7E7; --ic6: #E2F3F6;
-  --r: 14px; --hero1: #1F5FD1; --hero2: #3B8BD9;
+  --ic1: #E7ECF5; --ic2: #E3F4EA; --ic3: #FBF0D7; --ic4: #F3E8FB; --ic5: #FBE7E7; --ic6: #E2F3F6;
+  --r: 14px; --hero1: #15284F; --hero2: #2B4E8F;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #0F141B; --surface: #18202A; --sunk: #121922; --line: #263140;
-  --ink: #E8EDF4; --ink-2: #93A0B2; --accent: #6F9DF2; --accent-soft: #1C2B45;
+  --ink: #E8EDF4; --ink-2: #93A0B2; --accent: #8FB0EC; --accent-soft: #1A2742;
   --good: #4CC383; --good-soft: #15302A; --warn: #E3B04B; --warn-soft: #34290F;
-  --bad: #F07373; --bad-soft: #3A1B1F; --muted: #94A0B0; --muted-soft: #1E2733; --ic1: #1C2B45; --ic2: #15302A; --ic3: #34290F; --ic4: #2C1F3A; --ic5: #3A1B1F; --ic6: #12303A; --hero1: #2450A8; --hero2: #2C6FB0; color-scheme: dark; } }
+  --bad: #F07373; --bad-soft: #3A1B1F; --muted: #94A0B0; --muted-soft: #1E2733; --ic1: #1A2742; --ic2: #15302A; --ic3: #34290F; --ic4: #2C1F3A; --ic5: #3A1B1F; --ic6: #12303A; --hero1: #1B2F5E; --hero2: #2B4E8F; color-scheme: dark; } }
 :root[data-theme="dark"] {
   --bg: #0F141B; --surface: #18202A; --sunk: #121922; --line: #263140;
-  --ink: #E8EDF4; --ink-2: #93A0B2; --accent: #6F9DF2; --accent-soft: #1C2B45;
+  --ink: #E8EDF4; --ink-2: #93A0B2; --accent: #8FB0EC; --accent-soft: #1A2742;
   --good: #4CC383; --good-soft: #15302A; --warn: #E3B04B; --warn-soft: #34290F;
-  --bad: #F07373; --bad-soft: #3A1B1F; --muted: #94A0B0; --muted-soft: #1E2733; --ic1: #1C2B45; --ic2: #15302A; --ic3: #34290F; --ic4: #2C1F3A; --ic5: #3A1B1F; --ic6: #12303A; --hero1: #2450A8; --hero2: #2C6FB0; color-scheme: dark; }
+  --bad: #F07373; --bad-soft: #3A1B1F; --muted: #94A0B0; --muted-soft: #1E2733; --ic1: #1A2742; --ic2: #15302A; --ic3: #34290F; --ic4: #2C1F3A; --ic5: #3A1B1F; --ic6: #12303A; --hero1: #1B2F5E; --hero2: #2B4E8F; color-scheme: dark; }
 html, body { height: 100%; }
 body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.4;
   -webkit-font-smoothing: antialiased; }

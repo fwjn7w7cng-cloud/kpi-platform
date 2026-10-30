@@ -8,7 +8,8 @@
 это подсказка нам: тут нужна настройка переводчика, правило клиента или доработка ядра.
 Где лежит: база офиса, ключ client_cards = {id зрителя: {f: ответы, set: снимок конструктора, by: партнёр, ...}}.
 Кто видит: клиент — свою, партнёр — своих клиентов, админ — все («🛠 Пульт → 📋 Анкеты»).
-Админу: «📥 Анкета Excel» — заполненная таблица-анкета для tools/anketa.py apply (цифры схем — стандартные, уточнить).
+Админу: «🚀 Создать клиента» — папка clients/<код>/ с config.yaml и .env по анкете прямо из приложения (Адам 31.10: «подходит —
+сразу строим бота»; цифры схем — стандартные, уточнить); «📥 Анкета Excel» остаётся запасным путём (tools/anketa.py apply).
 """
 import io
 from datetime import datetime
@@ -236,6 +237,9 @@ def show(ctx, uid=None):
     fl = flags(c)
     if fl:
         v.lines([f"⚠️ {x}" for x in fl], title="Нестандарт — потребует настройки")
+    if c.get("client") and ctx.user_id in ctx.app.admins:
+        i = c["client"]
+        v.lines([f"Код {i['code']} · {i['url']} · порт {i['port']}", f"{i['created']} · {i['by']}"], title="🚀 Клиент создан")
     if c.get("notes"):
         v.lines([f"{n['ts']} · {n['who']}: {n['text']}" for n in c["notes"][-5:]], title="Заметки")
     if done < total:
@@ -251,6 +255,8 @@ def show(ctx, uid=None):
     if ctx.user_id in ctx.app.admins:
         tail.append(Button("📥 Анкета Excel", f"cdx:{uid}"))
     kb.append(tail)
+    if ctx.user_id in ctx.app.admins:
+        kb.append([Button("🚀 Что дальше", f"cdw:{uid}")] if c.get("client") else [Button("🚀 Создать клиента", f"cdc:{uid}")])
     from core.demo import is_partner
     if ctx.user_id in ctx.app.admins:
         kb.append([Button("📋 Все анкеты", "cds")])
@@ -392,12 +398,12 @@ def pdf(ctx, uid):
                  buttons=[[Button("‹ Анкета", f"cd:{uid}")]])
 
 
-def excel(c):
-    """Заполненная таблица-анкета для tools/anketa.py apply: компания, пакеты, отделы и должности по набору,
-    схемы зарплаты по вариациям конструктора со стандартными цифрами (их уточняем с клиентом)."""
+def build_raw(c):
+    """Анкета клиента (config.yaml в виде словаря) из карточки: компания, пакеты, отделы и должности по набору,
+    выходные, схемы зарплаты по вариациям конструктора со стандартными цифрами (их уточняем с клиентом)."""
     import yaml
-    from core import anketa as A
     from core.config import client_dir
+    from core import anketa as A
     raw = yaml.safe_load((client_dir("_template") / "config.yaml").read_text(encoding="utf-8"))
     f, s = c.get("f", {}), c.get("set", {})
     name = f.get("company") or "Новый клиент"
@@ -454,6 +460,16 @@ def excel(c):
         wh += [{"type": "fixed_bonus", "name": "Без ошибок", "amount": "5 000", "cut_per_miss": "1 000"},
                {"type": "per_unit", "unit": "ret_err", "price": "500", "cut": True, "name": "Ошибки склада в возвратах"}]
     raw["pay_schemes"]["warehouse"] = wh + [{"type": "timesheet"}]
+    return raw
+
+
+def excel(c):
+    """Заполненная таблица-анкета (запасной путь — tools/anketa.py apply): лист «Анкета клиента» + листы анкеты из build_raw."""
+    from core import anketa as A
+    raw = build_raw(c)
+    f, s = c.get("f", {}), c.get("set", {})
+    pay = dict(PAY_DEFAULT)
+    pay.update(s.get("pay") or {})
     tables = A.from_raw(raw)
     qa = [["Вопрос", "Ответ"]]
     for g, title, fs in GROUPS:
@@ -483,3 +499,153 @@ def xlsx(ctx, uid):
     return Reply(text="📥 Таблица-анкета: лист «Анкета клиента» — ответы и нестандарт; остальные листы — заготовка для "
                       "подключения (цифры схем стандартные — уточнить с клиентом), дальше tools/anketa.py check / apply.",
                  files=[(f"Анкета {_title(c)[:30]}.xlsx", data)], buttons=[[Button("‹ Анкета", f"cd:{uid}")]])
+
+
+# ---------- 🚀 создать клиента ----------
+
+def domain(ctx):
+    """Домен для адресов клиентов: от адреса этого приложения (demo.<домен>), иначе стандартный."""
+    from core.ui.web import DOMAIN
+    host = (ctx.app.web_url or "").split("//")[-1].split("/")[0]
+    return host.split(".", 1)[1] if host.count(".") >= 2 else DOMAIN
+
+
+def next_port(clients_dir):
+    """Свободный порт для службы kpi-web@<код>: следующий за занятыми в clients/*/.env (демо — 8101)."""
+    used = {8101}
+    for env in clients_dir.glob("*/.env"):
+        for line in env.read_text(encoding="utf-8").splitlines():
+            if line.startswith("WEB_PORT="):
+                try:
+                    used.add(int(line.split("=", 1)[1].strip()))
+                except ValueError:
+                    pass
+    return max(used) + 1
+
+
+def create(c, who, dom, clients_dir=None):
+    """Создать клиента из карточки: clients/<код>/ из шаблона + config.yaml по анкете + .env (порт, адрес, ключ админа).
+    → (info, problems): problems — почему нельзя (ошибки анкеты или код занят); info — что создано."""
+    import secrets
+    import shutil
+    import yaml
+    from core import config as C
+    clients_dir = clients_dir or C.CLIENTS
+    raw = build_raw(c)
+    try:
+        cfg = C.parse(raw["id"], raw)
+    except C.ConfigError as e:
+        return None, list(e.problems)
+    folder = clients_dir / cfg.id
+    if folder.exists():
+        return None, [f"код «{cfg.id}» уже занят — папка clients/{cfg.id} есть"]
+    shutil.copytree(clients_dir / "_template", folder, ignore=shutil.ignore_patterns("__pycache__"))
+    ts = datetime.now().strftime("%d.%m.%Y %H:%M")
+    head = (f"# Анкета клиента «{cfg.name}». Создано из анкеты в приложении {ts} ({who}).\n"
+            f"# Цифры схем зарплаты — стандартные, уточнить с клиентом. Правки — через анкету или этот файл, затем перезапуск службы.\n")
+    (folder / "config.yaml").write_text(head + yaml.safe_dump(cfg.raw, allow_unicode=True, sort_keys=False, width=120), encoding="utf-8")
+    port, key = next_port(clients_dir), secrets.token_urlsafe(18)
+    url = f"https://{cfg.id.replace('_', '-')}.{dom}"            # в адресе подчёркивание нельзя — дефис
+    (folder / ".env").write_text(f"# служба kpi-web@{cfg.id}; Caddy: {url.split('//')[1]} → 127.0.0.1:{port}\n"
+                                 f"WEB_PORT={port}\nWEB_URL={url}\nWEB_ADMIN_KEY={key}\nADMIN_IDS=\n", encoding="utf-8")
+    info = {"code": cfg.id, "name": cfg.name, "url": url, "port": port, "key": key, "created": ts, "by": who,
+            "depts": [d.name for d in cfg.departments], "positions": len(cfg.positions), "set": cfg.set_title}
+    return info, []
+
+
+def _admin(ctx):
+    return ctx.user_id in ctx.app.admins
+
+
+def preview_lines(c):
+    """Что получится из анкеты — для экрана подтверждения."""
+    from core import anketa as A
+    raw = build_raw(c)
+    s = c.get("set") or {}
+    pay = dict(PAY_DEFAULT)
+    pay.update(s.get("pay") or {})
+    return raw["id"], [
+        f"Код клиента: {raw['id']} · адрес {raw['id'].replace('_', '-')}.<домен>",
+        f"Набор: {E.title_of(E.normalize(raw.get('packages') or {}))}",
+        "Отделы: " + ", ".join(d["name"] for d in raw["departments"]),
+        f"Должностей: {len(raw['positions'])} · команд: {len(raw['teams'])}",
+        "Выходные: " + ", ".join(A._inv(A.DAYS_RU).get(d, d).lower() for d in raw["work_week"]["weekend"]),
+        "Торговым платят: " + pay_text(pay) + " — цифры стандартные, уточнить",
+    ]
+
+
+@screen("cdc")
+def create_screen(ctx, uid, go=None):
+    if not _admin(ctx):
+        return Reply(text="Клиента создаёт администратор.")
+    c = ensure(ctx, uid)
+    if c.get("client"):
+        return show(ctx, uid)
+    if not (c["f"].get("company") or "").strip():
+        return Reply(text="Сначала впишите название компании (✏️ Компания) — от него код клиента и адрес.",
+                     buttons=[[Button("✏️ Компания", f"cdg:{uid}:firm")], [Button("‹ Анкета", f"cd:{uid}")]])
+    if go == "go":
+        who = (ctx.me or {}).get("name") or "администратор"
+        info, problems = create(c, who, domain(ctx))
+        if problems:
+            v = View("🚀 Создать клиента", "не получилось")
+            v.lines(problems[:12], title="Что мешает")
+            v.note("Поправьте анкету и попробуйте снова; если код занят — измените название компании.")
+            return Reply(view=v, buttons=[[Button("‹ Анкета", f"cd:{uid}")]])
+        c["client"] = info
+        c.setdefault("notes", []).append({"ts": info["created"], "who": who, "text": f"создан клиент {info['code']} ({info['url']})"})
+        save(ctx.office, uid, c)
+        ctx.office.audit(who, "client", f"создан клиент {info['code']} из анкеты {uid}")
+        return steps(ctx, uid)
+    code, lines = preview_lines(c)
+    v = View("🚀 Создать клиента", _title(c))
+    v.lines(lines, title="Что будет создано")
+    done, total = progress(c)
+    warn = []
+    if done < total:
+        warn.append(f"Заполнено {done} из {total} обязательных пунктов анкеты — создать можно, но дозаполнить придётся.")
+    warn += [f"⚠️ {x}" for x in flags(c)]
+    if warn:
+        v.lines(warn, title="Обратите внимание")
+    v.note(f"Появится папка clients/{code} с анкетой-настройкой и доступом; дальше — один шаг Альфреда (служба и адрес). "
+           "Ничего у клиента ещё не запускается, пока Альфред не включит службу.")
+    return Reply(view=v, buttons=[[Button("✅ Создать", f"cdc:{uid}:go")], [Button("‹ Анкета", f"cd:{uid}")]])
+
+
+@screen("cdw")
+def steps(ctx, uid):
+    """Что дальше после создания — по шагам, с командой Альфреду."""
+    if not _admin(ctx):
+        return Reply(text="Это экран администратора.")
+    c = ensure(ctx, uid)
+    i = c.get("client")
+    if not i:
+        return create_screen(ctx, uid)
+    v = View("🚀 Клиент создан", f"{i['name']} · {i['created']}")
+    v.tiles([("Код", i["code"], None), ("Набор", i.get("set", "—"), None), ("Отделов", str(len(i.get("depts", []))), None),
+             ("Порт", str(i["port"]), None)])
+    v.lines([f"Адрес приложения: {i['url']}", "Отделы: " + ", ".join(i.get("depts", [])),
+             f"Папка на сервере: clients/{i['code']} (config.yaml — настройка, .env — порт, адрес и ключ администратора)"], title="Что создано")
+    host = i["url"].split("//")[-1]
+    v.lines([f"1. Альфреду: «Сэр, подключи клиента {i['code']}: служба kpi-web@{i['code']} и адрес {host} на порт {i['port']}, "
+             f"папку clients/{i['code']} закоммить в main». Он включит службу, пропишет адрес в Caddy и проверит, что открывается.",
+             "2. Откройте ссылку администратора (кнопка ниже) — это вход для вас и для того, кто будет вести бот у клиента.",
+             "3. Цифры схем зарплаты стандартные — уточнить с клиентом и поправить в config.yaml (или через анкету заново).",
+             "4. Отчёты 1С: 2–3 файла от клиента — Джарвису на переводчик (parser.py) и проверку tools/check_client.py.",
+             "5. Сотрудники: добавить людей и команды, раздать приглашения."], title="Что дальше")
+    v.note("Пока Альфред не включил службу, адрес не открывается — это нормально.")
+    kb = [[Button("🔑 Ссылка администратора", f"cdk:{uid}")], [Button("‹ Анкета", f"cd:{uid}"), Button("📋 Все анкеты", "cds")]]
+    return Reply(view=v, buttons=kb)
+
+
+@screen("cdk")
+def admin_link(ctx, uid):
+    if not _admin(ctx):
+        return Reply(text="Это экран администратора.")
+    i = ensure(ctx, uid).get("client")
+    if not i:
+        return create_screen(ctx, uid)
+    return Reply(text=f"🔑 Вход администратора для «{i['name']}»:\n{i['url']}/?admin={i['key']}\n\n"
+                      "Ссылка даёт полные права — отправляйте только тому, кто будет вести бот у клиента. "
+                      f"Она же лежит в clients/{i['code']}/.env (WEB_ADMIN_KEY).",
+                 buttons=[[Button("‹ Что дальше", f"cdw:{uid}")]])
