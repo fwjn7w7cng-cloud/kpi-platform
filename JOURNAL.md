@@ -3,6 +3,13 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-10-30 16:45 (Альфред) — шаг 4 «демо на домене»: демо собрано, Caddyfile на два домена, порты не открыты
+Код 4f4cdd6 (новое — только web/, tools/web_demo.py, тесты, журнал; kpi@demo не перезапускал). web_demo.py в scope MemoryMax=400M:
+35 с, экранов 1 451, index.html 1 774 КБ + manifest, sw.js, 3 значка → /var/www/kpi/demo; визитка → /var/www/kpi/site (всего 1,8 МБ).
+Caddyfile: копия Caddyfile.bak-2026-10-30, новый — kpibotsmith.ru и demo.kpibotsmith.ru; validate ок, reload, active, память 14 МБ.
+DNS: оба имени → 216.73.157.121 (это сервер). :80 отвечает 308 на https для обоих имён. ACME http-01: «Timeout during connect (likely
+firewall problem)» — ждём открытия 80/443 (Caddy повторит сам; у Let's Encrypt лимит неудач — открыть порты лучше не тянуть).
+
 ## 2026-10-30 16:42 (Альфред) — Caddy поставлен (шаг 3 «демо на домене»), порты не открыты
 Caddy v2.11.7 из официального репозитория cloudsmith (ключ /usr/share/keyrings/caddy-stable-archive-keyring.gpg, список
 /etc/apt/sources.list.d/caddy-stable.list). Предел: /etc/systemd/system/caddy.service.d/limits.conf — MemoryMax 100M, MemorySwapMax 50M.
