@@ -72,7 +72,7 @@ class Link(unittest.TestCase):
         self.assertEqual(code, 200, raw.decode())
         self.assertIn("✅ продажи", raw.decode())
         self.assertEqual(sum(r["amount"] for r in self.db.sales("2026-10-01", "2026-10-31")), 1500)
-        self.assertEqual(RP.log_of(self.db)[0]["who"], "1С напрямую")
+        self.assertEqual(RP.log_of(self.db)[0]["who"], "1С прислала сама")
         self.assertTrue(self.db.get(f"inbox:{ADMIN}") or self.app.office().get(f"inbox:{ADMIN}"))   # админу — «📬 Новые отчёты»
         code, h, raw = self.api.handle_raw("POST", "/api/1c?name=x.xlsx", {"X-Key": self.s["key"]}, b"")
         self.assertEqual(code, 400)

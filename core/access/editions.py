@@ -57,7 +57,6 @@ MODULES = {
     "fuel":         ("ГСМ водителей: топливо против карты", "logistics", None),
     "hr":           ("Кадры: приём, перевод, увольнение, приказы", "office", None),
     "branding":     ("Свой бренд: логотип и название на значке, свой адрес", "max", None),
-    "direct_1c":    ("Прямая связь с 1С без файлов", "max", None),
     "branches":     ("Несколько филиалов и юрлиц в одном приложении", "max", None),
     "custom":       ("Функции на заказ: до 3 в месяц", "max", None),
 }
@@ -73,7 +72,7 @@ PRESETS = {
     "company":  {"title": "Компания", "packages": {"sales": "control", "stock": True, "logistics": True, "office": True},
                  "for": "вся фирма: продажи, склад, водители, кадры"},
     "max":      {"title": "Максимум", "packages": {"sales": "control", "stock": True, "logistics": True, "office": True, "max": True},
-                 "for": "всё плюс свой бренд, 1С напрямую, филиалы и функции на заказ"},
+                 "for": "всё плюс свой бренд, филиалы и функции на заказ"},
 }
 ORDER = list(PRESETS)
 EDITIONS = PRESETS          # старое имя

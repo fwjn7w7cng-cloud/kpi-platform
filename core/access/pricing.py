@@ -111,7 +111,7 @@ def quote(packages, counts, pr, year=False):
     discount = dept_sum * pr["disc_all"] / 100 if all_depts else 0.0
     max_sum = pr["max"] if p["max"] else 0.0
     if p["max"]:
-        lines.append((f"{E.PACKAGES['max']['icon']} {E.PACKAGES['max']['title']}", max_sum, "бренд, 1С напрямую, филиалы, до 3 функций на заказ"))
+        lines.append((f"{E.PACKAGES['max']['icon']} {E.PACKAGES['max']['title']}", max_sum, "бренд, филиалы, до 3 функций на заказ"))
     monthly = rnd(dept_sum - discount + max_sum)
     monthly_year = rnd(monthly * (1 - pr["disc_year"] / 100))
     setup = 0

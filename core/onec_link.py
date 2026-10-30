@@ -88,9 +88,9 @@ def receive_direct(app, name, data, deliver=None):
         return 413, "файл больше 15 МБ — выгружайте отчёт за месяц"
     db = app.db()
     res = ingest(app.client_id, db, [(name, data)], False, app.hooks)[0]
-    reports.log_result(db, name, res, "1С напрямую")
+    reports.log_result(db, name, res, "1С прислала сама")
     if deliver and (res.ok or res.errors):
-        text = "📬 Новые отчёты 1С (напрямую)\n" + res.text()
+        text = "📬 Новые отчёты 1С (прислала 1С)\n" + res.text()
         kb = [[Button("🧪 Что пришло", "upl")]] + ([[Button("🧾 Нет в расчёте", "pak")]] if db.unknown_keys() else [])
         deliver([Reply(text=text[:3500], buttons=kb, to=a, edit=False) for a in app.admin_ids(db)])
     return (200 if not res.errors else 422), res.text()
