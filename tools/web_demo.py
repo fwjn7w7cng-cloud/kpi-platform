@@ -27,7 +27,7 @@ ROLES = [("owner", "Директор"), ("head", "Руководитель пр�
          ("pos:dispatcher", "Диспетчер"), ("pos:driver", "Водитель"), ("pos:hr", "Кадры"), ("accountant", "Бухгалтер")]
 SKIP = ("sw:", "mon:", "bk:", "viewas", "home")
 MAXN = {"owner": 900, "head": 600, "sv": 500, "rep": 400, "accountant": 300}     # остальные — 150
-NAME = "Опт-Партнёр KPI"
+NAME = "Алапа · демо"
 
 
 def _reply(r):
@@ -92,7 +92,7 @@ def build(out, data):
     tpl = (ROOT / "web" / "app_template.html").read_text(encoding="utf-8")
     js = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     (out / "index.html").write_text(tpl.replace("__DATA__", js), encoding="utf-8")
-    for name, (data_, _) in static_files(NAME, "KPI демо").items():
+    for name, (data_, _) in static_files(NAME).items():
         (out / name).write_bytes(data_)
     return out / "index.html"
 

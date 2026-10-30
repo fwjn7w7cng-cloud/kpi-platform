@@ -85,25 +85,43 @@ def reply_json(r, files=None):
 
 # ---------- «установка» на телефон ----------
 
-def manifest(name, short, color="#1F5FD1"):
+BRAND = "Алапа"                                     # имя продукта и фирмы (Адам 30.10): «зарплата» по-чеченски, ударение на первое «а»
+BRAND_COLOR = "#15284F"                             # тёмно-синий логотипа
+LOGO = ROOT / "assets" / "brand" / "alapa-logo.png"  # буква А со стрелкой роста, фон прозрачный
+
+
+def app_name(cfg_name, demo=False):
+    """Как приложение подписано во вкладке и в манифесте: «Алапа · демо» или «Алапа · <фирма>»."""
+    return f"{BRAND} · {'демо' if demo else cfg_name}"
+
+
+def manifest(name, short=BRAND, color=BRAND_COLOR):
     return {"name": name, "short_name": short, "start_url": "./", "scope": "./", "display": "standalone",
-            "background_color": "#F3F5F8", "theme_color": color, "lang": "ru",
+            "background_color": "#FFFFFF", "theme_color": color, "lang": "ru",
             "icons": [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
                       {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}]}
 
 
-def icon_png(size, text="KPI"):
+def icon_png(size, pad=None):
+    """Значок приложения: логотип на белом. pad — поля по краям долей от стороны; у 512 (маскируемый значок Android)
+    поля шире, чтобы круглая маска не срезала низ буквы."""
     from PIL import Image, ImageDraw, ImageFont
-    img = Image.new("RGB", (size, size), "#1F5FD1")
-    d = ImageDraw.Draw(img)
-    for y in range(size):                           # мягкий градиент сверху вниз
-        t = y / size
-        d.line([(0, y), (size, y)], fill=(int(31 + 28 * t), int(95 + 44 * t), int(209 + 8 * t)))
+    img = Image.new("RGB", (size, size), "#FFFFFF")
+    if pad is None:
+        pad = 0.19 if size >= 512 else 0.13
     try:
-        f = ImageFont.truetype(str(ROOT / "assets" / "fonts" / "Inter-Bold.otf"), int(size * 0.34))
-    except OSError:
-        f = ImageFont.load_default()
-    d.text((size / 2, size / 2), text, fill="white", font=f, anchor="mm")
+        logo = Image.open(LOGO).convert("RGBA")
+        w = int(size * (1 - 2 * pad))
+        logo = logo.resize((w, int(logo.height * w / logo.width)), Image.LANCZOS)
+        img.paste(logo, ((size - logo.width) // 2, (size - logo.height) // 2), logo)
+    except OSError:                                 # файла логотипа нет — буква на синем, чтобы приложение всё равно ставилось
+        d = ImageDraw.Draw(img)
+        d.rectangle([0, 0, size, size], fill=BRAND_COLOR)
+        try:
+            f = ImageFont.truetype(str(ROOT / "assets" / "fonts" / "Inter-Bold.otf"), int(size * 0.5))
+        except OSError:
+            f = ImageFont.load_default()
+        d.text((size / 2, size / 2), "А", fill="white", font=f, anchor="mm")
     buf = io.BytesIO()
     img.save(buf, "PNG")
     return buf.getvalue()
@@ -133,8 +151,8 @@ self.addEventListener("fetch", e => {
 """
 
 
-def static_files(name, short, live=False):
-    """{путь: (байты, тип)} — всё, кроме самой страницы."""
+def static_files(name, short=BRAND, live=False):
+    """{путь: (байты, тип)} — всё, кроме самой страницы. short — подпись значка на экране телефона."""
     return {"manifest.webmanifest": (json.dumps(manifest(name, short), ensure_ascii=False, indent=1).encode(),
                                      "application/manifest+json"),
             "sw.js": ((SW_LIVE if live else SW_STATIC).encode(), "text/javascript"),

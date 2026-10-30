@@ -422,8 +422,20 @@ class WebTransport(unittest.TestCase):
         code, h, raw = self.api.handle("GET", "/", {}, {}, None)
         self.assertIn("text/html", h["Content-Type"])
         self.assertNotIn(b"__NAME__", raw)
+        self.assertNotIn(b"__SHORT__", raw)
+        self.assertIn("<title>Алапа · демо</title>", raw.decode("utf-8"))          # имя продукта, не выдуманной фирмы
         for f in ("manifest.webmanifest", "sw.js", "icon-192.png"):
             self.assertEqual(self.api.handle("GET", "/" + f, {}, {}, None)[0], 200)
+        m = json.loads(self.api.handle("GET", "/manifest.webmanifest", {}, {}, None)[2])
+        self.assertEqual((m["name"], m["short_name"]), ("Алапа · демо", "Алапа"))
+        png = self.api.handle("GET", "/icon-512.png", {}, {}, None)[2]
+        self.assertTrue(png.startswith(b"\x89PNG"))
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(png)).convert("RGB")
+        self.assertEqual(img.size, (512, 512))
+        self.assertEqual(img.getpixel((5, 5)), (255, 255, 255))                      # белый фон — логотип, не заглушка
+        self.assertLess(sum(img.getpixel((256, 150))), 300)                           # тёмно-синяя буква в центре
 
     def test_admin_invite_guest_and_press(self):
         d, admin = self.post("start", {"admin": "секрет"})

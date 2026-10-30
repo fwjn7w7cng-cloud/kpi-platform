@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from core.ui import screens
-from core.ui.web import reply_json, static_files
+from core.ui.web import BRAND, app_name, reply_json, static_files
 
 log = logging.getLogger("kpi")
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -32,16 +32,17 @@ FILE_TYPES = {"xlsx": "application/vnd.openxmlformats-officedocument.spreadsheet
 
 
 class WebApi:
-    def __init__(self, app, admin_key="", base_url="", name=None, short="KPI"):
+    def __init__(self, app, admin_key="", base_url="", name=None, short=BRAND):
         self.app, self.admin_key = app, admin_key
         self.lock = threading.Lock()
         self.files = {}
         app.web_url = base_url.rstrip("/")
         for uid in self._office().get("web_admins") or []:
             app.admins.add(int(uid))
-        self.name = name or (app.cfg.name + (" · демо" if app.demo else ""))
+        self.name = name or app_name(app.cfg.name, app.demo)      # «Алапа · демо» / «Алапа · <фирма>»
         self.static = static_files(self.name, short, live=True)
-        self.page = (ROOT / "web" / "app.html").read_text(encoding="utf-8").replace("__NAME__", self.name)
+        self.page = ((ROOT / "web" / "app.html").read_text(encoding="utf-8")
+                     .replace("__NAME__", self.name).replace("__SHORT__", short))
 
     def _office(self):
         return self.app.office()
