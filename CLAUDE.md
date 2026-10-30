@@ -57,7 +57,9 @@ clients/<клиент>/       всё про конкретную фирму
   .env                  секреты: BOT_TOKEN, ADMIN_IDS, почта/Диск (не в git)
 clients/_template/      шаблон нового клиента — копируется при подключении
 clients/demo/           вымышленная фирма для показа: seed.py (наполнитель), vocab.py (8 отраслей)
-tools/                  crawl.py — робот прокликивает все роли; check_client.py — проверка анкеты и файлов клиента
+tools/                  crawl.py — робот прокликивает все роли; check_client.py — проверка анкеты и файлов клиента;
+                        web_demo.py — демо-приложение для сайта (снимок экранов демо → web/app_template.html)
+web/                    app_template.html — вид приложения (те же экраны, что в боте); site/ — визитка kpibotsmith.ru
 deploy/kpi@.service     служба на клиента: systemctl enable --now kpi@<код>
 run.py                  запуск бота клиента: python3 run.py <код>
 tests/                  тесты (unittest)

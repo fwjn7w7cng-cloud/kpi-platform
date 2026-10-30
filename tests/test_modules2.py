@@ -379,3 +379,21 @@ class BottomMenu(Base):
         card = self.app.text(901, "📈 Мой план")[0]                     # …но кнопка меню важнее: открылся план
         self.assertEqual(card.view.title, self.app.ctx(901).me["fio"])
         self.assertNotIn("await", self.app.ctx(901).session)
+
+
+class WebDemo(unittest.TestCase):
+    """Демо-приложение для сайта: снимок экранов собирается в страницу с манифестом и значками."""
+    def test_build(self):
+        from tools import web_demo
+        data = web_demo.export(today=TODAY, roles=["rep"], limit=15)
+        self.assertIn("home", data["roles"]["rep"]["screens"])
+        out = Path(tempfile.mkdtemp())
+        try:
+            page = web_demo.build(out, data)
+            html = page.read_text(encoding="utf-8")
+            self.assertNotIn("__DATA__", html)
+            self.assertIn('rel="manifest"', html)
+            for f in ("manifest.webmanifest", "sw.js", "icon-192.png", "icon-512.png", "icon-180.png"):
+                self.assertTrue((out / f).exists(), f)
+        finally:
+            shutil.rmtree(out, ignore_errors=True)
