@@ -121,10 +121,76 @@ def build(ctx):
            Button("📄 Коммерческое предложение", "sw:pdf")],
           [Button(("• " if preset == c else "") + E.PRESETS[c]["title"], f"sw:ed:{c}") for c in E.ORDER[:3]],
           [Button(("• " if preset == c else "") + E.PRESETS[c]["title"], f"sw:ed:{c}") for c in E.ORDER[3:]],
+          [Button("💵 Как платите торговым", "sw:pay"), Button("📋 Анкета для подключения", "cd")],
           [Button("📨 Хочу так — отправить заявку", "sw:req")]]
+    from core import onboard as O
+    v.note(f"Торговым платят: {O.pay_text(O.pay_of(ctx))} — поправьте в «💵 Как платите».")
     if not p["sales"] and any(p[c] for c in ("stock", "logistics", "office")):
         v.note("Без пакета «Продажи» торговые в приложение не входят — так можно: только склад или только водители.")
     return Reply(view=v, buttons=kb)
+
+
+def pay_screen(ctx):
+    """«💵 Как платите торговым» — вариации схемы простыми словами; цену не меняют, идут в анкету клиента."""
+    from core import onboard as O
+    pay = O.pay_of(ctx)
+    v = View("💵 Как платите торговым", "отметьте, из чего состоит зарплата торгового у вас")
+    v.lines([f"{'✅' if pay['salary'] else '⬜'} Оклад — {O.PAY['salary'][1]}",
+             f"{'✅' if pay['percent'] else '⬜'} % от продаж — {O.PAY['percent'][1]}",
+             f"▸ Бонус за план: {O.PLAN_T[pay['plan']]}",
+             f"{'✅' if pay['akb'] else '⬜'} Бонус за клиентов (АКБ) — {O.PAY['akb'][1]}",
+             f"{'✅' if pay['debt'] else '⬜'} Удержание за просрочку — {O.PAY['debt'][1]}"], title="Торговым")
+    extra = []
+    if ctx.cfg.packages.get("logistics"):
+        extra.append(f"{'✅' if pay['drivers'] else '⬜'} Водителям сдельно — {O.PAY['drivers'][1]}")
+    if ctx.cfg.packages.get("stock"):
+        extra.append(f"{'✅' if pay['wh'] else '⬜'} Складу бонус «без ошибок» — {O.PAY['wh'][1]}")
+    if extra:
+        v.lines(extra, title="Склад и водители")
+    if pay.get("other"):
+        v.lines([f"⚠️ {pay['other']}", "Этого нет среди готовых правил — посмотрим и настроим или доработаем под вас."],
+                title="По-своему")
+    v.note("Суммы и проценты зададим при подключении. Здесь — только что есть, а чего нет. На цену это не влияет.")
+    kb = [[Button(("✅ " if pay["salary"] else "⬜ ") + "Оклад", "sw:py:salary"), Button(("✅ " if pay["percent"] else "⬜ ") + "% от продаж", "sw:py:percent")],
+          [Button(f"Бонус за план: {O.PLAN_T[pay['plan']]} ▸", "sw:py:plan")],
+          [Button(("✅ " if pay["akb"] else "⬜ ") + "Бонус за АКБ", "sw:py:akb"), Button(("✅ " if pay["debt"] else "⬜ ") + "За просрочку", "sw:py:debt")]]
+    row = []
+    if ctx.cfg.packages.get("logistics"):
+        row.append(Button(("✅ " if pay["drivers"] else "⬜ ") + "Водителям сдельно", "sw:py:drivers"))
+    if ctx.cfg.packages.get("stock"):
+        row.append(Button(("✅ " if pay["wh"] else "⬜ ") + "Складу без ошибок", "sw:py:wh"))
+    if row:
+        kb.append(row)
+    kb.append([Button("✍️ У нас по-другому / добавить", "sw:py:other")])
+    kb.append([Button("‹ Собрать", "sw:ed"), Button("📋 Анкета", "cd")])
+    return Reply(view=v, buttons=kb)
+
+
+def pay_toggle(ctx, code):
+    from core import onboard as O
+    pay = O.pay_of(ctx)
+    if code == "other":
+        return ctx.ask("pay_other", "Как у вас платят по-своему? Напишите одной-двумя фразами — например «премия 10 000 за каждого "
+                                    "нового клиента» или «процент зависит от скидки». «-» — убрать.",
+                       buttons=[[Button("✖️ Отмена", "sw:pay")]])
+    if code == "plan":
+        pay["plan"] = O.PLAN_ORDER[(O.PLAN_ORDER.index(pay["plan"]) + 1) % len(O.PLAN_ORDER)]
+    elif code in O.PAY:
+        pay[code] = not pay[code]
+    ctx.session["pay"] = pay
+    ctx.save()
+    return pay_screen(ctx)
+
+
+@text_input("pay_other")
+def on_pay_other(ctx, text, data):
+    from core import onboard as O
+    pay = O.pay_of(ctx)
+    t = " ".join((text or "").split())[:200]
+    pay["other"] = "" if t in ("-", "—") else t
+    ctx.session["pay"] = pay
+    ctx.save()
+    return pay_screen(ctx)
 
 
 def _pk_button(ctx, code):
@@ -264,16 +330,27 @@ def request(ctx, client=None):
     text = (f"🧩 Заявка из показа: {who}\n{ctx.cfg.set_title}\n"
             f"Людей: продажи {counts['sales']}, склад {counts['stock']}, логистика {counts['logistics']}, офис {counts['office']}\n"
             f"Подключение {money(q['setup'])} · в месяц {money(q['monthly'])}")
+    from core import onboard as O
+    if partner:
+        c = O.new_manual(ctx, client, ctx.user_id)
+    else:
+        c = O.ensure(ctx, ctx.user_id)
+    O.snapshot(ctx, c)
+    O.save(ctx.office, c["uid"], c)
+    cid = c["uid"]
     reqs = ctx.office.get(REQ_KEY) or []
-    reqs.append({"uid": ctx.user_id, "who": who, "set": ctx.cfg.set_title, "counts": counts, "setup": q["setup"],
+    reqs.append({"uid": ctx.user_id, "card": cid, "who": who, "set": ctx.cfg.set_title, "counts": counts, "setup": q["setup"],
                  "monthly": q["monthly"], "ts": datetime.now().strftime("%d.%m %H:%M"), "show": True, "partner": by})
     ctx.office.put(REQ_KEY, reqs[-100:])
-    out = [Reply(text=text, to=a, buttons=[[Button("📨 Заявки", "rqs")]]) for a in ctx.app.admins if a != ctx.user_id]
+    out = [Reply(text=text, to=a, buttons=[[Button("📋 Анкета клиента", f"cd:{cid}"), Button("📨 Заявки", "rqs")]])
+           for a in ctx.app.admins if a != ctx.user_id]
     if by and not partner and by.isdigit():
-        out.append(Reply(text="🎉 Ваш клиент нажал «Хочу так»:\n" + text, to=int(by), buttons=[[Button("🤝 Мои клиенты", "ptn")]]))
-    tail = f"Клиент «{client}» закреплён за вами." if partner else "Мы свяжемся с вами в приложении."
+        out.append(Reply(text="🎉 Ваш клиент нажал «Хочу так»:\n" + text, to=int(by),
+                         buttons=[[Button("📋 Анкета клиента", f"cd:{cid}"), Button("🤝 Мои клиенты", "ptn")]]))
+    tail = (f"Клиент «{client}» закреплён за вами — заполните его анкету." if partner
+            else "Теперь 2 минуты на анкету — и мы подготовим подключение.")
     out.append(Reply(text=f"📨 Заявка отправлена: {ctx.cfg.set_title}, подключение {money(q['setup'])}, дальше {money(q['monthly'])} "
-                          f"в месяц. {tail}", buttons=[[Button("🧩 Собрать", "sw:ed")]]))
+                          f"в месяц. {tail}", buttons=[[Button("📋 Анкета для подключения", f"cd:{cid}")], [Button("🧩 Собрать", "sw:ed")]]))
     return out
 
 

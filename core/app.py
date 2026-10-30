@@ -52,6 +52,7 @@ class App:
         self.pending = []
         importlib.import_module("core.ui.screens")
         importlib.import_module("core.ui.tariff")
+        importlib.import_module("core.onboard")
         importlib.import_module("core.demo")
         importlib.import_module("core.jobs.briefs")
         for m in MODULES:

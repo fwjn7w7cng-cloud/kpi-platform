@@ -57,10 +57,14 @@ def home(ctx):
         v.note(f"Демо · {INDUSTRIES[ctx.industry].lower()} · набор «{ctx.cfg.set_title}». Все люди и цифры выдуманы.")
         from core.demo import is_partner
         if is_partner(ctx):
-            v.note("🤝 Вы партнёр: «📘 Памятка» — как показывать, «🤝 Мои клиенты» — приглашения и заявки, "
+            v.note("🤝 Вы партнёр: «📘 Инструкция» — что нажимать, «🤝 Мои клиенты» — приглашения, анкеты и заявки, "
                    "«🔄 Заново» — свежие цифры перед каждым показом.")
     # Что уже есть в нижнем меню, на главной не повторяем (переключатели демо, «Смотреть как», отзывы — тоже там).
     kb = rows(_dept_buttons(ctx), 2) + rows(_home_buttons(ctx), 2)
+    if ctx.demo and ctx.app.demo_gate and ctx.user_id not in ctx.app.admins:
+        from core.demo import is_partner
+        if not is_partner(ctx):                      # гость-клиент: анкета для подключения всегда под рукой
+            kb.append([Button("🧩 Собрать и цена", "sw:ed"), Button("📋 Анкета для подключения", "cd")])
     kb.append(_month_switch(ctx))
     return Reply(view=v, buttons=kb)
 
@@ -228,7 +232,7 @@ def bottom_rows(ctx):
             out.append([("🛠 Пульт", "adm")])
         from core.demo import is_partner
         if is_partner(ctx):
-            out.append([("🤝 Мои клиенты", "ptn"), ("📘 Памятка", "ptm"), ("🔄 Заново", "sw:reset")])
+            out.append([("🤝 Мои клиенты", "ptn"), ("📘 Инструкция", "ptm"), ("🔄 Заново", "sw:reset")])
     return out
 
 
@@ -783,6 +787,10 @@ def demo(ctx, what=None, value=None, *more):
         return T.toggle_year(ctx)
     if what == "pdf":
         return T.pdf(ctx)
+    if what == "pay":
+        return T.pay_screen(ctx)
+    if what == "py" and value:
+        return T.pay_toggle(ctx, value)
     if what == "req":
         return T.request(ctx)
     if what == "reset":

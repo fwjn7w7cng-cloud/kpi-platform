@@ -143,7 +143,7 @@ def proc(ctx, pid):
     v = View(_title(ctx, p), _sub(ctx, p))
     lines, kb = [], []
     for i, (t, who, by, ts) in enumerate(p["items"]):
-        lines.append(f"{'✓' if by else '○'} {t} — {WHO[who]}" + (f" · {by}, {ts}" if by else ""))
+        lines.append(f"{'●' if by else '○'} {t} — {WHO[who]}" + (f" · {by}, {ts}" if by else ""))
         if not by and p["status"] == "open" and may_close(ctx, p, who):
             kb.append([Button(f"✅ {t[:30]}", f"hrc:{p['id']}:{i}")])
     v.lines(lines, title="Чек-лист")
