@@ -29,7 +29,7 @@ INDUSTRIES = {
 }
 
 DEPT_KINDS = {"sales", "warehouse", "logistics", "purchasing", "office"}
-SOURCES = {"seed", "mail", "drive", "api"}
+SOURCES = {"seed", "mail", "drive", "api", "folder"}   # folder — папка на нашем сервере (core/ingest/folder.py)
 
 
 class ConfigError(Exception):

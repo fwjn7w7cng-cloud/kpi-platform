@@ -117,7 +117,7 @@ schedule:
 
 # Откуда берём отчёты 1С: mail (почта, настройки в .env клиента) или drive (папка Google Диска)
 source:
-  kind: mail
+  kind: folder          # отчёты 1С кладутся в data/<код>/inbox/ (курьер rclone или 1С сама); mail / drive — почта или Google Диск
 
 pay:
   salary: "30 000"            # оклад по умолчанию, если в схеме не указан

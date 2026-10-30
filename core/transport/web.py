@@ -16,6 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from core import push
 from core.ui import screens
 from core.ui.web import BRAND, app_name, reply_json, static_files
 
@@ -79,8 +80,14 @@ class WebApi:
                 others.setdefault(int(r.to), []).append(r)
         for to, rs in others.items():
             key = f"inbox:{to}"
-            box = (self._office().get(key) or []) + [reply_json(r, self._files()) for r in rs]
+            items = [reply_json(r, self._files()) for r in rs]
+            box = (self._office().get(key) or []) + items
             self._office().put(key, box[-INBOX_MAX:])
+            if push.has(self._office(), to):          # 🔔 на телефон: первое сообщение, остальные — «и ещё N»
+                title, body = push.summary(items[0])
+                if len(items) > 1:
+                    body = f"{body} · и ещё {len(items) - 1}"
+                push.send_async(self._office, to, title, body)
         return mine
 
     def _files(self):
@@ -114,7 +121,25 @@ class WebApi:
                                          ctx.cfg.role_title(ctx.role) if ctx.role not in ("guest", "admin") else
                                          "Администратор" if ctx.role == "admin" else "")
         return {"msgs": msgs, "inbox": self._inbox(uid), "home": bool(home), "tabs": tabs, "extra": extra, "tools": tools,
-                "company": ctx.cfg.name, "who": who, "role": role_t, "guest": not allowed or ctx.role == "guest"}
+                "company": ctx.cfg.name, "who": who, "role": role_t, "guest": not allowed or ctx.role == "guest",
+                "push": None if self.app.demo or not allowed or ctx.role == "guest" else push.has(self._office(), uid)}
+
+    # ---------- фоновая работа: рассылки и отчёты (core/jobs/worker.py) ----------
+
+    def background(self):
+        """Работник: рассылки по расписанию и забор отчётов. В демо — None."""
+        if self.app.demo:
+            return None
+        from core.jobs.worker import Worker
+        return Worker(self.app, lambda out: self._deliver(0, out))
+
+    def tick(self, worker, now=None):
+        """Одна минута работника — под тем же замком, что и нажатия."""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        now = now or datetime.now(ZoneInfo(self.app.cfg.timezone)).replace(tzinfo=None)
+        with self.lock:
+            return worker.tick(now)
 
     def handle(self, method, path, query, body, token):
         """→ (код, {заголовки}, байты). Без сети — так провод и проверяется в тестах."""
@@ -135,6 +160,9 @@ class WebApi:
                 # а приложение открывает его в отдельном окне (target=_blank) — назад в приложение одной кнопкой «Готово».
                 return 200, {"Content-Type": FILE_TYPES.get(f[0].rsplit(".", 1)[-1].lower(), "application/octet-stream"),
                              "Content-Disposition": f"inline; filename*=UTF-8''{quote(f[0])}"}, f[1]
+            if u == "/api/push-key":                    # открытый ключ сервера для подписки на уведомления
+                with self.lock:
+                    return self._json({"key": push.public_key(self._office())})
             if u == "/api/poll":
                 with self.lock:
                     tok, uid, _ = self._device(token, create=False)
@@ -155,6 +183,12 @@ class WebApi:
                     to = str(body.get("to") or "home")[:64]
                     out = self.app.press(uid, to, top=bool(body.get("top")))
                     sid = getattr(self.app, "last_sid", to.split(":")[0])
+                elif act == "push":                        # подписка телефона на уведомления (или отписка)
+                    if body.get("off"):
+                        push.unsubscribe(self._office(), uid, body.get("endpoint"))
+                        return self._json({"ok": True, "on": False})
+                    ok = push.subscribe(self._office(), uid, body.get("sub") or {})
+                    return self._json({"ok": ok, "on": ok})
                 elif act == "upload":                      # файл отчёта: {name, data: base64}
                     import base64
                     try:
@@ -221,4 +255,16 @@ def serve(api, port=8101, host="127.0.0.1"):
 
     srv = ThreadingHTTPServer((host, port), Handler)
     log.info("веб-приложение %s: http://%s:%s", api.name, host, port)
+    worker = api.background()
+    if worker:
+        def loop():
+            import time
+            while True:
+                time.sleep(60 - time.time() % 60 + 1)          # раз в минуту, в начале минуты
+                try:
+                    api.tick(worker)
+                except Exception:                              # noqa: BLE001
+                    log.exception("фоновая работа")
+        threading.Thread(target=loop, daemon=True, name="worker").start()
+        log.info("рассылки и забор отчётов: %s", ", ".join(t for t, _ in worker.srcs) or "источников нет — только кнопка «📥 Отчёты»")
     srv.serve_forever()

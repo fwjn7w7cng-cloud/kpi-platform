@@ -33,6 +33,14 @@ def log_of(db):
     return db.get(KEY) or []
 
 
+def log_result(db, name, res, who):
+    """Запись в журнал «🧪 Что пришло» (кнопка и автоматический забор)."""
+    entry = {"ts": datetime.now().strftime("%d.%m.%Y %H:%M"), "who": who, "name": name,
+             "ok": res.ok, "skip": res.skipped, "err": res.errors}
+    db.put(KEY, ([entry] + log_of(db))[:LOG_MAX])
+    return entry
+
+
 def receive(ctx, name, data):
     """Принять один файл: проверить права и размер, прогнать конвейер, записать в журнал. → [Reply]."""
     name = (name or "файл").replace("/", "_").replace("\\", "_")[:120]
@@ -47,9 +55,7 @@ def receive(ctx, name, data):
     if not name.lower().endswith(EXT):
         return [Reply(text=f"«{name}» — не похоже на отчёт 1С. Принимаются Excel (.xls, .xlsx), .csv и .mxl.")]
     res = ingest(ctx.cfg.id, ctx.db, [(name, data)], manual=True, hooks=ctx.app.hooks)[0]
-    entry = {"ts": datetime.now().strftime("%d.%m.%Y %H:%M"), "who": ctx.name(), "name": name,
-             "ok": res.ok, "skip": res.skipped, "err": res.errors}
-    ctx.db.put(KEY, ([entry] + log_of(ctx.db))[:LOG_MAX])
+    entry = log_result(ctx.db, name, res, ctx.name())
     ctx.db.audit(ctx.name(), "upload", f"{name}: принято {len(res.ok)}, пропущено {len(res.skipped)}, ошибок {len(res.errors)}")
     v = View("🧪 Что пришло", name)
     _entry(v, entry)
@@ -102,6 +108,10 @@ def upload_screen(ctx):
                 title="Последняя загрузка")
     v.note("Как: в 1С сформируйте отчёт → «Сохранить как» Excel → здесь «Выбрать файлы». Можно сразу несколько. "
            "Тот же файл второй раз не примется; новый файл за тот же период заменит прежний. Утверждённый месяц закрыт.")
+    kind = (ctx.cfg.source or {}).get("kind")
+    auto = {"folder": "из папки на сервере (1С или курьер кладёт файлы)", "mail": "с почты бота", "drive": "с Google Диска"}.get(kind)
+    if auto:
+        v.note(f"🔄 Автоматически: раз в 10 минут бот забирает отчёты {auto}. Кнопка ниже — для разовых файлов.")
     st = ctx.db.month_status(month_of(ctx.today))
     if st == "review":
         v.note(f"{month_title(month_of(ctx.today))} на согласовании — файлы за него принимаются только отсюда, не автоматически.")

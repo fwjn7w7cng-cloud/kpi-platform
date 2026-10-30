@@ -165,6 +165,10 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 .upl { display: flex; align-items: center; justify-content: center; gap: 8px; border: 2px dashed var(--accent); border-radius: var(--r);
   padding: 18px 12px; color: var(--accent); font-weight: 600; background: var(--accent-soft); cursor: pointer; text-align: center; }
 .upl input { display: none; }
+.pushbar { display: flex; gap: 10px; align-items: center; background: var(--accent-soft); border-radius: var(--r); padding: 12px 14px; margin-bottom: 12px; }
+.pushbar p { margin: 0; flex: 1; font-size: 14px; color: var(--ink); }
+.pushbar button { border: 0; border-radius: 10px; padding: 9px 12px; font-weight: 600; cursor: pointer; }
+.pushbar .on { background: var(--accent); color: #fff; } .pushbar .no { background: transparent; color: var(--ink-2); }
 .file { display: inline-flex; gap: 6px; align-items: center; background: var(--surface); box-shadow: 0 0 0 1px var(--line); border-radius: 10px;
   padding: 8px 12px; color: var(--accent); font-weight: 500; text-decoration: none; }
 .busy { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 40; background: linear-gradient(90deg, transparent, var(--accent), transparent);
@@ -300,6 +304,7 @@ function show(d) {
   if (d.tabs) { S.tabs = d.tabs; S.extra = d.extra || []; S.tools = d.tools || []; }
   const msgs = d.msgs || [], parts = [];
   if (d.inbox && d.inbox.length) parts.push(`<div class="inbox">${d.inbox.map(m => msgHtml(m, false, false)).join("")}</div>`);
+  if (d.home && d.push === false) { const pb = pushBar(); if (pb) parts.push(pb); }
   msgs.forEach((m, i) => parts.push(msgHtml(m, d.home, i === 0)));
   $("main").innerHTML = `<div class="screen">${parts.join("")}</div>`;
   $("main").scrollTop = 0;
@@ -312,6 +317,8 @@ function show(d) {
   const tb = $("tools"); tb.hidden = !S.tools.length;
   tb.textContent = S.tools.length ? (S.tools.some(([, to]) => to === "adm") ? "🛠 Пульт" : "🤝 Партнёр") : "";
   tabs();
+  const pe = $("pushOn"); if (pe) pe.addEventListener("click", enablePush);
+  const pn = $("pushNo"); if (pn) pn.addEventListener("click", () => { try { localStorage.setItem("pushNo", "1"); } catch (e) {} $("pushBar").remove(); });
   const up = $("upFile");
   if (up) up.addEventListener("change", () => uploadFiles([...up.files]));
   const f = $("askForm");
@@ -340,6 +347,27 @@ async function call(act, body) {
     show(await r.json());
   } catch (e) { toast("Нет связи с сервером. Проверьте интернет и нажмите ещё раз."); }
   finally { busy = false; $("busy").hidden = true; }
+}
+// 🔔 Уведомления: на iPhone — только из приложения на экране «Домой» (iOS 16.4+), на Android — в браузере тоже.
+function pushBar() {
+  try { if (localStorage.getItem("pushNo")) return ""; } catch (e) {}
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent), standalone = window.navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+  if (ios && !standalone) return `<div class="pushbar" id="pushBar"><p>🔔 Чтобы получать уведомления на iPhone, добавьте приложение на экран «Домой»: «Поделиться» → «На экран „Домой“».</p><button class="no" id="pushNo">✕</button></div>`;
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return "";
+  if (Notification.permission === "denied") return "";
+  return `<div class="pushbar" id="pushBar"><p>🔔 Утренняя сводка и напоминания — уведомлением на телефон</p><button class="on" id="pushOn">Включить</button><button class="no" id="pushNo">✕</button></div>`;
+}
+function keyBytes(k) { const s = atob(k.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - k.length % 4) % 4)); return Uint8Array.from(s, c => c.charCodeAt(0)); }
+async function enablePush() {
+  try {
+    if (await Notification.requestPermission() !== "granted") { toast("Уведомления не разрешены — их можно включить в настройках телефона."); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const {key} = await (await fetch("/api/push-key", {credentials: "same-origin"})).json();
+    const sub = await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: keyBytes(key)});
+    const r = await fetch("/api/push", {method: "POST", headers: {"Content-Type": "application/json"}, credentials: "same-origin", body: JSON.stringify({sub: sub.toJSON()})});
+    if ((await r.json()).ok) { toast("🔔 Уведомления включены"); const b = $("pushBar"); if (b) b.remove(); }
+    else toast("Не получилось включить уведомления.");
+  } catch (e) { toast("Не получилось включить уведомления на этом телефоне."); }
 }
 // Файлы отчётов: по одному в /api/upload (base64), ответы складываем в один экран «Что пришло».
 async function uploadFiles(files) {
