@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -181,7 +181,7 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 
 .askbar { display: flex; gap: 8px; align-items: flex-end; }
 .askbar textarea { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--surface);
-  color: var(--ink); font: inherit; resize: none; min-height: 44px; max-height: 140px; }
+  color: var(--ink); font: inherit; font-size: 16px; resize: none; min-height: 44px; max-height: 140px; }
 .askbar textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
 .send { border: 0; background: var(--accent); color: #fff; border-radius: 12px; padding: 0 16px; height: 44px; font-weight: 600; cursor: pointer; }
 .inbox { display: flex; flex-direction: column; gap: 8px; }
@@ -386,13 +386,20 @@ function tabs() {
   if (items.length > max) html.push(`<button class="tab" data-more="1"><span class="i">☰</span><span class="l">Ещё</span></button>`);
   nav.innerHTML = html.join("");
 }
+const VER = "__VER__";
 async function call(act, body) {
   if (busy) return;
   busy = true; $("busy").hidden = false;
   try {
     const r = await fetch("/api/" + act, {method: "POST", headers: {"Content-Type": "application/json"}, credentials: "same-origin", body: JSON.stringify(body || {})});
     if (!r.ok) throw new Error(r.status);
-    show(await r.json());
+    const d = await r.json();
+    // на сервере новая версия приложения, а у телефона в памяти старая страница — перезагрузить один раз
+    if (d.ver && d.ver !== VER) {
+      let done = ""; try { done = sessionStorage.getItem("reloadedFor") || ""; } catch (e) {}
+      if (done !== d.ver) { try { sessionStorage.setItem("reloadedFor", d.ver); } catch (e) {} location.reload(); return; }
+    }
+    show(d);
   } catch (e) { toast("Нет связи с сервером. Проверьте интернет и нажмите ещё раз."); }
   finally { busy = false; $("busy").hidden = true; }
 }

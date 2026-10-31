@@ -42,8 +42,10 @@ class WebApi:
             app.admins.add(int(uid))
         self.name = name or app_name(app.cfg.name, app.demo)      # «Алапа · демо» / «Алапа · <фирма>»
         self.static = static_files(self.name, short, live=True)
-        self.page = ((ROOT / "web" / "app.html").read_text(encoding="utf-8")
-                     .replace("__NAME__", self.name).replace("__SHORT__", short))
+        raw = (ROOT / "web" / "app.html").read_text(encoding="utf-8")
+        import hashlib
+        self.ver = hashlib.sha1(raw.encode()).hexdigest()[:10]      # версия страницы: телефон со старой — перезагрузится сам
+        self.page = raw.replace("__NAME__", self.name).replace("__SHORT__", short).replace("__VER__", self.ver)
 
     def _office(self):
         return self.app.office()
@@ -120,7 +122,7 @@ class WebApi:
         role_t = "" if not allowed else (ctx.position_name if ctx.role in ("staff", "head") and ctx.position_name else
                                          ctx.cfg.role_title(ctx.role) if ctx.role not in ("guest", "admin") else
                                          "Администратор" if ctx.role == "admin" else "")
-        return {"msgs": msgs, "inbox": self._inbox(uid), "home": bool(home), "tabs": tabs, "extra": extra, "tools": tools,
+        return {"ver": self.ver, "msgs": msgs, "inbox": self._inbox(uid), "home": bool(home), "tabs": tabs, "extra": extra, "tools": tools,
                 "company": ctx.cfg.name, "who": who, "role": role_t, "guest": not allowed or ctx.role == "guest",
                 "push": None if self.app.demo or not allowed or ctx.role == "guest" else push.has(self._office(), uid)}
 
