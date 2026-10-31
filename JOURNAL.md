@@ -3,6 +3,12 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-01 02:06 (Джарвис) — домен alapa.pro (ждёт выкатки, fdbb87b)
+Адам 01.11: сайт и демо — на alapa.pro. В коде: `core/ui/web.DOMAIN` = alapa.pro, тексты demo.py / maximum.py, визитка web/site → demo.alapa.pro,
+`core/push.CONTACT` = mailto:botsmith.pro@gmail.com. DNS в REG.RU (Адам): alapa.pro и kpibotsmith.ru — `@`, `*` (у alapa ещё `www`) → 103.214.71.188.
+Осталось Альфреду: выкатить, WEB_URL в clients/demo/.env → https://demo.alapa.pro, визитку в /var/www/kpi/site; когда у alapa.pro и demo.alapa.pro
+появятся сертификаты — kpibotsmith.ru и demo.kpibotsmith.ru в Caddy сделать пересылкой на alapa.pro / demo.alapa.pro. Тесты 184 — ок.
+
 ## 2026-11-01 01:50 (Альфред) — демо и сайт переехали на новый сервер 103.214.71.188; добавлен alapa.pro
 Старый: stop + disable kpi@demo, kpi-web@demo, caddy 01:47:56, процессов нет. rsync kpi-platform (без venv) — demo.db sha256 совпал
 (22391b35…); /var/www/kpi и /var/lib/caddy/.local/share/caddy (caddy:caddy). Новый: Caddyfile.bak-2026-11-01-move; к kpibotsmith.ru и
