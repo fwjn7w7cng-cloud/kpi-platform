@@ -475,7 +475,7 @@ def build_raw(c):
         wh += [{"type": "fixed_bonus", "name": "Без ошибок", "amount": "5 000", "cut_per_miss": "1 000"},
                {"type": "per_unit", "unit": "ret_err", "price": "500", "cut": True, "name": "Ошибки склада в возвратах"}]
     raw["pay_schemes"]["warehouse"] = wh + [{"type": "timesheet"}]
-    for name, comps in (s.get("schemes") or {}).items():      # 🧱 конструктор зарплаты — как собрали, кирпичик в кирпичик
+    for name, comps in (s.get("schemes") or {}).items():      # 🧱 конструктор зарплаты — как собрали, блок в блок
         raw["pay_schemes"][name] = comps
     if "buyer" in raw["pay_schemes"]:
         for p in raw["positions"]:

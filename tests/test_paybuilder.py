@@ -96,54 +96,124 @@ class Builder(Base):
     def view(self, data):
         return next(r for r in self.screens(data) if r.view)
 
-    def test_every_brick_for_every_position(self):
+    def items(self, pos="rep"):
+        return PB.items_of(self.app.ctx(7), pos)
+
+    def item(self, bid, pos="rep"):
+        return next(x for x in self.items(pos) if x["b"] == bid)
+
+    def add(self, *bids):
+        for b in bids:
+            self.screens(f"pbs:t:{b}")
+        self.screens("pbs:ok")
+
+    def test_every_block_and_variant_for_every_position(self):
         for pos in PB.POSITIONS:
             self.screens(f"pb:{pos}")
-            for bid, b in PB.BRICKS.items():
-                if pos in b[3]:
-                    self.screens(f"pbn:{bid}")
-                    items = PB.items_of(self.app.ctx(7), pos)
-                    i = next(n for n, x in enumerate(items) if x["b"] == bid)
-                    for var in b[4]:
-                        self.screens(f"pbv:{i}:{var[0]}")
-            emp, rows = PB.example(self.app.ctx(7), pos, PB.items_of(self.app.ctx(7), pos))
+            self.screens("pbs")
+            for bid in PB._blocks_for(pos):
+                if not any(x["b"] == bid for x in self.items(pos)):
+                    self.screens(f"pbs:t:{bid}")
+            self.screens("pbs:ok")
+            for bid in PB._blocks_for(pos):
+                self.screens(f"pbe:{bid}")
+                for var in PB.variants(bid, pos):
+                    self.screens(f"pbe:{bid}:t:{var[0]}")
+                self.screens(f"pbe:{bid}:ok")
+            emp, rows = PB.example(self.app.ctx(7), pos, self.items(pos))
             self.assertTrue(emp, pos)
             self.assertFalse([r for r in rows if r[0].startswith("⚠️")], pos)
-        self.assertEqual(sum(1 for x in PB.items_of(self.app.ctx(7), "rep") if x["b"] == "salary"), 1)   # оклад — один
+        self.assertEqual(sum(1 for x in self.items("rep") if x["b"] == "salary"), 1)       # оклад — один
 
-    def test_page_edit_and_input(self):
+    def test_select_blocks_ok_and_cancel(self):
         out = self.screens("pb:rep")
-        self.assertIn("Для кого схема", out[0].text)                           # должность — сверху
-        v = out[1].view
-        self.assertEqual(v.title, "🧱 Конструктор зарплаты")
-        self.assertIn("Пример за месяц", [t[0] for t in next(b for k, b in v.blocks if k == "tiles")])
-        self.screens("pbf:2:steps")
-        self.app.text(7, "80 5 000; 100 15000; 120 25 000")
-        self.assertEqual(PB.items_of(self.app.ctx(7), "rep")[2]["p"]["steps"], [[0.8, 5000], [1.0, 15000], [1.2, 25000]])
-        self.screens("pbf:1:rate")
-        self.app.text(7, "0,5")
-        self.assertAlmostEqual(PB.items_of(self.app.ctx(7), "rep")[1]["p"]["rate"], 0.005)
-        self.screens("pbf:1:rate")
-        self.assertTrue(self.app.text(7, "много")[0].ask)                         # не число — переспросит
-        self.screens("pbv:2:gate")                                              # продажи: фикс с порога плана
-        self.assertEqual(PB.bname(PB.items_of(self.app.ctx(7), "rep")[2]), "Продажи: фикс с порога")
-        self.screens("pbv:1:pct_steps")                                         # % — ставка растёт с планом
-        self.screens("pbf:1:rate_steps")
+        self.assertIn("Для кого схема", out[0].text)
+        self.assertEqual(out[1].view.title, "🧱 Конструктор зарплаты")
+        self.assertTrue(any(b.label.startswith("‹") for b in out[1].all_buttons()))       # сам экран — «Назад» туда, откуда пришли
+        before = [x["b"] for x in self.items()]
+        win = self.screens("pbs")[-1]
+        self.assertEqual([b.label for b in win.buttons[-2]], ["✅ ОК", "✖️ Отмена"])
+        bk = win.buttons[-1][0].to                                              # «‹ Назад» в окне — на страницу конструктора
+        self.screens("pbs:t:akb")
+        self.assertIn("Для кого схема", self.screens(bk)[0].text)
+        self.assertEqual([x["b"] for x in self.items()], before)
+        self.screens("pbs:t:akb")
+        self.screens("pbs:t:mult")
+        self.assertEqual([x["b"] for x in self.items()], before)                # до «ОК» схема не меняется
+        self.screens("pbs:no")
+        self.assertEqual([x["b"] for x in self.items()], before)                # «Отмена» — всё как было
+        self.screens("pbs")
+        self.screens("pbs:t:mult")
+        self.screens(f"pbs:t:{before[0]}")                                      # сняли галочку — блок уйдёт
+        self.screens("pbs:ok")
+        got = [x["b"] for x in self.items()]
+        self.assertIn("mult", got)
+        self.assertNotIn(before[0], got)
+        self.assertEqual(got[-1], "mult")                                       # множитель — в конце, как считает движок
+        back = self.screens("pbs:ok")[-1]
+        self.assertTrue(any((b.to or "").startswith("bk:") for b in back.all_buttons()))
+
+    def test_block_variants_fields_ok_cancel(self):
+        self.screens("pb:rep")
+        self.screens("pbx")
+        self.add("sales")
+        win = self.screens("pbe:sales")[-1]
+        self.assertTrue(win.buttons[-1][0].label.startswith("‹"))
+        self.screens("pbe:sales:t:pct_steps")                                   # процент — ступенями
+        self.screens("pbe:sales:t:gate")                                        # и бонус с порога плана
+        self.assertEqual([x["v"] for x in self.items()], ["pct"])               # до «ОК» — прежнее
+        self.screens("pbe:sales:f:pct_steps:rate_steps")
         self.app.text(7, "80 0,3; 100 0,5")
-        self.assertEqual(PB.items_of(self.app.ctx(7), "rep")[1]["p"]["rate_steps"], [[0.8, 0.003], [1.0, 0.005]])
-        self.screens("pbu:3")
-        self.assertEqual(PB.items_of(self.app.ctx(7), "rep")[2]["b"], "akb")
-        self.screens("pbd:1")
+        self.screens("pbe:sales:f:gate:min")
+        self.assertTrue(self.app.text(7, "много")[0].ask)                        # не число — переспросит
+        self.screens("pbe:sales:no")
+        self.assertEqual([x["v"] for x in self.items()], ["pct"])               # «Отмена» — как было
+        self.screens("pbe:sales")
+        self.screens("pbe:sales:t:pct_steps")
+        self.screens("pbe:sales:t:gate")
+        self.screens("pbe:sales:f:pct_steps:rate_steps")
+        self.app.text(7, "80 0,3; 100 0,5")
+        self.screens("pbe:sales:ok")
+        it = self.items()
+        self.assertEqual([x["v"] for x in it], ["pct_steps", "gate"])            # процент и бонус — вместе, по одному виду
+        self.assertEqual(it[0]["p"]["rate_steps"], [[0.8, 0.003], [1.0, 0.005]])
+        self.screens("pbe:sales")
+        self.screens("pbe:sales:t:steps")                                       # другой бонус вместо порога
+        self.screens("pbe:sales:ok")
+        self.assertEqual([x["v"] for x in self.items()], ["pct_steps", "steps"])
+        self.screens("pbe:sales")
+        self.screens("pbe:sales:t:pct_steps")
+        self.screens("pbe:sales:t:steps")
+        self.screens("pbe:sales:ok")                                            # ничего не отмечено — блок убран
+        self.assertEqual(self.items(), [])
         self.screens("pbr")
-        self.assertEqual(len(PB.items_of(self.app.ctx(7), "rep")), len(PB.DEFAULTS["rep"]))
+        self.assertEqual(len(self.items()), len(PB.DEFAULTS["rep"]))
+
+    def test_piece_units_several(self):
+        self.screens("pb:driver")
+        self.screens("pbx")
+        self.add("piece")
+        units = [v[0] for v in PB.variants("piece", "driver")]
+        self.assertIn("km", units)
+        self.screens("pbe:piece")
+        for u in units[:3]:
+            if u not in [x["v"] for x in PB._draft(self.app.ctx(7), "piece")["items"]]:
+                self.screens(f"pbe:piece:t:{u}")
+        self.screens(f"pbe:piece:f:{units[0]}:price")
+        self.app.text(7, "7")
+        self.screens("pbe:piece:ok")
+        it = self.items("driver")
+        self.assertEqual(sorted(x["v"] for x in it), sorted(units[:3]))         # за что платить — можно несколько
+        self.assertEqual(next(x for x in it if x["v"] == units[0])["p"]["price"], 7)
+        ctx = self.app.ctx(7)                                                    # старая запись «unit» переводится
+        ctx.session["pb"]["driver"] = [{"b": "piece", "v": "unit", "p": {"unit": "km", "price": 4}}]
+        self.assertEqual(PB.items_of(ctx, "driver"), [{"b": "piece", "v": "km", "p": {"price": 4}}])
 
     def test_goes_to_card_and_client_config(self):
         self.screens("pb:rep")
-        self.screens("pbn:mult")
-        self.screens("pbn:margin")
-        self.screens("pbn:focus")                                               # фокусные — своим блоком
+        self.add("mult", "margin", "focus")                                     # фокусные — своим блоком
         self.screens("pb:driver")
-        self.screens("pbn:cut")
+        self.add("cut")
         c = O.ensure(self.app.ctx(7), "7")
         O.snapshot(self.app.ctx(7), c)
         self.assertTrue(any(x.startswith("Торговый:") and "множитель" in x for x in c["set"]["pay_lines"]))
@@ -154,6 +224,11 @@ class Builder(Base):
         self.assertTrue(any(x.get("base") == "focus" for x in raw["pay_schemes"]["rep"]))
         cfg = parse(raw["id"], raw)                                             # настройка клиента разбирается
         self.assertIn("driver", cfg.raw["pay_schemes"])
+
+    def test_no_brick_word(self):
+        for pos in PB.POSITIONS:
+            for r in self.screens(f"pb:{pos}") + self.screens("pbs"):
+                self.assertNotIn("ирпичик", str(r.text) + str(r.view and r.view.blocks) + str([b.label for b in r.all_buttons()]))
 
     def test_each_indicator_is_own_block(self):
         for m in ("sales", "focus", "collect", "akb", "sku", "visits"):
@@ -174,8 +249,8 @@ class Builder(Base):
         out = self.screens("pbx")
         v = next(r for r in out if r.view).view
         self.assertEqual(PB.items_of(self.app.ctx(7), "rep"), [])
-        self.assertIn("с нуля", str(v.blocks))
-        self.screens("pbn:akb")                                                 # только один показатель, без оклада
+        self.assertIn("Схема пустая", str(v.blocks))
+        self.add("akb")                                                         # только один показатель, без оклада
         emp, rows = PB.example(self.app.ctx(7), "rep", PB.items_of(self.app.ctx(7), "rep"))
         self.assertTrue(rows and not any(r[0].startswith("⚠️") for r in rows))
         c = O.ensure(self.app.ctx(7), "7")

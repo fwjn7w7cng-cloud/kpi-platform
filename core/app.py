@@ -30,6 +30,8 @@ MODULES = ["debts", "reminders", "achievements", "staff", "payroll", "tasks", "a
 
 
 RESET = {"home", "mon"}          # главная и смена месяца: путь «Назад» начинается заново
+STAY = {"pbs", "pbe"}            # окна с «ОК / Отмена» (конструктор зарплаты): в путь не попадают, «‹ Назад» из них — на экран
+REPLACE = {"pb"}                 # переключение внутри экрана (должность в конструкторе) — не копит шаги «Назад»
 TRAIL = 12
 MAX_OPEN = 40                    # демо: сколько копий фирмы держать открытыми одновременно
 
@@ -241,11 +243,15 @@ class App:
         out = self._run(ctx, sid, args, finish=False)
         mine = [r for r in out if not r.to]
         # Экран можно открыть ещё раз кнопкой «Назад», только если он ничего не менял и никому не писал.
-        safe = sid not in RESET and ctx.db.rev() == rev and len(mine) == len(out) and not (mine and mine[-1].ask)
-        if safe and (not trail or trail[-1] != data):
+        safe = sid not in RESET and sid not in STAY and ctx.db.rev() == rev and len(mine) == len(out) and not (mine and mine[-1].ask)
+        if safe and trail and sid in REPLACE and trail[-1].split(":")[0] == sid:
+            trail[-1] = data
+        elif safe and (not trail or trail[-1] != data):
             trail.append(data)
         ctx.session["trail"] = trail[-TRAIL:]
         back = len(trail) - 1 if safe else len(trail)
+        if sid in STAY and args and args[-1] in ("ok", "no") and trail and trail[-1].split(":")[0] in REPLACE:
+            back = len(trail) - 1                     # «ОК» / «Отмена» вернули на экран — «Назад» туда же, куда у самого экрана
         return self._with_keyboard(user_id, self._finish(ctx, out, sid, back=back))
 
     def _with_keyboard(self, user_id, out, force=False):
@@ -318,7 +324,7 @@ class App:
         last = mine[-1] if mine else None
         if back is None:                             # ответ на ввод текста — назад на экран, с которого спросили
             back = len(ctx.session.get("trail") or [])
-        if last and sid not in RESET and not last.ask and \
+        if last and sid not in RESET and not last.ask and not last.noback and \
                 not any(b.to == "home" or (b.to or "").startswith("bk:") for b in last.all_buttons()):
             last.buttons = list(last.buttons) + [[Button("‹ Назад", f"bk:{max(back, 0)}")]]
         ctx.save()

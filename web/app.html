@@ -162,6 +162,12 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 .pill.off { color: var(--ink-2); }
 .li:focus-visible, .lt:focus-visible, .pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .seg { display: flex; gap: 8px; } .seg .pill { flex: 1; }
+.okbar { display: flex; gap: 10px; position: sticky; bottom: 8px; z-index: 2; }
+.okbar button { flex: 1; border: 0; border-radius: 14px; padding: 14px; font-size: 15.5px; font-weight: 600; cursor: pointer; }
+.okbar .ok { background: var(--accent); color: #fff; } .okbar .no { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+.li .ck { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; flex: none; margin: 0 4px; font-size: 15px; font-weight: 700;
+  box-shadow: inset 0 0 0 2px var(--line); color: transparent; }
+.li .ck.on { background: var(--accent); box-shadow: none; color: #fff; }
 @media (prefers-reduced-motion: no-preference) { .screen { animation: in .18s ease-out; } @keyframes in { from { opacity: .4; transform: translateY(4px); } } }
 
 .askbar { display: flex; gap: 8px; align-items: flex-end; }
@@ -276,14 +282,21 @@ function buttons(rows, home) {
     const isPill = r => r.length >= 3 || r.every(([l]) => !splitLabel(l)[0] && String(l).length <= 18);
     let list = [], pills = [];
     const flush = () => {
-      if (list.length) html += `<div class="list">${list.map(([l, to]) => { const [i, t] = splitLabel(l);
+      if (list.length) html += `<div class="list">${list.map(([l, to]) => {
+        const ck = /^[☑☐]\s/.test(l) ? l[0] : "";                 // галочка: отметить / снять (конструктор и т. п.)
+        if (ck) return `<button class="li" data-to="${esc(to)}"><span class="ck ${ck === "☑" ? "on" : ""}">✓</span><span class="tx">${esc(l.slice(2))}</span></button>`;
+        const [i, t] = splitLabel(l);
         return `<button class="li" data-to="${esc(to)}"><span class="ic" style="--ic:${icOf(t)}">${esc(i || "›")}</span><span class="tx">${esc(t)}</span><span class="ch">›</span></button>`; }).join("")}</div>`;
       if (pills.length) html += `<div class="pills">${pills.map(([l, to]) => `<button class="pill" data-to="${esc(to)}">${esc(l)}</button>`).join("")}</div>`;
       list = []; pills = [];
     };
+    let okbar = "";
     rows.forEach(r => { r = r.filter(([, to]) => !to.startsWith("mon:") && !to.startsWith("bk:")); if (!r.length) return;
+      if (r.length === 2 && r[0][1].endsWith(":ok") && r[1][1].endsWith(":no")) {   // «ОК / Отмена» — две большие кнопки внизу
+        okbar = `<div class="okbar"><button class="ok" data-to="${esc(r[0][1])}">${esc(r[0][0])}</button><button class="no" data-to="${esc(r[1][1])}">${esc(r[1][0])}</button></div>`; return; }
       if (isPill(r)) { if (list.length) flush(); pills.push(...r); } else { if (pills.length) flush(); list.push(...r); } });
     flush();
+    html += okbar;
   }
   if (mon.length) html += `<div class="seg">${mon.map(([l, to]) => `<button class="pill" data-to="${esc(to)}">${esc(l)}</button>`).join("")}</div>`;
   return `<div class="actions">${html}</div>`;

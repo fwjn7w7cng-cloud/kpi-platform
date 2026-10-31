@@ -1,15 +1,15 @@
-"""🧱 Конструктор зарплаты (Адам 31.10): схема оплаты по должностям собирается кирпичиками на отдельной странице,
-и сразу виден живой пример — сколько получит человек этой должности и из чего сложилась сумма.
+"""🧱 Конструктор зарплаты (Адам 31.10): схема оплаты по должностям собирается из блоков на отдельной странице,
+рядом — живой пример настоящим движком на человеке этой должности.
 
-Кирпичик = готовый способ платить (BRICKS): оклад, % от продаж, бонус за план, удержание за просрочку, множитель, сдельно…
-У кирпичика варианты (фикс / % / ступени / пропорционально / множитель) и поля с цифрами. Кирпичик → кубик ядра
-(core/pay/components.py) — to_comp(); пример считается настоящим движком (Payroll.slip_rows) на человеке этой должности.
+Каждый показатель — свой блок со своими вариантами (процент: единый / с порога / ступенями / до и сверх плана;
+бонус за план: фикс / порог / ступени / пропорционально). Ни один блок не обязателен — «🧹 С нуля».
+Блок → кубик ядра (`core/pay/components.py`); схема → `set.schemes` анкеты → config.yaml клиента.
+Где лежит: сессия зрителя — `pb` = {должность: [{b: блок, v: вариант, p: {поле: значение}}]}, `pb_pos` — открытая.
+У «Сдельно» и «Удержаний» вариант — единица работы (км, точки, ошибки…), можно несколько сразу.
 
-Где лежит: сессия зрителя — `pb` = {должность: [{b: кирпичик, v: вариант, p: {поле: значение}}]}, `pb_pos` — открытая.
-Снимок уходит в анкету клиента (onboard.snapshot → set.schemes) и при «🚀 Создать клиента» — в его config.yaml (schemes()).
-Ни один кирпичик не обязателен (Адам 31.10: «некоторых блоков у клиента вообще не будет»): «🧹 С нуля» — пустая схема.
-Экраны: pb[:должность] — схема · pbe:i — кирпичик · pbv:i:вариант · pbf:i:поле (ввод) · pbc:i:поле:значение (выбор) ·
-pba[:раздел] — каталог · pbn:кирпичик — добавить · pbu:i — выше · pbd:i — убрать · pbr — как было.
+Управление (Адам 31.10: «ничего не уносит, везде ОК / Отмена»): pb[:должность] — схема · pbs — выбор блоков галочками
+(pbs:t:<блок>, pbs:ok / pbs:no) · pbe:<блок> — варианты блока галочками, цифры (:f:<вариант>:<поле>), выбор (:c:…), :ok / :no.
+До «ОК» схема не меняется (черновики pb_sel / pb_blk в сессии); «‹ Назад» в окне — на страницу конструктора, как «Отмена» (`app.STAY`).
 """
 import copy
 import re
@@ -35,7 +35,7 @@ METRICS = {"sales": "продажи", "focus": "фокусные", "akb": "АК�
            "collect": "сбор денег", "visits": "визиты по маршруту"}
 SCOPES = {"self": "свои", "team": "команды", "dept": "отдела", "all": "всей компании"}
 
-# ---------- кирпичики ----------
+# ---------- блоки ----------
 # поле: (подпись, вид) — вид: money | pct | int | coef | text | steps_money | steps_coef | amounts | metric | scope | unit
 F = {
     "amount": ("Сумма", "money"), "rate": ("Ставка", "pct"), "rate_above": ("Ставка сверх плана", "pct"),
@@ -173,7 +173,30 @@ BRICKS["margin"] = ("Показатели", "📊", "Наценка", SALES, [
     "процент с наценки — если в отчёте 1С есть себестоимость")
 
 
+def variants(bid, pos=None):
+    """Варианты блока для должности: у «Сдельно» и «Удержаний» вариант — это единица работы (км, точки, ошибки…)."""
+    if bid in ("piece", "cut"):
+        cut = bid == "cut"
+        return [(u, t[0], {"price": t[2]}, {"type": "per_unit", "unit": u, "cut": cut})
+                for u, t in UNITS.items() if t[3] == cut and (pos is None or pos in t[1])]
+    return BRICKS[bid][4]
+
+
+def group(bid, v):
+    """Группа выбора внутри блока: в одной группе — один вариант (переключатель), разные группы — можно вместе."""
+    if bid in METRIC_BLOCKS:
+        return "pct" if v.startswith("pct") else "bonus"
+    if bid in ("piece", "cut"):
+        return v
+    return "main"
+
+
 def brick(b, v=None, **p):
+    if b in ("piece", "cut"):
+        unit = p.pop("unit", None) or v or variants(b)[0][0]
+        out = {"b": b, "v": unit, "p": {"price": UNITS[unit][2]}}
+        out["p"].update(p)
+        return out
     var = next(x for x in BRICKS[b][4] if v is None or x[0] == v)
     out = {"b": b, "v": var[0], "p": copy.deepcopy(var[2])}
     out["p"].update(p)
@@ -197,8 +220,8 @@ DEFAULTS = {
 # ---------- превращение в кубик ядра ----------
 
 def to_comp(pos, item):
-    _, _, title, _, variants, _ = BRICKS[item["b"]]
-    var = next((x for x in variants if x[0] == item["v"]), variants[0])
+    vs = variants(item["b"])
+    var = next((x for x in vs if x[0] == item["v"]), vs[0])
     c = copy.deepcopy(var[3])
     p = item["p"]
     for k, v in p.items():
@@ -243,7 +266,7 @@ def lines(session):
 
 
 def needs_data(session):
-    """Кирпичики, которым нужны особые данные из 1С — для «⚠️ нестандарт» в анкете."""
+    """Блоки, которым нужны особые данные из 1С — для «⚠️ нестандарт» в анкете."""
     out = []
     for pos, items in ((session or {}).get("pb") or {}).items():
         for i in items:
@@ -294,7 +317,7 @@ def fmt(field, v):
 
 
 def bname(item):
-    """Название кирпичика с уточнением: «Бонус за план: АКБ», «Сдельно: км пробега»."""
+    """Название блока с уточнением: «Бонус за план: АКБ», «Сдельно: км пробега»."""
     b = BRICKS[item["b"]]
     p = item["p"]
     if item["b"] in METRIC_BLOCKS:
@@ -303,24 +326,23 @@ def bname(item):
         return f"{b[2]}: {short.get(item['v'], item['v'])}"
     if item["b"] in ("mult", "rank") and p.get("metric", "sales") != "sales":
         return f"{b[2]}: {METRICS[p['metric']].split(' (')[0]}"
-    if item["b"] in ("piece", "cut") and p.get("unit"):
-        return f"{b[2]}: " + UNITS.get(p["unit"], (p["unit"],))[0].replace("за ", "", 1)
+    if item["b"] in ("piece", "cut"):
+        return f"{b[2]}: " + UNITS.get(item["v"], (item["v"],))[0].replace("за ", "", 1)
     if item["b"] in ("fixed", "discipline") and p.get("name"):
         return p["name"]
     return b[2]
 
 
 def summary(pos, item):
-    """«ступени · продажи · 80 % → 5 000 ₽; …» — коротко, что внутри кирпичика."""
+    """«ступени · продажи · 80 % → 5 000 ₽; …» — коротко, что внутри блока."""
     b = BRICKS[item["b"]]
+    p = item["p"]
+    if item["b"] in ("piece", "cut"):
+        u = item["v"]
+        price = p.get("price", 0)
+        return UNITS.get(u, (u,))[0] + " — " + (_pct(price) if u in RATE_UNITS else money(price))
     var = next((x for x in b[4] if x[0] == item["v"]), b[4][0])
     parts = [var[1]] if len(b[4]) > 1 else []
-    p = item["p"]
-    if "unit" in p:
-        u = p["unit"]
-        price = p.get("price", 0)
-        parts = [UNITS.get(u, (u,))[0] + " — " + (_pct(price) if u in RATE_UNITS else money(price))]
-        return " · ".join(parts)
     for k in ("metric", "amount", "rate", "rate_steps", "rate_above", "focus_rate", "min_plan", "min", "cap", "steps", "coefs", "share",
               "debt_steps", "days", "max", "months", "norm", "amounts", "cut_per_miss", "min_total", "max_variable"):
         if k in p:
@@ -367,7 +389,7 @@ def state(ctx):
 
 
 def _upgrade(items):
-    """Схемы, собранные до 31.10 (кирпичики «% от продаж» и «Бонус за план»), — в блоки показателей."""
+    """Схемы, собранные до 31.10 (блоки «% от продаж» и «Бонус за план»), — в блоки показателей."""
     out = []
     for it in items:
         if it.get("b") == "percent":
@@ -382,6 +404,9 @@ def _upgrade(items):
             v = "fix" if v == "fixed" else v
             p = {k: x for k, x in it.get("p", {}).items() if k != "metric"}
             out.append({"b": m, "v": v, "p": {**brick(m, v)["p"], **p}})
+        elif it.get("b") in ("piece", "cut") and it.get("v") == "unit":
+            u = it.get("p", {}).get("unit", "km")
+            out.append({"b": it["b"], "v": u, "p": {"price": it.get("p", {}).get("price", UNITS.get(u, ("", (), 0))[2])}})
         elif it.get("b") in BRICKS:
             out.append(it)
     return out
@@ -392,7 +417,7 @@ def items_of(ctx, pos):
     if pos not in pb:
         pb[pos] = copy.deepcopy(DEFAULTS[pos])
         ctx.session["pb"] = pb
-    elif any(it.get("b") not in BRICKS for it in pb[pos]):
+    elif any(it.get("b") not in BRICKS or it.get("v") == "unit" for it in pb[pos]):
         pb[pos] = _upgrade(pb[pos])
         ctx.session["pb"] = pb
     return pb[pos]
@@ -437,64 +462,15 @@ def example(ctx, pos, items):
     slip = Payslip(emp)
     try:
         pay.slip_rows(emp, scheme(pos, items), slip)
-    except Exception as e:                                       # noqa: BLE001 — кирпичик с неполными цифрами
+    except Exception as e:                                       # noqa: BLE001 — блок с неполными цифрами
         return emp, [("⚠️ Не считается", 0, str(e)[:80])]
     return emp, slip.rows
 
 
 # ---------- экраны ----------
 
-@screen("pb")
-def page(ctx, pos=None):
-    if not _may(ctx):
-        return Reply(text="Конструктор зарплаты — у руководителя и администратора.")
-    pos = cur_pos(ctx, pos)
-    items = items_of(ctx, pos)
-    title, icon, *_ = POSITIONS[pos]
-    emp, rs = example(ctx, pos, items)
-    total = round(max(sum(r[1] for r in rs), 0)) if rs else 0
-    fixed = sum(r[1] for r in rs if r[0] == "Оклад")
-    v = View("🧱 Конструктор зарплаты", f"{icon} {title} — собирайте схему кирпичиками")
-    if emp:
-        kpi_note = ""
-        if pos in SALES:
-            m = ctx.kpi().emp(emp["id"])["sales"]
-            kpi_note = f" · план {_pct(m.pct or 0, 0)}" if m.plan else ""
-        v.tiles([("Пример за месяц", money(total), "good"), ("Оклад", money(fixed), None),
-                 ("Сверх оклада", money(total - fixed), "good" if total - fixed > 0 else None)])
-        v.note(f"Пример: {emp['fio']}{kpi_note} — посчитано по цифрам месяца этой фирмы. Меняете кирпичик — сумма пересчитывается.")
-    cards = []
-    for n, it in enumerate(items, 1):
-        b = BRICKS[it["b"]]
-        mine = [r for r in rs if _belongs(it, r)] if rs else []
-        val = money(sum(r[1] for r in mine)) if mine else ""
-        lines = [summary(pos, it)] + [f"{r[0]}: {r[2]}" for r in mine[:2] if r[2]]
-        color = "bad" if mine and sum(r[1] for r in mine) < 0 else ("good" if mine and sum(r[1] for r in mine) > 0 else None)
-        cards.append(Card(f"{n}. {b[1]} {bname(it)}", val, lines, color=color))
-    if cards:
-        v.cards(cards, title="Схема — сверху вниз")
-    else:
-        v.note("Пусто — собирайте с нуля: «➕ Добавить кирпичик». Берите только то, что есть у вас: каких-то показателей "
-               "(визиты, SKU, дебиторка) у фирмы может не быть — их просто не добавляйте.")
-    kb = rows([Button(f"✏️ {n}. {bname(it)}"[:40], f"pbe:{n - 1}") for n, it in enumerate(items, 1)], 2)
-    other = ((ctx.session.get("pay") or {}).get("other") or "").strip()
-    if other:
-        v.note(f"✍️ По-своему: {other} — посмотрим при подключении.")
-    kb.append([Button("➕ Добавить кирпичик", "pba")])
-    tail = [Button("↺ Как было", "pbr"), Button("🧹 С нуля", "pbx")]
-    if ctx.demo:
-        tail.append(Button("✍️ У нас по-другому", "sw:py:other"))
-    if ctx.demo:
-        tail.append(Button("📋 В анкету", "cd"))
-    kb.append(tail)
-    # Должность — сверху, отдельной строкой таблеток: сначала выбрал, кому, потом собираешь.
-    top = Reply(text="Для кого схема:", buttons=[[Button(("● " if p == pos else "") + POSITIONS[p][1] + " " + POSITIONS[p][0], f"pb:{p}")
-                                                  for p in POSITIONS]])
-    return [top, Reply(view=v, buttons=kb)]
-
-
 def _belongs(item, row):
-    """Какие строки расчёта дал этот кирпичик (по названию строки)."""
+    """Какие строки расчёта дал этот блок (по названию строки)."""
     t = item["b"]
     name = row[0]
     keys = {"salary": ("Оклад",), "company": ("(компания)",),
@@ -505,7 +481,7 @@ def _belongs(item, row):
     if t in ("fixed", "discipline"):
         return name == item["p"].get("name")
     if t in ("piece", "cut"):
-        u = item["p"].get("unit")
+        u = item["v"]
         return name == (("Удержание: " if UNITS.get(u, ("", (), 0, False))[3] else "") + UNITS.get(u, (u,))[0])
     if t in METRIC_BLOCKS:
         pct_t = {"sales": "% от продаж", "focus": "% от фокусных", "collect": "% от собранных денег"}.get(t)
@@ -523,97 +499,12 @@ def _belongs(item, row):
     return bool(keys) and any(k in name for k in keys)
 
 
-@screen("pbe")
-def edit(ctx, i):
-    pos = cur_pos(ctx)
-    items = items_of(ctx, pos)
-    try:
-        it = items[int(i)]
-    except (ValueError, IndexError):
-        return page(ctx)
-    b = BRICKS[it["b"]]
-    v = View(f"{b[1]} {bname(it)}", f"{POSITIONS[pos][0]} · {b[5]}")
-    v.lines([summary(pos, it)], title="Сейчас")
-    emp, rs = example(ctx, pos, items)
-    mine = [r for r in rs if _belongs(it, r)]
-    if mine:
-        v.lines([f"{r[0]}: {money(r[1])} — {r[2]}" for r in mine], title=f"В примере ({emp['fio']})")
-    kb = []
-    if len(b[4]) > 1:
-        kb.append([Button(("● " if x[0] == it["v"] else "") + x[1], f"pbv:{i}:{x[0]}") for x in b[4]])
-    for k, val in it["p"].items():
-        kind = F[k][1]
-        if kind in ("metric", "scope", "unit"):
-            kb.append([Button(f"{F[k][0]}: {fmt(k, val)} ▸", f"pbc:{i}:{k}")])
-        else:
-            kb.append([Button(f"✏️ {F[k][0]}: {fmt(k, val)}", f"pbf:{i}:{k}")])
-    kb.append([Button("⬆️ Выше", f"pbu:{i}"), Button("🗑 Убрать", f"pbd:{i}")])
-    kb.append([Button("‹ Вся схема", "pb")])
-    return Reply(view=v, buttons=kb)
-
-
-@screen("pbv")
-def set_variant(ctx, i, var):
-    pos = cur_pos(ctx)
-    items = items_of(ctx, pos)
-    try:
-        it = items[int(i)]
-    except (ValueError, IndexError):
-        return page(ctx)
-    variants = BRICKS[it["b"]][4]
-    new = next((x for x in variants if x[0] == var), None)
-    if new:
-        keep = {k: v for k, v in it["p"].items() if k in new[2]}
-        it["v"], it["p"] = var, {**copy.deepcopy(new[2]), **keep}
-        _save(ctx, pos, items)
-    return edit(ctx, i)
-
-
-@screen("pbc")
-def choose(ctx, i, field, val=None):
-    pos = cur_pos(ctx)
-    items = items_of(ctx, pos)
-    try:
-        it = items[int(i)]
-    except (ValueError, IndexError):
-        return page(ctx)
-    kind = F.get(field, ("", ""))[1]
-    opts = METRICS if kind == "metric" else SCOPES if kind == "scope" else \
-        {u: t[0] for u, t in UNITS.items() if pos in t[1] and t[3] == (it["b"] == "cut")} if kind == "unit" else {}
-    if val is not None and val in opts:
-        it["p"][field] = val
-        if kind == "unit":
-            it["p"]["price"] = UNITS[val][2]
-        _save(ctx, pos, items)
-        return edit(ctx, i)
-    return Reply(text=f"{F[field][0]}:", buttons=rows([Button(("● " if it["p"].get(field) == k else "") + t, f"pbc:{i}:{field}:{k}")
-                                                       for k, t in opts.items()], 2) + [[Button("‹ Кирпичик", f"pbe:{i}")]])
-
-
 HINT = {"money": "Сумма, например 25 000", "pct": "Процент, например 0,4 (это 0,4 %) или 80 (это 80 %)",
         "int": "Число, например 60", "text": "Название, например «Компенсация связи»",
         "steps_money": "Ступени через точку с запятой: «80 5000; 100 15000; 120 20000» — процент и сумма",
         "steps_coef": "Ступени: «90 0,8; 100 1; 110 1,2» — процент и множитель",
         "steps_rate": "Ступени: «80 0,3; 100 0,4; 120 0,6» — выполнение плана в % и ставка в %",
         "amounts": "Суммы через пробел за 1-е, 2-е, 3-е место: «5000 3000 1000»"}
-
-
-@screen("pbf")
-def ask_field(ctx, i, field):
-    pos = cur_pos(ctx)
-    items = items_of(ctx, pos)
-    try:
-        it = items[int(i)]
-    except (ValueError, IndexError):
-        return page(ctx)
-    kind = F[field][1]
-    hint = HINT.get(kind, "")
-    if field == "debt_steps":
-        hint = "Ступени: «5 1000; 10 3000» — доля просрочки в % и сумма"
-    if it["b"] == "mult_debt" and field == "coefs":
-        hint = "Ступени: «10 0,9; 20 0,7» — просрочка выше % → множитель"
-    return ctx.ask("pb_field", f"{F[field][0]} — сейчас {fmt(field, it['p'][field])}.\n{hint}", {"i": int(i), "f": field},
-                   buttons=[[Button("✖️ Отмена", f"pbe:{i}")]])
 
 
 def _parse_num(t):
@@ -641,15 +532,224 @@ def _pairs(text, second_pct=False):
     return sorted(out)
 
 
+
+# ---------- экраны: галочки и «✅ ОК / ✖️ Отмена» (Адам 31.10: никуда не уносит, назад — только ОК или Отмена) ----------
+# Схема: pb[:должность]. Выбор блоков: pbs → галочки pbs:t:<блок> → pbs:ok / pbs:no.
+# Блок: pbe:<блок> → варианты галочками pbe:<блок>:t:<вариант>, цифры pbe:<блок>:f:<вариант>:<поле>,
+# выбор из списка pbe:<блок>:c:<вариант>:<поле>[:<значение>] → pbe:<блок>:ok / pbe:<блок>:no.
+# Черновики — в сессии (pb_sel, pb_blk), до «ОК» схема не меняется.
+
+ORDER = sorted(BRICKS, key=lambda b: (SECTIONS.index(BRICKS[b][0]) if BRICKS[b][0] in SECTIONS else 99, list(BRICKS).index(b)))
+
+
+def _sort(items):
+    """Порядок в схеме: как в каталоге; множители и пределы — в конце (так их и считает движок)."""
+    return sorted(items, key=lambda it: (BRICKS[it["b"]][0] == "Множители и пределы", ORDER.index(it["b"])))
+
+
+def _blocks_for(pos):
+    return [bid for bid in ORDER if pos in BRICKS[bid][3] and variants(bid, pos)]
+
+
+@screen("pb")
+def page(ctx, pos=None):
+    if not _may(ctx):
+        return Reply(text="Конструктор зарплаты — у руководителя и администратора.")
+    pos = cur_pos(ctx, pos)
+    ctx.session.pop("pb_sel", None)
+    ctx.session.pop("pb_blk", None)
+    ctx.save()
+    items = items_of(ctx, pos)
+    title, icon, *_ = POSITIONS[pos]
+    emp, rs = example(ctx, pos, items)
+    total = round(max(sum(r[1] for r in rs), 0)) if rs else 0
+    fixed = sum(r[1] for r in rs if r[0] == "Оклад")
+    v = View("🧱 Конструктор зарплаты", f"{icon} {title}")
+    if emp:
+        kpi_note = ""
+        if pos in SALES:
+            m = ctx.kpi().emp(emp["id"])["sales"]
+            kpi_note = f" · план {_pct(m.pct or 0, 0)}" if m.plan else ""
+        v.tiles([("Пример за месяц", money(total), "good"), ("Оклад", money(fixed), None),
+                 ("Сверх оклада", money(total - fixed), "good" if total - fixed > 0 else None)])
+        v.note(f"Пример: {emp['fio']}{kpi_note} — по цифрам месяца этой фирмы.")
+    cards, used = [], []
+    for bid in ORDER:
+        mine = [it for it in items if it["b"] == bid]
+        if not mine:
+            continue
+        used.append(bid)
+        b = BRICKS[bid]
+        got = [r for r in rs for it in mine if _belongs(it, r)] if rs else []
+        val = sum(r[1] for r in got)
+        lines = [summary(pos, it) for it in mine] + [f"{r[0]}: {r[2]}" for r in got[:3] if r[2]]
+        cards.append(Card(f"{b[1]} {b[2]}", money(val) if got else "", lines,
+                          color="bad" if got and val < 0 else "good" if got and val > 0 else None))
+    if cards:
+        v.cards(cards, title="Из чего складывается")
+    else:
+        v.note("Схема пустая. Нажмите «☑️ Выбрать блоки» и отметьте галочками, что есть у вас.")
+    other = ((ctx.session.get("pay") or {}).get("other") or "").strip()
+    if other:
+        v.note(f"✍️ По-своему: {other} — посмотрим при подключении.")
+    kb = [[Button("☑️ Выбрать блоки", "pbs")]]
+    kb += rows([Button(f"⚙️ {BRICKS[bid][2]}", f"pbe:{bid}") for bid in used], 2)
+    tail = [Button("↺ Как было", "pbr"), Button("🧹 С нуля", "pbx")]
+    if ctx.demo:
+        tail.append(Button("✍️ У нас по-другому", "sw:py:other"))
+    kb.append(tail)
+    if ctx.demo:
+        kb.append([Button("📋 В анкету", "cd")])
+    top = Reply(text="Для кого схема:", buttons=[[Button(("● " if p == pos else "") + POSITIONS[p][1] + " " + POSITIONS[p][0], f"pb:{p}")
+                                                  for p in POSITIONS]])
+    return [top, Reply(view=v, buttons=kb)]
+
+
+# ----- выбор блоков галочками -----
+
+@screen("pbs")
+def select(ctx, act=None, bid=None):
+    if not _may(ctx):
+        return page(ctx)
+    pos = cur_pos(ctx)
+    avail = _blocks_for(pos)
+    sel = ctx.session.get("pb_sel")
+    if sel is None or act is None:
+        sel = sorted({it["b"] for it in items_of(ctx, pos)}, key=ORDER.index)
+    if act == "t" and bid in avail:
+        sel = [x for x in sel if x != bid] if bid in sel else sorted(sel + [bid], key=ORDER.index)
+    if act == "no":
+        return page(ctx)
+    if act == "ok":
+        items = items_of(ctx, pos)
+        keep = [it for it in items if it["b"] in sel]
+        for b in sel:
+            if not any(it["b"] == b for it in keep):
+                keep.append(brick(b, variants(b, pos)[0][0]))
+        _save(ctx, pos, _sort(keep))
+        return page(ctx)
+    ctx.session["pb_sel"] = sel
+    ctx.save()
+    v = View("☑️ Выбрать блоки", f"{POSITIONS[pos][1]} {POSITIONS[pos][0]}")
+    v.note("Отметьте, что есть у вас, и нажмите «ОК». Чего у фирмы нет — не отмечайте. Цифры — потом, внутри каждого блока.")
+    kb = [[Button(f"{'☑' if b in sel else '☐'} {BRICKS[b][1]} {BRICKS[b][2]}", f"pbs:t:{b}")] for b in avail]
+    kb.append([Button("✅ ОК", "pbs:ok"), Button("✖️ Отмена", "pbs:no")])
+    return Reply(view=v, buttons=kb)
+
+
+# ----- блок: варианты галочками и цифры -----
+
+def _draft(ctx, bid, fresh=False):
+    pos = cur_pos(ctx)
+    d = ctx.session.get("pb_blk")
+    if fresh or not d or d.get("b") != bid:
+        d = {"b": bid, "items": copy.deepcopy([it for it in items_of(ctx, pos) if it["b"] == bid])}
+        ctx.session["pb_blk"] = d
+        ctx.save()
+    return d
+
+
+def _short(item):
+    if item["b"] in ("piece", "cut"):
+        return UNITS.get(item["v"], (item["v"],))[0]
+    var = next((x for x in variants(item["b"]) if x[0] == item["v"]), None)
+    return var[1] if var else item["v"]
+
+
+@screen("pbe")
+def block(ctx, bid=None, act=None, var=None, field=None, val=None):
+    if not _may(ctx) or bid not in BRICKS:
+        return page(ctx)
+    pos = cur_pos(ctx)
+    if act is None:
+        d = _draft(ctx, bid, fresh=True)
+    else:
+        d = _draft(ctx, bid)
+    vs = variants(bid, pos)
+    if act == "no":
+        return page(ctx)
+    if act == "ok":
+        items = [it for it in items_of(ctx, pos) if it["b"] != bid] + d["items"]
+        _save(ctx, pos, _sort(items))
+        return page(ctx)
+    if act == "t" and any(x[0] == var for x in vs):
+        have = [it for it in d["items"] if it["v"] == var]
+        if have:
+            d["items"] = [it for it in d["items"] if it["v"] != var]
+        else:
+            g = group(bid, var)
+            d["items"] = [it for it in d["items"] if group(bid, it["v"]) != g] + [brick(bid, var)]
+        d["items"].sort(key=lambda it: [x[0] for x in vs].index(it["v"]) if any(x[0] == it["v"] for x in vs) else 99)
+        ctx.session["pb_blk"] = d
+        ctx.save()
+    if act == "f":
+        it = next((x for x in d["items"] if x["v"] == var), None)
+        if it and field in it["p"]:
+            kind = F[field][1]
+            hint = HINT.get(kind, "")
+            if field == "debt_steps":
+                hint = "Ступени: «5 1000; 10 3000» — доля просрочки в % и сумма"
+            if bid == "mult_debt" and field == "coefs":
+                hint = "Ступени: «10 0,9; 20 0,7» — просрочка выше % → множитель"
+            return ctx.ask("pb_field", f"{_short(it)} — {F[field][0].lower()}: сейчас {fmt(field, it['p'][field])}.\n{hint}",
+                           {"b": bid, "v": var, "f": field}, buttons=[[Button("✖️ Отмена", f"pbe:{bid}:back")]])
+    if act == "c":
+        it = next((x for x in d["items"] if x["v"] == var), None)
+        kind = F.get(field, ("", ""))[1]
+        opts = METRICS if kind == "metric" else SCOPES if kind == "scope" else {}
+        if it and opts:
+            if val in opts:
+                it["p"][field] = val
+                ctx.session["pb_blk"] = d
+                ctx.save()
+            else:
+                return Reply(text=f"{_short(it)} — {F[field][0].lower()}:",
+                             buttons=[[Button(("● " if it["p"].get(field) == k else "") + t, f"pbe:{bid}:c:{var}:{field}:{k}")
+                                       for k, t in opts.items()], [Button("✖️ Отмена", f"pbe:{bid}:back")]])
+    b = BRICKS[bid]
+    v = View(f"{b[1]} {b[2]}", f"{POSITIONS[pos][0]} · {b[5]}")
+    chosen = {it["v"] for it in d["items"]}
+    multi = bid in ("piece", "cut")
+    if bid in METRIC_BLOCKS and any(not x[0].startswith("pct") for x in vs) and any(x[0].startswith("pct") for x in vs):
+        v.note("Отметьте один вид процента и/или один вид бонуса за план — можно оба, можно ничего. Цифры — кнопками ✏️ ниже.")
+    elif multi:
+        v.note("Отметьте, за что платить, — можно несколько. Цену каждого — кнопками ✏️ ниже.")
+    else:
+        v.note("Отметьте вид. Цифры — кнопками ✏️ ниже.")
+    emp, rs = None, []
+    if d["items"]:
+        emp, rs = example(ctx, pos, _sort([it for it in items_of(ctx, pos) if it["b"] != bid] + d["items"]))
+        got = [r for r in rs for it in d["items"] if _belongs(it, r)]
+        if got and emp:
+            v.lines([f"{r[0]}: {money(r[1])} — {r[2]}" for r in got], title=f"В примере ({emp['fio']})")
+    else:
+        v.note("Ничего не отмечено — после «✅ ОК» блок уберётся из схемы.")
+    kb = [[Button(f"{'☑' if x[0] in chosen else '☐'} {x[1]}", f"pbe:{bid}:t:{x[0]}")] for x in vs]
+    for it in d["items"]:
+        if multi:
+            pre = UNITS.get(it["v"], (it["v"],))[0] + " · "
+        elif bid in METRIC_BLOCKS:
+            pre = ("Процент · " if it["v"].startswith("pct") else "Бонус · ")
+        else:
+            pre = ""
+        for k, val_ in it["p"].items():
+            kind = F[k][1]
+            label = pre + (F[k][0].lower() if pre else F[k][0]) + f": {fmt(k, val_)}"
+            to = f"pbe:{bid}:{'c' if kind in ('metric', 'scope') else 'f'}:{it['v']}:{k}"
+            kb.append([Button(("▸ " if kind in ("metric", "scope") else "✏️ ") + label, to)])
+    kb.append([Button("✅ ОК", f"pbe:{bid}:ok"), Button("✖️ Отмена", f"pbe:{bid}:no")])
+    return Reply(view=v, buttons=kb)
+
+
 @text_input("pb_field")
 def on_field(ctx, text, data):
-    pos = cur_pos(ctx)
-    items = items_of(ctx, pos)
-    i, field = data.get("i", 0), data.get("f", "")
-    try:
-        it = items[i]
-    except IndexError:
+    bid, var, field = data.get("b"), data.get("v"), data.get("f", "")
+    if bid not in BRICKS:
         return page(ctx)
+    d = _draft(ctx, bid)
+    it = next((x for x in d["items"] if x["v"] == var), None)
+    if not it or field not in F:
+        return block(ctx, bid, "back")
     kind = F[field][1]
     try:
         if kind == "money":
@@ -675,72 +775,11 @@ def on_field(ctx, text, data):
         if isinstance(val, float) and val < 0:
             raise ValueError
     except (ValueError, IndexError):
-        return ctx.ask("pb_field", f"Не понял. {HINT.get(kind, '')}", data, buttons=[[Button("✖️ Отмена", f"pbe:{i}")]])
+        return ctx.ask("pb_field", f"Не понял. {HINT.get(kind, '')}", data, buttons=[[Button("✖️ Отмена", f"pbe:{bid}:back")]])
     it["p"][field] = val
-    _save(ctx, pos, items)
-    return edit(ctx, str(i))
-
-
-@screen("pba")
-def catalog(ctx, section=None):
-    pos = cur_pos(ctx)
-    if section is not None and section.isdigit() and int(section) < len(SECTIONS):
-        sec = SECTIONS[int(section)]
-        bs = [(bid, b) for bid, b in BRICKS.items() if b[0] == sec and pos in b[3]]
-        v = View(f"{SECTION_ICON[sec]} {sec}", f"для: {POSITIONS[pos][0].lower()}")
-        v.lines([f"{b[1]} {b[2]} — {b[5]}" for _, b in bs] or ["Для этой должности здесь ничего нет."])
-        return Reply(view=v, buttons=[[Button(f"➕ {b[1]} {b[2]}", f"pbn:{bid}")] for bid, b in bs] + [[Button("‹ Разделы", "pba")]])
-    v = View("➕ Добавить кирпичик", f"{POSITIONS[pos][1]} {POSITIONS[pos][0]}")
-    secs = [(n, s) for n, s in enumerate(SECTIONS) if any(b[0] == s and pos in b[3] for b in BRICKS.values())]
-    v.lines([f"{SECTION_ICON[s]} {s}: " + ", ".join(b[2].lower() for b in BRICKS.values() if b[0] == s and pos in b[3])
-             for _, s in secs])
-    return Reply(view=v, buttons=rows([Button(f"{SECTION_ICON[s]} {s}", f"pba:{n}") for n, s in secs], 2) + [[Button("‹ Вся схема", "pb")]])
-
-
-@screen("pbn")
-def add(ctx, bid):
-    pos = cur_pos(ctx)
-    if bid not in BRICKS or pos not in BRICKS[bid][3]:
-        return catalog(ctx)
-    items = items_of(ctx, pos)
-    if bid in ONCE:                                        # оклад, табель, пределы — по одному на схему
-        have = next((n for n, x in enumerate(items) if x["b"] == bid), None)
-        if have is not None:
-            return edit(ctx, str(have))
-    it = brick(bid)
-    if bid in ("piece", "cut"):
-        units = [u for u, t in UNITS.items() if pos in t[1] and t[3] == (bid == "cut")]
-        if units:
-            it["p"] = {"unit": units[0], "price": UNITS[units[0]][2]}
-    post = [n for n, x in enumerate(items) if x["b"] in ("mult", "mult_debt", "limits", "timesheet")]
-    at = len(items) if BRICKS[bid][0] == "Множители и пределы" else (post[0] if post else len(items))
-    items.insert(at, it)
-    _save(ctx, pos, items)
-    return edit(ctx, str(at))
-
-
-@screen("pbu")
-def up(ctx, i):
-    pos = cur_pos(ctx)
-    items = items_of(ctx, pos)
-    i = int(i)
-    if 0 < i < len(items):
-        items[i - 1], items[i] = items[i], items[i - 1]
-        _save(ctx, pos, items)
-        return edit(ctx, str(i - 1))
-    return edit(ctx, str(i))
-
-
-@screen("pbd")
-def drop(ctx, i):
-    pos = cur_pos(ctx)
-    items = items_of(ctx, pos)
-    try:
-        items.pop(int(i))
-    except (ValueError, IndexError):
-        pass
-    _save(ctx, pos, items)
-    return page(ctx)
+    ctx.session["pb_blk"] = d
+    ctx.save()
+    return block(ctx, bid, "back")
 
 
 @screen("pbr")
