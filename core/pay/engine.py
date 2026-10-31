@@ -13,6 +13,7 @@
   fine     штраф суммой amount
   extra    работа в выходной (+1 оплачиваемый день)
   comment  просто комментарий
+  km       км за день для ГСМ (amount) — вписывает руководитель или сам торговый
 """
 from dataclasses import dataclass, field
 from datetime import date
@@ -20,7 +21,7 @@ from datetime import date
 from core.calendar import in_ramadan
 from core.pay import components as C
 
-DAY_KINDS = {"absent", "truancy", "half", "late", "fine", "extra", "comment"}
+DAY_KINDS = {"absent", "truancy", "half", "late", "fine", "extra", "comment", "km"}
 
 
 @dataclass

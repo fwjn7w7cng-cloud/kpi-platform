@@ -62,6 +62,10 @@
   pool           котёл отдела: price × отгрузки отдела (или rate × продажи отдела), делится по коэффициентам должностей
                  (coefs {часть названия должности: коэф.}) и отработанным дням
   fixed_bonus    cut_unit + cut_price — минус за каждую ошибку (единица сдельной оплаты); hand — «на руки», не в ведомость
+  salary         mode shift — за смену (выходы × amount); advance — оклад как аванс (минус из начисленного)
+  fuel_comp      ГСМ в общую зарплату: mode fixed (amount) | day (price × дни) | km (price × км) | norm (км × l100 / 100 ×
+                 fuel_price); км — из рейсов + вписанные руками (отметка «км» в табеле, торговый — сам за день)
+  limits         name — своё название доплаты («Доплата до оклада»)
   timesheet      свои правила должности: late [[минуты, сумма]], truancy — прогул, fines [[название, сумма]] — свои штрафы,
                  extra_coef — выход в выходной (1 или 2 дня), newbie_free — новичкам без штрафов
 """
@@ -216,8 +220,10 @@ def check(c):
             p.append("per_unit: price — сумма за единицу («4») или rate — доля («3%»)")
     if c.get("scope", "self") not in SCOPES:
         p.append(f"scope «{c.get('scope')}» — self, team, dept или all")
-    if t == "salary" and c.get("mode", "days") not in ("days", "fixed", "calendar"):
-        p.append("salary.mode — days, fixed или calendar")
+    if t == "salary" and c.get("mode", "days") not in ("days", "fixed", "calendar", "shift", "advance"):
+        p.append("salary.mode — days, fixed, calendar, shift или advance")
+    if t == "fuel_comp" and c.get("mode", "fixed") not in ("fixed", "day", "km", "norm"):
+        p.append("fuel_comp.mode — fixed, day, km или norm")
     return p
 
 
@@ -241,6 +247,12 @@ def salary(ctx, emp, c):
     mode = c.get("mode", "days")
     if mode == "fixed":
         return [("Оклад", base, "фиксированный, за месяц")]
+    if mode == "shift":                              # за смену: выходы по табелю × ставка смены
+        days = ctx.worked_days(emp)
+        rate = c.get("amount", 0)
+        return [("За смены", rate * days, f"{_d(days)} смен × {_n(rate)}")]
+    if mode == "advance":                            # оклад как аванс: уже выплачен в месяце — вычитается из начисленного
+        return [("Аванс (выплачен в месяце)", -base, "вычитается из сдельной части")]
     if mode == "calendar":
         import calendar as _cal
         cal = ctx.cal
@@ -838,10 +850,43 @@ def pool(ctx, emp, c):
     return [(c.get("name") or "Котёл отдела", mine, f"{what} = {_n(total)}, доля {_p(w.get(emp['id'], 0) / allw if allw else 0, 1)}")]
 
 
+def km_of(ctx, emp):
+    """Км за месяц для ГСМ: из рейсов (логистика) + вписанные руками (табель, отметка «км»; торговые — сами за день)."""
+    manual = sum(r["amount"] or 0 for r in ctx._ts.get(emp["id"], []) if r["kind"] == "km")
+    fn = UNITS.get("km")
+    trips = 0.0
+    if fn and ctx.cfg.has_module("logistics"):
+        try:
+            trips = fn(ctx, emp) or 0
+        except Exception:                          # noqa: BLE001 — рейсов нет
+            trips = 0
+    return trips + manual, trips, manual
+
+
+def fuel_comp(ctx, emp, c):
+    """ГСМ — в общую зарплату: fixed — фикс в месяц; day — за отработанный день; km — ₽ за км; norm — км × л/100 × цена литра."""
+    mode = c.get("mode", "fixed")
+    title = c.get("name") or "ГСМ"
+    if mode == "fixed":
+        return [(title, c.get("amount", 0), "фикс в месяц")]
+    if mode == "day":
+        days = ctx.worked_days(emp)
+        return [(title, days * c.get("price", 0), f"{_d(days)} дн. × {_n(c.get('price', 0))}")]
+    km, trips, manual = km_of(ctx, emp)
+    src = " + ".join(x for x in (f"рейсы {_d(round(trips))}" if trips else "", f"вписано {_d(round(manual))}" if manual else "") if x)
+    if not km:
+        return [(title, 0, "км за месяц пока не вписаны")]
+    if mode == "norm":
+        liters = km * c.get("l100", 10) / 100
+        return [(title, liters * c.get("fuel_price", 0), f"{_d(round(km))} км ({src}) × {_d(c.get('l100', 10))} л/100 = "
+                 f"{_d(round(liters))} л × {_n(c.get('fuel_price', 0))}")]
+    return [(title, km * c.get("price", 0), f"{_d(round(km))} км ({src}) × {_d(c.get('price', 0))} ₽")]
+
+
 # Кубики, которые считаются после остальных: множитель и пределы. Строка расчёта помнит свой кубик (kind).
 PERCENT_KINDS = {"sales_percent"}
 BONUS_KINDS = {"plan_bonus", "fixed_bonus", "debt_bonus", "new_clients", "rank_bonus", "per_unit", "seniority",
-               "growth_bonus", "kpi_card", "orders", "team_days", "period_bonus", "awards", "pool"}
+               "growth_bonus", "kpi_card", "orders", "team_days", "period_bonus", "awards", "pool", "fuel_comp"}
 PERCENT_KINDS |= {"old_debt"}
 
 
@@ -886,7 +931,7 @@ def limits(ctx, emp, c, rows):
     total = sum(r[1] for r in rows) + sum(r[1] for r in out)
     mn = c.get("min_total")
     if mn and total < mn:
-        out.append(("Доплата до гарантированного минимума", mn - total, f"минимум {_n(mn)}"))
+        out.append((c.get("name") or "Доплата до гарантированного минимума", mn - total, f"минимум {_n(mn)}"))
     return out
 
 
@@ -897,7 +942,7 @@ BUILTIN = {"new_clients": new_clients, "discount_penalty": discount_penalty, "ra
            "seniority": seniority, "salary": salary, "sales_percent": sales_percent, "plan_bonus": plan_bonus, "fixed_bonus": fixed_bonus,
            "debt_penalty": debt_penalty, "debt_bonus": debt_bonus, "timesheet": timesheet, "per_unit": per_unit,
            "growth_bonus": growth_bonus, "kpi_card": kpi_card, "orders": orders, "team_days": team_days, "old_debt": old_debt,
-           "period_bonus": period_bonus, "awards": awards, "pool": pool}
+           "period_bonus": period_bonus, "awards": awards, "pool": pool, "fuel_comp": fuel_comp}
 
 
 def _n(x):

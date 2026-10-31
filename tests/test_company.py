@@ -210,7 +210,7 @@ class Maximum(Base):
     def test_locks_below_editions(self):
         self.role(42, "owner", ed="control")
         r = self.app.press(42, "custom")
-        self.assertIn("Максимум", r[0].view.subtitle)
+        self.assertIn("Дополнительно", r[0].view.subtitle)
         self.role(43, "owner", ed="business")
         self.assertIn("Кадры и офис", self.app.press(43, "hr")[0].view.subtitle)
 

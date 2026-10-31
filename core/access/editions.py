@@ -36,15 +36,15 @@ MODULES = {
     "kpi":          ("KPI-ядро: план/факт, рейтинг, карточки, сводка", "sales", "start"),
     "reminders":    ("Напоминания и алерты", "any", None),
     "debts":        ("Дебиторка", "sales", "start"),
-    "payroll":      ("Расчёт зарплаты по отчётам и табелю", "any", None),
+    "payroll":      ("Зарплата: табель, оклад, сдельная, ГСМ, бонусы, штрафы", "any", None),
     "achievements": ("Достижения и челленджи", "sales", "business"),
     "staff":        ("Кабинеты склада, водителей, офиса", "ops", None),
     "tasks":        ("Задачи от руководителя", "sales", "business"),
     "clients":      ("Клиенты: спящие, падают, растут", "sales", "business"),
-    "route":        ("Маршрут и отчёт за день", "sales", "business"),
+    "route":        ("Маршруты торговых и отчёт за день", "sales", "business"),
     "quiz":         ("Тесты и обучение новичков", "sales", "business"),
     "plans":        ("Утверждение планов", "sales", "control"),
-    "approval":     ("Цепочка утверждения зарплаты и реестр", "sales", "control"),
+    "approval":     ("Утверждение зарплаты и ведомость", "sales", "control"),
     "audit":        ("Журнал изменений", "sales", "control"),
     "watchdog":     ("«Ночной сторож» аномалий", "sales", "control"),
     "forecast":     ("Прогноз плана и сравнение отделов", "sales", "control"),
@@ -54,7 +54,7 @@ MODULES = {
     "warehouse":    ("Склад: приёмка поставок, отгрузки, ошибки", "stock", None),
     "returns":      ("Возвраты и чья ошибка", "stock", None),
     "logistics":    ("Логистика: рейсы, «Мой день» водителя, сдельная оплата", "logistics", None),
-    "fuel":         ("ГСМ водителей: топливо против карты", "logistics", None),
+    "fuel":         ("Контроль топлива против топливной карты", "logistics", None),
     "hr":           ("Кадры: приём, перевод, увольнение, приказы", "office", None),
     "branding":     ("Свой бренд: логотип и название на значке, свой адрес", "max", None),
     "branches":     ("Несколько филиалов и юрлиц в одном приложении", "max", None),
@@ -205,7 +205,10 @@ def package_of(module):
 
 
 def lock_text(module):
-    """Подпись на закрытом экране: «Пакет «Склад и закупки»» / «Продажи — уровень Бизнес» / «Любой пакет»."""
+    """Подпись на закрытом экране: отдел функции (31.10 — платим за функции)."""
+    if module in FUNCS:
+        icon, gtitle = FUNC_GROUPS[FUNCS[module][0]]
+        return f"Функция · {icon} {gtitle}"
     pkg, level = package_of(module)
     if pkg == "sales":
         return f"Продажи — уровень {LEVELS[level]} и выше"
@@ -243,3 +246,89 @@ def upgrade(packages, code):
     elif code in p:
         p[code] = not p[code]
     return p
+
+
+# ---------- функции (Адам 31.10: платим только за функции; отдел — папка, настройки внутри функции — бесплатно) ----------
+# код модуля: (отдел для группировки, цена по умолчанию ₽/мес). Отдел подключён, если в нём выбрана хоть одна функция.
+FUNC_GROUPS = {"all": ("💰", "Все отделы"), "sales": ("📈", "Продажи"), "stock": ("📦", "Склад и закупки"),
+               "logistics": ("🚚", "Логистика"), "office": ("👤", "Кадры и офис"), "max": ("⭐", "Дополнительно")}
+FUNCS = {
+    "payroll": ("all", 3000), "approval": ("all", 1000),
+    "kpi": ("sales", 3000), "route": ("sales", 2000), "debts": ("sales", 2000), "clients": ("sales", 2000),
+    "tasks": ("sales", 1000), "quiz": ("sales", 1000), "achievements": ("sales", 1000), "plans": ("sales", 1000),
+    "forecast": ("sales", 1000), "call_today": ("sales", 1000), "watchdog": ("sales", 1000), "formulas": ("sales", 2000),
+    "stock": ("stock", 3000), "warehouse": ("stock", 2000), "returns": ("stock", 1000),
+    "logistics": ("logistics", 3000), "fuel": ("logistics", 1000),
+    "hr": ("office", 2000),
+    "branding": ("max", 10000), "branches": ("max", 10000), "custom": ("max", 20000),
+}
+FUNC_SHORT = {
+    "payroll": "Зарплата: табель, оклад, ГСМ", "approval": "Утверждение зарплаты",
+    "kpi": "План и факт, рейтинг", "route": "Маршруты и отчёт дня", "debts": "Дебиторка", "clients": "Клиенты",
+    "tasks": "Задачи", "quiz": "Тесты и обучение", "achievements": "Достижения", "plans": "Утверждение планов",
+    "forecast": "Прогноз", "call_today": "Кому позвонить", "watchdog": "Ночной сторож", "formulas": "Свои формулы",
+    "stock": "Закупки и заказы", "warehouse": "Склад: приёмка", "returns": "Возвраты", "logistics": "Рейсы водителей",
+    "fuel": "Контроль топлива", "hr": "Кадры и приказы", "branding": "Свой бренд", "branches": "Филиалы",
+    "custom": "Функции на заказ",
+}
+FREE = {"reminders", "audit", "staff"}          # бесплатно у всех (кабинеты — когда подключён отдел вне продаж)
+
+
+def functions_of(packages):
+    """Платные функции, которые даёт набор пакетов (готовые наборы так и заданы)."""
+    return {m for m in modules_of(packages) if m in FUNCS}
+
+
+def packages_of(functions):
+    """Набор пакетов по выбранным функциям: отдел включён, если в нём есть функция; уровень продаж — по самой старшей."""
+    fs = set(functions or ())
+    out = {code: False for code in PACKAGES}
+    out["sales"] = None
+    levels = [MODULES[f][2] for f in fs if f in MODULES and MODULES[f][1] == "sales" and MODULES[f][2]]
+    if any(FUNCS.get(f, ("",))[0] == "sales" for f in fs):
+        out["sales"] = max(levels, key=LEVEL_ORDER.index) if levels else "start"
+    for code in ("stock", "logistics", "office", "max"):
+        out[code] = any(FUNCS.get(f, ("",))[0] == code for f in fs)
+    if not any(v for k, v in out.items() if k != "max") and "payroll" in fs:
+        pass
+    return out
+
+
+def modules_from(functions, packages):
+    """Модули клиента, если функции выбраны поштучно: выбранные + бесплатные (кабинеты — при отделе вне продаж)."""
+    out = {f for f in functions if f in MODULES}
+    out |= {"reminders", "audit"}
+    p = normalize(packages)
+    if p["stock"] or p["logistics"] or p["office"]:
+        out.add("staff")
+    for need, deps in REQUIRES.items():
+        if need in out:
+            out |= deps
+    return out
+
+
+def toggle_function(functions, code):
+    """Отметить / снять функцию с учётом связей: включили «Склад» — включатся «Закупки»; сняли «Закупки» — снимется «Склад»."""
+    fs = set(functions)
+    if code in fs:
+        fs.discard(code)
+        fs -= {f for f, deps in REQUIRES.items() if code in deps}
+    else:
+        fs.add(code)
+        fs |= {d for d in REQUIRES.get(code, ()) if d in FUNCS}
+    return fs
+
+
+def preset_functions(code):
+    return functions_of(PRESETS[code]["packages"])
+
+
+def funcs_title(base, functions):
+    """«Старт + Склад: приёмка …» — набор, с которого начали, и что добавили или убрали (коротко)."""
+    if base not in PRESETS:
+        return f"своих функций: {len(functions)}"
+    have, was = set(functions), preset_functions(base)
+    if have == was:
+        return PRESETS[base]["title"]
+    plus, minus = len(have - was), len(was - have)
+    return PRESETS[base]["title"] + (f" + {plus}" if plus else "") + (f" − {minus}" if minus else "") + " функц."

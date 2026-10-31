@@ -51,7 +51,7 @@ class ClientCard(Base):
         c = O.card(self.office(), CLIENT)
         self.assertEqual(c["by"], str(PARTNER))
         self.assertEqual(c["f"]["decider"], "Ахмед, Стройбаза, 8 928 000 00 00")   # заметка партнёра из приглашения
-        self.assertEqual((c["set"]["title"], c["set"]["counts"]["sales"], c["set"]["monthly"]), ("Бизнес", 6, 14200))
+        self.assertEqual((c["set"]["title"], c["set"]["counts"]["sales"], c["set"]["monthly"]), ("Бизнес", 6, 16800))
         self.app.press(CLIENT, "cdf:200:company")
         self.app.text(CLIENT, "Стройбаза")
         self.app.press(CLIENT, "cdv:200:onec"); self.app.press(CLIENT, "cdv:200:onec:t:4"); self.app.press(CLIENT, "cdv:200:onec:ok")                                   # «Не 1С»

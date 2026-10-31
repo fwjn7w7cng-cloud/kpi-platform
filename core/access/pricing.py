@@ -1,6 +1,7 @@
-"""Цены конструктора: за пакет в месяц + за каждого человека в подключённых отделах, подключение — один раз.
+"""Цены конструктора (Адам 31.10): платим только за функции; отдел — папка; настройки внутри функции — бесплатно.
 
-  в месяц      Σ по пакетам (пакет + люди × цена за человека) − скидка «все четыре отдела» + «Максимум»
+  в месяц      Σ цен выбранных функций + люди в подключённых отделах × цена за человека − скидка «все четыре отдела»
+               + дополнительное (бренд, филиалы, функции на заказ — без скидки)
   подключение  месячная оплата × setup_mult (1,5), но не меньше setup_min (20 000), до тысячи — платится один раз
                (Адам 30.10: подключение должно быть выше месячной оплаты)
   за год       −disc_year % к месячной сумме
@@ -10,20 +11,18 @@
 from core.access import editions as E
 
 # код, подпись, стандарт, единица
-PRICES = [
-    ("sales_start",         "Продажи Старт — пакет",            5000,  "₽/мес"),
-    ("sales_start_user",    "Продажи Старт — за человека",      500,   "₽/мес за чел."),
-    ("sales_business",      "Продажи Бизнес — пакет",           10000, "₽/мес"),
-    ("sales_business_user", "Продажи Бизнес — за человека",     700,   "₽/мес за чел."),
-    ("sales_control",       "Продажи Премиум — пакет",          15000, "₽/мес"),
-    ("sales_control_user",  "Продажи Премиум — за человека",    1000,  "₽/мес за чел."),
-    ("stock",               "Склад и закупки — пакет",          5000,  "₽/мес"),
-    ("stock_user",          "Склад и закупки — за человека",    500,   "₽/мес за чел."),
-    ("logistics",           "Логистика — пакет",                5000,  "₽/мес"),
-    ("logistics_user",      "Логистика — за человека",          500,   "₽/мес за чел."),
-    ("office",              "Кадры и офис — пакет",             3000,  "₽/мес"),
-    ("office_user",         "Кадры и офис — за человека",       300,   "₽/мес за чел."),
-    ("max",                 "Максимум — пакет, до 3 функций",   40000, "₽/мес"),
+# Цены за функции (Адам 31.10): отдел — папка, платим только за функции; настройки внутри функции — бесплатно.
+# Код цены функции — f_<код модуля>; подписи и отделы — editions.FUNCS / MODULES.
+def _func_prices():
+    out = []
+    for code, (grp, price) in E.FUNCS.items():
+        icon, gtitle = E.FUNC_GROUPS[grp]
+        out.append((f"f_{code}", f"{icon} {gtitle} · {E.FUNC_SHORT[code]}", price, "₽/мес"))
+    return out
+
+
+PRICES = _func_prices() + [
+    ("user",                "👥 За человека в приложении (кроме директора и админа)", 300, "₽/мес за чел."),
     ("custom_extra",        "Функция на заказ сверх трёх",      15000, "₽ за штуку"),
     ("setup_mult",          "Подключение — во сколько раз выше месяца", 1.5, "× месячной оплаты"),
     ("setup_min",           "Подключение — не меньше",          20000, "₽ один раз"),
@@ -86,40 +85,45 @@ def fmt(x):
     return s
 
 
-def quote(packages, counts, pr, year=False):
-    """Расчёт: {lines, dept_sum, discount, monthly, monthly_year, year_total, setup_lines, setup, people, all_depts}.
-    lines — [(подпись, сумма в месяц, пояснение)] по пакетам."""
-    p = E.normalize(packages)
+def quote(sel, counts, pr, year=False):
+    """Расчёт по функциям: {lines, dept_sum, discount, monthly, monthly_year, year_total, setup_lines, setup, people,
+    all_depts, functions, packages}. sel — набор функций (множество / список) или, по-старому, словарь пакетов.
+    lines — [(подпись, сумма в месяц, пояснение)]: отделы с их функциями, люди, дополнительное."""
+    funcs = E.functions_of(sel) if isinstance(sel, dict) else {f for f in (sel or ()) if f in E.FUNCS}
+    p = E.packages_of(funcs)
     counts = counts or {}
     lines, setup_lines = [], []
-    dept_sum, n_pkgs, people = 0.0, 0, 0
-    for code in ("sales", "stock", "logistics", "office"):
-        v = p[code]
-        if not v:
+    dept_sum = 0.0
+    for grp, (icon, gtitle) in E.FUNC_GROUPS.items():
+        if grp == "max":
             continue
-        key = f"sales_{v}" if code == "sales" else code
-        base, per = pr[key], pr[f"{key}_user"]
-        n = int(counts.get(code, 0))
-        amount = base + per * n
-        title = E.PACKAGES[code]["title"] + (f" · {E.LEVELS[v]}" if code == "sales" else "")
-        lines.append((f"{E.PACKAGES[code]['icon']} {title}", amount,
-                      f"{fmt(base)} + {n} чел. × {fmt(per)}" if n else f"{fmt(base)}, людей пока нет"))
+        fs = [f for f in E.FUNCS if f in funcs and E.FUNCS[f][0] == grp]
+        if not fs:
+            continue
+        amount = sum(pr[f"f_{f}"] for f in fs)
+        lines.append((f"{icon} {gtitle}", amount, f"{len(fs)} функц.: " + ", ".join(E.FUNC_SHORT[f] for f in fs)))
         dept_sum += amount
-        n_pkgs += 1
-        people += n
-    all_depts = n_pkgs == 4
+    people = sum(int(counts.get(d, 0)) for d in ("sales", "stock", "logistics", "office") if p.get(d))
+    if people:
+        lines.append(("👥 Люди в приложении", people * pr["user"], f"{people} чел. × {fmt(pr['user'])}"))
+        dept_sum += people * pr["user"]
+    all_depts = all(p.get(d) for d in ("sales", "stock", "logistics", "office"))
     discount = dept_sum * pr["disc_all"] / 100 if all_depts else 0.0
-    max_sum = pr["max"] if p["max"] else 0.0
-    if p["max"]:
-        lines.append((f"{E.PACKAGES['max']['icon']} {E.PACKAGES['max']['title']}", max_sum, "бренд, филиалы, до 3 функций на заказ"))
+    extra = [f for f in E.FUNCS if f in funcs and E.FUNCS[f][0] == "max"]
+    max_sum = sum(pr[f"f_{f}"] for f in extra)
+    if extra:
+        icon, gtitle = E.FUNC_GROUPS["max"]
+        lines.append((f"{icon} {gtitle}", max_sum, ", ".join(E.FUNC_SHORT[f] for f in extra)))
     monthly = rnd(dept_sum - discount + max_sum)
     monthly_year = rnd(monthly * (1 - pr["disc_year"] / 100))
     setup = 0
-    if n_pkgs or p["max"]:
+    if funcs:
         raw = monthly * pr["setup_mult"]
         setup = max(int(round(raw / 1000)) * 1000, int(pr["setup_min"]))
         setup_lines.append((f"Месячная оплата × {fmt(pr['setup_mult'])}", setup) if setup > pr["setup_min"] else
                            (f"Минимум (месяц × {fmt(pr['setup_mult'])} = {fmt(rnd(raw))})", setup))
     return {"lines": lines, "dept_sum": dept_sum, "discount": discount, "all_depts": all_depts, "monthly": monthly,
             "monthly_year": monthly_year, "year": bool(year), "year_total": monthly_year * 12, "setup_lines": setup_lines,
-            "setup": setup, "people": people, "packages": p, "trial_days": int(pr["trial_days"]), "empty": not n_pkgs and not p["max"]}
+            "setup": setup, "people": people, "packages": p, "functions": funcs, "trial_days": int(pr["trial_days"]),
+            "empty": not funcs}
+

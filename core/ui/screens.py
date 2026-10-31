@@ -555,7 +555,7 @@ def view_as(ctx, emp_id=None):
 # ======================= табель =======================
 
 TS_KINDS = {"late": "⏰ Опоздание", "absent": "✗ Пропуск", "truancy": "🚫 Прогул", "half": "½ Полдня",
-            "extra": "💼 Работал в выходной", "fine": "💸 Штраф", "comment": "💬 Комментарий"}
+            "extra": "💼 Работал в выходной", "fine": "💸 Штраф", "comment": "💬 Комментарий", "km": "🚗 Км за день (ГСМ)"}
 
 
 @screen("ts")
@@ -591,6 +591,8 @@ def _ts_label(r):
         s += f" {r['minutes']} мин"
     if r["kind"] == "fine" and r["amount"]:
         s += f" {money(r['amount'])}"
+    if r["kind"] == "km":
+        s = f"🚗 {r['amount']:g} км"
     if r["note"]:
         s += f" · {r['note']}"
     return s
@@ -654,9 +656,10 @@ def ts_add(ctx, emp_id, act=None, value=None):
             if kind == "fine" and (d["fine"] or "").isdigit() and int(d["fine"]) < len(fines):
                 name, amount = fines[int(d["fine"])]
                 ctx.db.add_timesheet(day, int(emp_id), "fine", amount=amount, note=name, who=ctx.author())
-            elif kind in ("fine", "comment"):
-                return ctx.ask("ts_text", "Напишите " + ("сумму и причину: «500 курил в зале»" if kind == "fine" else "комментарий"),
-                               {"emp": int(emp_id), "kind": kind, "day": day})
+            elif kind in ("fine", "comment", "km"):
+                prompt = {"fine": "сумму и причину: «500 курил в зале»", "comment": "комментарий",
+                          "km": "сколько км проехал за день — числом, например 120"}[kind]
+                return ctx.ask("ts_text", "Напишите " + prompt, {"emp": int(emp_id), "kind": kind, "day": day})
             else:
                 ctx.db.add_timesheet(day, int(emp_id), kind, minutes=d["min"] if kind == "late" else 0, who=ctx.author())
             ctx.db.audit(ctx.author(), "timesheet", f"{emp['fio']} {day} {kind}")
@@ -681,7 +684,15 @@ def ts_add(ctx, emp_id, act=None, value=None):
 @text_input("ts_text")
 def on_ts_text(ctx, text, data):
     amount, note = 0, text.strip()
-    if data["kind"] == "fine":
+    if data["kind"] == "km":
+        try:
+            amount = float(note.replace(" ", "").replace(",", ".").replace("км", ""))
+            if not 0 < amount < 3000:
+                raise ValueError
+        except ValueError:
+            return ctx.ask("ts_text", "Нужно число км, например 120.", data)
+        note = ""
+    elif data["kind"] == "fine":
         parts = note.split(maxsplit=1)
         try:
             amount = float(parts[0].replace(" ", "").replace(",", "."))
@@ -760,19 +771,13 @@ def lock(ctx, module):
     title = E.MODULES.get(module, (module,))[0]
     v = View(f"🔒 {title}", E.lock_text(module) if module in E.MODULES else "")
     lines = [LOCK_TEXT.get(module, "Этот раздел подключается отдельно.")]
-    if module in E.MODULES:
-        pkg, level = E.package_of(module)
+    if module in E.FUNCS:
         pr = P.prices(ctx.office)
-        if pkg == "sales":
-            lines.append(f"Пакет «Продажи» уровня «{E.LEVELS[level]}»: {P.fmt(pr['sales_' + level])} ₽ в месяц "
-                         f"+ {P.fmt(pr['sales_' + level + '_user'])} ₽ за человека.")
-        elif pkg == "max":
-            lines.append(f"Пакет «Максимум»: {P.fmt(pr['max'])} ₽ в месяц — всё сразу, вместе с функциями на заказ.")
-        elif pkg in ("stock", "logistics", "office"):
-            lines.append(f"Пакет «{E.PACKAGES[pkg]['title']}»: {P.fmt(pr[pkg])} ₽ в месяц "
-                         f"+ {P.fmt(pr[pkg + '_user'])} ₽ за человека в отделе.")
-        elif pkg == "ops":
-            lines.append("Входит в пакеты «Склад и закупки», «Логистика» и «Кадры и офис».")
+        icon, gtitle = E.FUNC_GROUPS[E.FUNCS[module][0]]
+        lines.append(f"Функция «{title}» ({icon} {gtitle}): {P.fmt(pr['f_' + module])} ₽ в месяц. "
+                     "Платите только за неё — настройки внутри бесплатно.")
+    elif module in E.FREE:
+        lines.append("Бесплатно — появляется вместе с любым отделом вне продаж.")
     v.lines(lines)
     kb = []
     if ctx.demo:

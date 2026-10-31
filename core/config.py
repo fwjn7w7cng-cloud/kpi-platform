@@ -72,11 +72,23 @@ class ClientConfig:
     holidays: dict = field(default_factory=dict)
     positions: list = field(default_factory=list)
     raw: dict = field(repr=False, default_factory=dict)
+    functions: object = None     # выбранные поштучно функции (31.10) или None — тогда по пакетам
 
     @property
     def modules(self):
-        """Все модули, доступные клиенту по его набору пакетов."""
+        """Все модули, доступные клиенту: по выбранным функциям, а если их нет — по набору пакетов."""
+        if self.functions is not None:
+            return E.modules_from(self.functions, self.packages)
         return E.modules_of(self.packages)
+
+    def with_functions(self, functions):
+        """Копия анкеты с функциями поштучно (демо: окно набора; клиент: functions в анкете)."""
+        import copy
+        c = copy.copy(self)
+        c.functions = {f for f in functions if f in E.FUNCS}
+        c.packages = E.packages_of(c.functions)
+        c.edition = E.preset_of(c.packages) if E.functions_of(c.packages) == c.functions else E.CUSTOM
+        return c
 
     def has_module(self, code):
         return code in self.modules
@@ -88,6 +100,7 @@ class ClientConfig:
         """Копия анкеты с другим набором пакетов (демо: конструктор)."""
         import copy
         c = copy.copy(self)
+        c.functions = None
         c.packages = E.normalize(packages)
         c.edition = E.preset_of(c.packages)
         return c
@@ -104,6 +117,9 @@ class ClientConfig:
 
     @property
     def set_title(self):
+        if self.functions is not None:
+            code = next((k for k in E.ORDER if E.preset_functions(k) == set(self.functions)), None)
+            return E.PRESETS[code]["title"] if code else f"свой набор · функций {len(self.functions)}"
         return E.title_of(self.packages)
 
     def role_title(self, role):
@@ -199,7 +215,7 @@ def _packages(raw, p):
         if pkg in E.PACKAGES and pkg != "sales":
             base[pkg] = True
     packages = E.normalize(base)
-    if not any(packages.values()):
+    if not any(packages.values()) and not raw.get("functions"):
         p.append("не подключён ни один пакет: укажите edition (start / business / control / company / max) или packages")
     return packages, E.preset_of(packages)
 
@@ -385,13 +401,20 @@ def parse(client_id, raw, hooks=None):
         if val and not _is_time(str(val)):
             p.append(f"schedule.{key} «{val}» — время в виде 08:00")
 
+    funcs = raw.get("functions")
+    if funcs is not None:
+        if not isinstance(funcs, list) or any(f not in E.FUNCS for f in funcs):
+            p.append(f"functions — список функций: {', '.join(E.FUNCS)}")
     if p:
         raise ConfigError(client_id, p)
-    return ClientConfig(
+    cfg = ClientConfig(
         id=client_id, name=name, industry=industry, timezone=tz, edition=edition, packages=packages,
         weekend=weekend, salary_days=salary_days, departments=depts, teams=teams, role_titles=titles,
         lines=lines, source=source, pay=pay, holidays={str(k): v for k, v in holidays.items()},
         positions=positions, raw=raw)
+    if funcs is not None:                     # функции поштучно (31.10) — важнее пакетов
+        cfg = cfg.with_functions(funcs)
+    return cfg
 
 
 def _is_time(s):

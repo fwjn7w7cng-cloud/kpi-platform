@@ -47,7 +47,7 @@ class Demo(unittest.TestCase):
         self.assertIn("💵 Долги", labels)                       # дебиторка — уже в Старте
         self.assertIn("💰 Зарплата", kb)                        # и зарплата
         r = self.app.press(10, "cli")                          # закрытый экран не открывается — объясняет
-        self.assertIn("уровень Бизнес", r[0].view.subtitle)
+        self.assertIn("Функция · 📈 Продажи", r[0].view.subtitle)
 
     def test_long_home_is_grouped(self):
         self.app.press(15, "sw:ed:control")

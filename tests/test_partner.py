@@ -73,9 +73,9 @@ class Partner(unittest.TestCase):
         self.assertIn("администратора", self.app.press(PARTNER, "gst")[0].text)
         self.assertIn("администратора", self.app.press(PARTNER, "ptl")[0].text)
         self.app.press(PARTNER, "sw:role:admin")
-        self.app.press(PARTNER, "pre:stock")
+        self.app.press(PARTNER, "pre:f_stock")
         self.app.text(PARTNER, "1")
-        self.assertEqual(P.prices(self.app.office())["stock"], P.DEFAULT["stock"])
+        self.assertEqual(P.prices(self.app.office())["f_stock"], P.DEFAULT["f_stock"])
         g = self.guest(PARTNER)
         g2 = dict(self.app.office().get("demo_guests"))
         g2[str(STRANGER)] = {"status": "on", "till": "2026-11-05", "by": "999"}

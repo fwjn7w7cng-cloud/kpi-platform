@@ -34,10 +34,15 @@ def counts_of(ctx):
     return {k: hc.get(k, 0) for k in DEPT_ORDER}
 
 
-def quote_of(ctx, packages=None, year=None, counts=None):
+def funcs_of(cfg):
+    """Функции, которые сейчас подключены: выбранные поштучно или по набору пакетов."""
+    return set(cfg.functions) if cfg.functions is not None else E.functions_of(cfg.packages)
+
+
+def quote_of(ctx, sel=None, year=None, counts=None):
     if year is None:
         year = bool(ctx.session.get("year")) if ctx.demo else False
-    return P.quote(packages if packages is not None else ctx.cfg.packages, counts or counts_of(ctx), P.prices(ctx.office), year=year)
+    return P.quote(sel if sel is not None else funcs_of(ctx.cfg), counts or counts_of(ctx), P.prices(ctx.office), year=year)
 
 
 def quote_view(ctx, q, title, sub):
@@ -45,32 +50,27 @@ def quote_view(ctx, q, title, sub):
     v = View(title, sub)
     if q["empty"]:
         v.tiles([("Подключение, один раз", "—", None), ("Дальше, в месяц", "—", None)])
-        v.note("Ничего не выбрано — включите хотя бы один пакет.")
+        v.note("Ничего не выбрано — отметьте хотя бы одну функцию.")
         return v
     tiles = [("Подключение, один раз", money(q["setup"]), None), ("Дальше, в месяц", money(q["monthly"]), "good")]
     if q["year"]:
         tiles.append(("За год: в месяц", money(q["monthly_year"]), "good"))
     v.tiles(tiles)
-    counts = counts_of(ctx)
     pr = P.prices(ctx.office)
-    rs = []
-    codes = [c for c in DEPT_ORDER if q["packages"][c]]
-    for (label, amount, detail), code in zip(q["lines"], codes):
-        rs.append(Row([label, f"{counts.get(code, 0)} чел.", money(amount, "")], sub=detail))
+    rs = [Row([label, money(amount, "")], sub=detail) for label, amount, detail in q["lines"] if not label.startswith("⭐")]
     if q["discount"]:
-        rs.append(Row(["Скидка: все 4 отдела", f"−{P.fmt(pr['disc_all'])}%", Cell("−" + money(q["discount"], ""), "good")]))
-    if q["packages"]["max"]:
-        label, amount, detail = q["lines"][-1]
-        rs.append(Row([label, "—", money(amount, "")], sub=detail))
-    rs.append(Row([Cell("Итого в месяц", bold=True), "", Cell(money(q["monthly"], ""), bold=True)]))
-    v.table(["Что подключено", "Людей", "₽ в месяц"], rs)
+        rs.append(Row([f"Скидка: все 4 отдела −{P.fmt(pr['disc_all'])}%", Cell("−" + money(q["discount"], ""), "good")]))
+    rs += [Row([label, money(amount, "")], sub=detail) for label, amount, detail in q["lines"] if label.startswith("⭐")]
+    rs.append(Row([Cell("Итого в месяц", bold=True), Cell(money(q["monthly"], ""), bold=True)]))
+    v.table(["Что подключено", "₽ в месяц"], rs)
     srows = [Row([a, money(b, "")]) for a, b in q["setup_lines"]]
     srows.append(Row([Cell("Итого подключение", bold=True), Cell(money(q["setup"], ""), bold=True)]))
     v.table(["Подключение — платится один раз", "₽"], srows)
     lines = [f"Первые {q['trial_days']} дней — бесплатно: смотрите и решайте." if q["trial_days"] else "",
-             "Считаются люди в подключённых отделах; директор и администратор — бесплатно.",
+             "Платите только за функции; настройки внутри функции — бесплатно. Люди считаются в подключённых отделах, "
+             "директор и администратор — бесплатно.",
              f"Оплата за год — минус {P.fmt(pr['disc_year'])}%: {money(q['monthly_year'])} в месяц, {money(q['year_total'])} за год.",
-             "Отдел или уровень можно добавить потом — доплата только за него." if not q["all_depts"] else
+             "Функцию можно добавить потом — доплата только за неё." if not q["all_depts"] else
              f"Все четыре отдела — скидка {P.fmt(pr['disc_all'])}% уже учтена."]
     v.lines([x for x in lines if x], title="Условия")
     return v
@@ -87,20 +87,11 @@ def tariff(ctx):
     q = quote_of(ctx)
     v = quote_view(ctx, q, "💳 Тариф", f"{ctx.cfg.name} · набор «{ctx.cfg.set_title}» · {q['people']} чел. в приложении")
     kb = []
-    p = ctx.cfg.packages
     pr = P.prices(ctx.office)
-    if p["sales"] and p["sales"] != E.LEVEL_ORDER[-1]:
-        nxt = E.LEVEL_ORDER[E.LEVEL_ORDER.index(p["sales"]) + 1]
-        kb.append([Button(f"⬆️ Продажи до «{E.LEVELS[nxt]}» — {P.fmt(pr['sales_' + nxt])} + {P.fmt(pr['sales_' + nxt + '_user'])}/чел.",
-                          f"tfr:sales:{nxt}")])
-    if not p["sales"]:
-        kb.append([Button(f"➕ Продажи · Старт — {P.fmt(pr['sales_start'])} + {P.fmt(pr['sales_start_user'])}/чел.", "tfr:sales:start")])
-    for code in ("stock", "logistics", "office"):
-        if not p[code]:
-            kb.append([Button(f"➕ {E.PACKAGES[code]['icon']} {E.PACKAGES[code]['title']} — {P.fmt(pr[code])} + {P.fmt(pr[code + '_user'])}/чел.",
-                              f"tfr:{code}")])
-    if not p["max"]:
-        kb.append([Button(f"➕ ⭐ Максимум — {P.fmt(pr['max'])} в месяц", "tfr:max")])
+    have = funcs_of(ctx.cfg)
+    for f in [f for f in E.FUNCS if f not in have][:12]:
+        icon = E.FUNC_GROUPS[E.FUNCS[f][0]][0]
+        kb.append([Button(f"➕ {icon} {E.FUNC_SHORT[f]} · {P.fmt(pr['f_' + f])}", f"tfr:{f}")])
     kb.append([Button("📄 Расчёт PDF", "tfp")])
     if is_admin(ctx):
         kb.append([Button("💰 Цены", "pr")])
@@ -111,7 +102,7 @@ def build(ctx):
     q = quote_of(ctx)
     counts = counts_of(ctx)
     people = sum(counts.values())
-    title = f"набор «{E.base_title(base_of(ctx), ctx.cfg.packages)}»"
+    title = f"набор «{E.funcs_title(base_of(ctx), funcs_of(ctx.cfg))}»"
     v = quote_view(ctx, q, "🧩 Собрать бота", f"{title} · людей в фирме {people}")
     p = ctx.cfg.packages
     kb = [[Button("☑️ Выбрать набор", "swe")],
@@ -127,10 +118,9 @@ def build(ctx):
 
 
 # ---------- окно выбора пакетов (Адам 31.10: «сначала выбрать, потом ОК или Отмена») ----------
-# swe — открыть; swe:p:<набор> — готовый набор; swe:s:<уровень|off> — уровень продаж; swe:t:<пакет> — пакет; swe:y — за год;
+# swe — открыть; swe:b:<набор> — набор (один); swe:t:<функция> — функция галочкой; swe:y — за год;
 # swe:ok — применить; swe:no — выйти без изменений. Черновик — в сессии (pk_draft), суммы считаются по нему.
 
-MAX_LABEL = "⭐ Бренд, филиалы, функции на заказ"
 
 
 def base_of(ctx):
@@ -138,8 +128,8 @@ def base_of(ctx):
     b = ctx.session.get("base")
     if b in E.PRESETS:
         return b
-    code = E.preset_of(ctx.cfg.packages)
-    return code if code in E.PRESETS else "company"
+    have = funcs_of(ctx.cfg)
+    return next((c for c in E.ORDER if E.preset_functions(c) == have), "company")
 
 
 @screen("swe")
@@ -149,9 +139,9 @@ def packages_window(ctx, act=None, value=None):
     if not ctx.demo:
         return Reply(text="Пакеты подключённой фирмы меняются через «💳 Тариф».")
     d = ctx.session.get("pk_draft")
-    if act is None or not isinstance(d, dict):
-        d = {"base": base_of(ctx), "packages": dict(ctx.cfg.packages), "year": bool(ctx.session.get("year"))}
-    p = E.normalize(d["packages"])
+    if act is None or not isinstance(d, dict) or "funcs" not in d:
+        d = {"base": base_of(ctx), "funcs": sorted(funcs_of(ctx.cfg)), "year": bool(ctx.session.get("year"))}
+    f = set(d["funcs"])
     if act == "no":
         ctx.session.pop("pk_draft", None)
         ctx.save()
@@ -163,44 +153,39 @@ def packages_window(ctx, act=None, value=None):
         if d.get("counts"):
             ctx.session["counts"] = d["counts"]
         ctx.save()
-        return set_packages(ctx, p)
+        return set_functions(ctx, f)
     if act == "b" and value in E.PRESETS:
         d["base"] = value
-        p = E.normalize(E.PRESETS[value]["packages"])
+        f = E.preset_functions(value)
         d["counts"] = dict(E.PRESETS[value]["people"])
-    elif act == "s":
-        p["sales"] = None if p.get("sales") == value else value if value in E.LEVELS else p["sales"]
-    elif act == "t" and value in E.PACKAGES and value != "sales":
-        p[value] = not p[value]
+    elif act == "t" and value in E.FUNCS:
+        f = E.toggle_function(f, value)
     elif act == "y":
         d["year"] = not d["year"]
-    d["packages"] = p
+    d["funcs"] = sorted(f)
     ctx.session["pk_draft"] = d
     ctx.save()
     counts = d.get("counts") or counts_of(ctx)
-    q = quote_of(ctx, p, d["year"], counts)
+    q = quote_of(ctx, f, d["year"], counts)
     pr = P.prices(ctx.office)
-    v = View("☑️ Выбрать набор", E.base_title(d["base"], p) + " · людей " + str(sum(counts.values())))
+    v = View("☑️ Выбрать набор", f"«{E.funcs_title(d['base'], f)}» · людей {sum(counts.values())}")
     if q["empty"]:
         v.tiles([("Подключение, один раз", "—", None), ("Дальше, в месяц", "—", None)])
     else:
         v.tiles([("Подключение, один раз", money(q["setup"]), None), ("Дальше, в месяц", money(q["monthly"]), "good")]
                 + ([("За год: в месяц", money(q["monthly_year"]), "good")] if d["year"] else []))
-    v.note("Сверху — набор (один): с ним по умолчанию ставятся люди, роли и функции. Ниже — что включено: любую галочку "
-           "можно снять или добавить, набор останется.")
+    v.lines([f"«{E.PRESETS[c]['title']}» — {E.PRESETS[c]['size']}: {E.PRESETS[c]['what']}" for c in E.ORDER],
+            title="Наборы — по умолчанию под размер фирмы")
+    v.note("Сверху — набор (один): с ним по умолчанию ставятся люди, роли и функции. Ниже — функции по отделам: платите только "
+           "за отмеченные, любую можно снять или добавить. Настройки внутри функции — бесплатно.")
     kb = []
     for c in E.ORDER:
         x = E.PRESETS[c]
         n = sum(x["people"].values())
-        kb.append([Button(f"{'☑' if d['base'] == c else '☐'} Набор «{x['title']}» — {n} чел.: {x['what']}", f"swe:b:{c}")])
-    for lv in E.LEVEL_ORDER:
-        kb.append([Button(f"{'☑' if p['sales'] == lv else '☐'} 📈 Продажи · {E.LEVELS[lv]} — {P.fmt(pr['sales_' + lv])} "
-                          f"+ {P.fmt(pr['sales_' + lv + '_user'])}/чел.", f"swe:s:{lv}")])
-    for code in ("stock", "logistics", "office"):
-        dd = E.PACKAGES[code]
-        kb.append([Button(f"{'☑' if p[code] else '☐'} {dd['icon']} {dd['title']} — {P.fmt(pr[code])} + {P.fmt(pr[code + '_user'])}/чел.",
-                          f"swe:t:{code}")])
-    kb.append([Button(f"{'☑' if p['max'] else '☐'} {MAX_LABEL} — {P.fmt(pr['max'])} в месяц", "swe:t:max")])
+        kb.append([Button(f"{'☑' if d['base'] == c else '☐'} Набор «{x['title']}» · {n} чел.", f"swe:b:{c}")])
+    for fc, (grp, _) in E.FUNCS.items():
+        icon = E.FUNC_GROUPS[grp][0]
+        kb.append([Button(f"{'☑' if fc in f else '☐'} {icon} {E.FUNC_SHORT[fc]} · {P.fmt(pr['f_' + fc])}", f"swe:t:{fc}")])
     kb.append([Button(f"{'☑' if d['year'] else '☐'} 📅 Оплата за год — минус {P.fmt(pr['disc_year'])}%", "swe:y")])
     kb.append(ok_row("swe"))
     return Reply(view=v, buttons=kb)
@@ -239,7 +224,16 @@ def on_pay_other(ctx, text, data):
     return pay_screen(ctx)
 
 
+def set_functions(ctx, functions):
+    ctx.session["funcs"] = sorted(functions)
+    ctx.session.pop("packages", None)
+    ctx.session.pop("edition", None)
+    ctx.save()
+    return build(ctx.app.ctx(ctx.user_id))
+
+
 def set_packages(ctx, packages, base=None):
+    ctx.session.pop("funcs", None)
     ctx.session["packages"] = E.normalize(packages)
     if base in E.PRESETS:
         ctx.session["base"] = base
@@ -292,19 +286,15 @@ def reset_counts(ctx):
 
 
 def what_view(ctx):
-    """Вторая страница КП: что входит в каждый выбранный пакет."""
-    p = ctx.cfg.packages
+    """Вторая страница КП: какие функции подключены — по отделам, с ценой каждой."""
+    pr = P.prices(ctx.office)
+    have = funcs_of(ctx.cfg)
     v = View("Что входит", ctx.cfg.set_title)
-    for code in E.PACKAGES:
-        if not p[code]:
-            continue
-        d = E.PACKAGES[code]
-        mods = [E.MODULES[m][0] for m in sorted(E.MODULES) if E.package_of(m)[0] == code and m in ctx.cfg.modules]
-        head = f"{d['icon']} {d['title']}" + (f" · {E.LEVELS[p['sales']]}" if code == "sales" else "")
-        v.lines([d["what"].capitalize() + "."] + [f"• {m}" for m in mods], title=head)
-    common = [E.MODULES[m][0] for m in sorted(ctx.cfg.modules) if E.package_of(m)[0] in ("any", "ops")]
-    if common:
-        v.lines([f"• {m}" for m in common], title="Для всех подключённых отделов")
+    for grp, (icon, gtitle) in E.FUNC_GROUPS.items():
+        fs = [f for f in E.FUNCS if f in have and E.FUNCS[f][0] == grp]
+        if fs:
+            v.lines([f"• {E.MODULES[f][0]} — {P.fmt(pr['f_' + f])} ₽/мес" for f in fs], title=f"{icon} {gtitle}")
+    v.lines(["• Напоминания, журнал изменений, кабинеты сотрудников, «🐞 Не работает», Рамадан"], title="Бесплатно у всех")
     return v
 
 
@@ -369,24 +359,22 @@ def request(ctx, client=None):
 
 @screen("tfr")
 def tariff_request(ctx, code, level=None):
-    if ctx.role not in ("owner", "admin") or code not in E.PACKAGES:
+    if ctx.role not in ("owner", "admin") or code not in E.FUNCS:
         return tariff(ctx)
-    p = dict(ctx.cfg.packages)
-    p[code] = level if code == "sales" else True
-    q = quote_of(ctx, p)
-    q0 = quote_of(ctx)
-    what = f"{E.PACKAGES[code]['title']}" + (f" · {E.LEVELS[level]}" if level else "")
+    have = funcs_of(ctx.cfg)
+    q = quote_of(ctx, have | {code})
+    q0 = quote_of(ctx, have)
+    what = E.MODULES[code][0]
     text = (f"💳 {ctx.cfg.name}: {ctx.name()} просит подключить «{what}».\n"
-            f"Было {money(q0['monthly'])} в месяц → станет {money(q['monthly'])}; доплата за подключение {money(q['setup'] - q0['setup'])}.")
+            f"Было {money(q0['monthly'])} в месяц → станет {money(q['monthly'])}.")
     reqs = ctx.office.get(REQ_KEY) or []
-    reqs.append({"uid": ctx.user_id, "who": ctx.name(), "set": what, "monthly": q["monthly"], "setup": q["setup"] - q0["setup"],
+    reqs.append({"uid": ctx.user_id, "who": ctx.name(), "set": what, "monthly": q["monthly"], "setup": 0,
                  "ts": datetime.now().strftime("%d.%m %H:%M"), "show": False})
     ctx.office.put(REQ_KEY, reqs[-100:])
     ctx.db.audit(ctx.author(), "tariff_req", what)
     out = [Reply(text=text, to=a) for a in ctx.app.admins if a != ctx.user_id]
-    out.append(Reply(text=f"📨 Заявка отправлена: «{what}». Станет {money(q['monthly'])} в месяц, подключение "
-                          f"{money(q['setup'] - q0['setup'])} один раз. Администратор включит пакет и подтвердит.",
-                     buttons=[[Button("💳 Тариф", "tf")]]))
+    out.append(Reply(text=f"📨 Заявка отправлена: «{what}». Станет {money(q['monthly'])} в месяц. Администратор включит функцию "
+                          "и подтвердит.", buttons=[[Button("💳 Тариф", "tf")]]))
     return out
 
 
@@ -409,12 +397,12 @@ def prices_screen(ctx):
     v.table(["Что", "Цена"], [Row([title, Cell(f"{P.fmt(pr[code])} {unit}", "warn" if code in ch else None)],
                                  sub=f"стандарт {P.fmt(P.DEFAULT[code])}" if code in ch else "")
                               for code, title, _, unit in P.PRICES])
-    v.note("Цены действуют для всех расчётов сразу: конструктор, тариф, замки на экранах. "
-           "Скидки — в процентах, пробный период — в днях.")
+    v.note("Платим только за функции; настройки внутри функции — бесплатно. Цены действуют для всех расчётов сразу: "
+           "конструктор, тариф, замки на экранах. Скидки — в процентах, пробный период — в днях.")
     if not is_admin(ctx):
         v.note("Менять цены может только администратор платформы.")
         return Reply(view=v, buttons=[[Button("🧩 Собрать", "sw:ed")]] if ctx.demo else [])
-    kb = rows([Button(f"✏️ {title.replace(' — за человека', ': чел.').replace(' — пакет', '').replace(' — ', ': ')[:28]}",
+    kb = rows([Button(f"✏️ {title.split(' · ')[-1].split(' (')[0].replace(' — ', ': ')[:28]}",
                       f"pre:{code}") for code, title, _, _ in P.PRICES], 2)
     kb.append([Button("↩️ Стандартные цены", "prx")] if ch else [])
     kb.append([Button("‹ Пульт", "adm")] if ctx.demo and ctx.app.demo_gate else

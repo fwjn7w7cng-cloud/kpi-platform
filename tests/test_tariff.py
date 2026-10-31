@@ -15,38 +15,38 @@ TODAY = date(2026, 10, 29)
 
 
 class Quote(unittest.TestCase):
+    """Цены за функции (Адам 31.10): отдел — папка, платим за функции + люди; скидка за 4 отдела; дополнительное — без скидки."""
     def test_small_firm(self):
-        q = P.quote({"sales": "business", "stock": True}, {"sales": 5, "stock": 3}, P.DEFAULT)
-        self.assertEqual([round(a) for _, a, _ in q["lines"]], [10000 + 5 * 700, 5000 + 3 * 500])
-        self.assertEqual(q["monthly"], 20000)
-        self.assertEqual(q["setup"], 30000)                      # 20 000 × 1,5
+        fs = E.preset_functions("start") | {"stock"}
+        q = P.quote(fs, {"sales": 5, "stock": 3}, P.DEFAULT)
+        self.assertEqual([round(a) for _, a, _ in q["lines"]], [3000, 3000 + 2000, 3000, 8 * 300])   # все, продажи, склад, люди
+        self.assertEqual(q["monthly"], 13400)
+        self.assertEqual(q["setup"], 20000)                                     # месяц × 1,5 меньше минимума
         self.assertEqual(q["discount"], 0)
         self.assertEqual(q["people"], 8)
 
-    def test_all_departments_discount_and_max(self):
-        counts = {"sales": 22, "stock": 11, "logistics": 10, "office": 5}
-        q = P.quote(E.PRESETS["company"]["packages"], counts, P.DEFAULT)
+    def test_presets_and_max(self):
+        want = {"start": 9800, "business": 19500, "control": 31000, "company": 45000, "max": 101300}
+        for code, monthly in want.items():
+            q = P.quote(E.preset_functions(code), E.PRESETS[code]["people"], P.DEFAULT)
+            self.assertEqual(q["monthly"], monthly, code)
+        q = P.quote(E.preset_functions("max"), E.PRESETS["max"]["people"], P.DEFAULT, year=True)
         self.assertTrue(q["all_depts"])
-        self.assertEqual(round(q["dept_sum"]), 37000 + 10500 + 10000 + 4500)
-        self.assertEqual(q["monthly"], P.rnd(62000 * 0.85))
-        self.assertEqual(q["setup"], round(q["monthly"] * 1.5 / 1000) * 1000)
-        self.assertGreater(q["setup"], q["monthly"])
-        qm = P.quote(E.PRESETS["max"]["packages"], counts, P.DEFAULT, year=True)
-        self.assertEqual(qm["monthly"], q["monthly"] + 40000)
-        self.assertEqual(qm["setup"], round(qm["monthly"] * 1.5 / 1000) * 1000)
-        self.assertEqual(qm["monthly_year"], P.rnd(qm["monthly"] * 0.9))
+        self.assertEqual(q["monthly"], P.rnd((34000 + 127 * 300) * 0.85 + 40000))   # дополнительное — без скидки
+        self.assertEqual(q["setup"], 152000)
+        self.assertEqual(q["monthly_year"], P.rnd(q["monthly"] * 0.9))
 
-    def test_empty_and_only_max(self):
-        self.assertTrue(P.quote({}, {}, P.DEFAULT)["empty"])
-        q = P.quote({"max": True}, {}, P.DEFAULT)
-        self.assertEqual((q["monthly"], q["setup"]), (40000, 60000))
-        q = P.quote({"sales": "start"}, {"sales": 2}, P.DEFAULT)
-        self.assertEqual((q["monthly"], q["setup"]), (6000, 20000))            # меньше минимума — минимум
+    def test_empty_old_packages_and_only_extra(self):
+        self.assertTrue(P.quote(set(), {}, P.DEFAULT)["empty"])
+        self.assertEqual(P.quote({"sales": "start"}, {"sales": 2}, P.DEFAULT)["monthly"], 8000 + 600)   # старый вид — тоже понимает
+        q = P.quote({"branding"}, {}, P.DEFAULT)
+        self.assertEqual((q["monthly"], q["setup"]), (10000, 20000))
 
     def test_round_numbers_by_default(self):
         for code, value in P.DEFAULT.items():
             if code != "setup_mult":
                 self.assertEqual(value % (1 if code in ("disc_all", "disc_year", "trial_days") else 100), 0, code)
+        self.assertEqual({c for c in P.DEFAULT if c.startswith("f_")}, {f"f_{f}" for f in E.FUNCS})   # цена у каждой функции
 
 
 class Base(unittest.TestCase):
@@ -94,28 +94,25 @@ class Builder(Base):
         self.assertEqual(self.app.press(16, self.app.press(16, "swe:t:office")[0].buttons[-1][0].to)[0].view.title, "🧩 Собрать бота")   # стрелка — назад, без изменений
         self.assertEqual(self.app.ctx(16).cfg.packages, before)
 
-    def test_toggle_packages_and_price(self):
+    def test_toggle_functions_and_price(self):
         self.owner(11)
         r = self.app.press(11, "sw:ed")[0]
         self.assertEqual(r.view.title, "🧩 Собрать бота")
         t = self.tiles(r)
-        self.assertIn("Подключение, один раз", t)
-        self.assertIn("Дальше, в месяц", t)
-        r2 = pick(self.app, 11, "t:stock")[0]                # выключили склад
+        r2 = pick(self.app, 11, "t:warehouse")[0]            # сняли одну функцию — склад есть, приёмки нет
         ctx = self.app.ctx(11)
-        self.assertFalse(ctx.cfg.packages["stock"])
         self.assertFalse(ctx.cfg.has_module("warehouse"))
-        self.assertEqual(ctx.cfg.edition, E.CUSTOM)
+        self.assertTrue(ctx.cfg.has_module("stock"))
         self.assertLess(int(self.tiles(r2)["Дальше, в месяц"].replace(" ", "").rstrip("₽")),
                         int(t["Дальше, в месяц"].replace(" ", "").rstrip("₽")))
-        pick(self.app, 11, "s:start")
+        pick(self.app, 11, "b:start", "t:stock")                # набор «Старт» + закупки
         ctx = self.app.ctx(11)
-        self.assertEqual(ctx.cfg.packages["sales"], "start")
         self.assertFalse(ctx.cfg.has_module("clients"))
-        self.assertTrue(ctx.cfg.has_module("logistics"))
+        self.assertTrue(ctx.cfg.has_module("stock") and ctx.cfg.dept_on("purchasing") if ctx.cfg.dept("purchasing") else True)
+        self.assertIn("«Старт + 1 функц.»", self.app.press(11, "sw:ed")[0].view.subtitle)
+        self.assertEqual(self.app.ctx(11).session["counts"]["sales"], 6)    # набор — типовые люди
         r3 = self.app.press(11, "sw:ed:company")[0]
         self.assertIn("«Компания»", r3.view.subtitle)
-        self.assertEqual(self.app.ctx(11).cfg.edition, "company")
 
     def test_people_counts_and_year(self):
         self.owner(12)
@@ -146,9 +143,8 @@ class Builder(Base):
         self.app.press(14, "sw:ed:start")
         self.app.press(14, "sw:role:owner")
         r = self.app.press(14, "lg")[0]
-        self.assertIn("Пакет «Логистика»", r.view.subtitle)
         lines = next(b for k, b in r.view.blocks if k == "lines")[1]
-        self.assertTrue(any("5 000 ₽ в месяц + 500 ₽ за человека" in x for x in lines))
+        self.assertTrue(any("3 000 ₽ в месяц" in x and "настройки внутри бесплатно" in x for x in lines))
         self.assertIn("sw:ed", [b.to for b in r.all_buttons()])
 
     def test_department_off_for_its_people(self):
@@ -167,20 +163,14 @@ class Prices(Base):
         self.app.press(1, "sw:role:admin")
         r = self.app.press(1, "pr")[0]
         self.assertEqual(r.view.subtitle, "стандартные")
-        self.app.press(1, "pre:stock")
+        self.app.press(1, "pre:f_stock")
         self.app.text(1, "6 000")
-        self.assertEqual(P.prices(self.app.office())["stock"], 6000)
-        self.assertEqual(P.changed(self.app.office()), {"stock"})
+        self.assertEqual(P.prices(self.app.office())["f_stock"], 6000)
+        self.assertEqual(P.changed(self.app.office()), {"f_stock"})
         self.app.press(1, "pre:disc_all")
         self.assertTrue(self.app.text(1, "95")[0].ask)        # скидка 95% — не бывает
         self.owner(21)
-        r = self.app.press(21, "lg")                          # цена в замке — уже новая
-        pick(self.app, 21, "t:logistics")
-        r = self.app.press(21, "lg")[0]
-        lines = next(b for k, b in r.view.blocks if k == "lines")[1]
-        self.assertTrue(any("5 000" in x for x in lines))
-        r = self.app.press(21, "sk")[0]
-        pick(self.app, 21, "t:stock")
+        pick(self.app, 21, "t:stock")                         # сняли закупки — в замке уже новая цена
         lines = next(b for k, b in self.app.press(21, "sk")[0].view.blocks if k == "lines")[1]
         self.assertTrue(any("6 000 ₽ в месяц" in x for x in lines))
         self.app.press(1, "prx")
@@ -189,10 +179,10 @@ class Prices(Base):
     def test_guest_as_admin_cannot_edit(self):
         self.app.press(31, "sw:role:admin")                   # гость играет роль админа — цены только смотрит
         r = self.app.press(31, "pr")[0]
-        self.assertNotIn("pre:stock", [b.to for b in r.all_buttons()])
-        self.app.press(31, "pre:stock")
+        self.assertNotIn("pre:f_stock", [b.to for b in r.all_buttons()])
+        self.app.press(31, "pre:f_stock")
         out = self.app.text(31, "1")
-        self.assertEqual(P.prices(self.app.office())["stock"], 5000)
+        self.assertEqual(P.prices(self.app.office())["f_stock"], 3000)
         self.assertTrue(out)
 
 
@@ -215,10 +205,10 @@ class ClientTariff(unittest.TestCase):
         r = self.app.press(700, "tf")[0]
         self.assertEqual(r.view.title, "💳 Тариф")
         tiles = dict((a, b) for a, b, _ in next(b for k, b in r.view.blocks if k == "tiles"))
-        self.assertEqual(tiles["Дальше, в месяц"], "11 400 ₽")          # 10 000 + 2 торговых × 700; директор бесплатно
+        self.assertEqual(tiles["Дальше, в месяц"], "15 600 ₽")          # функции «Бизнеса» 15 000 + 2 торговых × 300
         self.assertIn("tfr:stock", [b.to for b in r.all_buttons()])
         out = self.app.press(700, "tfr:stock")
-        self.assertTrue(any(x.to == 1 and "Склад и закупки" in x.text for x in out))
+        self.assertTrue(any(x.to == 1 and "Закупки" in x.text for x in out))
         self.assertIn("Станет", out[-1].text)
         self.assertTrue(self.app.office().get("tariff_req"))
 

@@ -94,8 +94,8 @@ class Errors(unittest.TestCase):
         self.assertFalse(cfg.has_module("clients"))
         self.assertEqual(cfg.edition, E.CUSTOM)
         self.assertEqual(cfg.set_title, "Продажи Старт + Склад и закупки")
-        self.assertEqual(E.lock_text("clients"), "Продажи — уровень Бизнес и выше")
-        self.assertEqual(E.lock_text("custom"), "Пакет «Максимум»")
+        self.assertEqual(E.lock_text("clients"), "Функция · 📈 Продажи")                 # платим за функции (31.10)
+        self.assertEqual(E.lock_text("custom"), "Функция · ⭐ Дополнительно")
 
     def test_own_packages_over_preset(self):
         raw = demo_raw()

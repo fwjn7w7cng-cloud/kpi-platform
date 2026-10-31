@@ -112,6 +112,8 @@ def route(ctx, day=None, emp_id=None):
                     for n, c in enumerate(pts, 1)], 2)
         if pts:
             kb.append([Button("📋 Сформировать отчёт", f"rtr:{day}")])
+        km = sum(x["amount"] or 0 for x in ctx.db.timesheet(day, day, emp["id"]) if x["kind"] == "km")
+        kb.append([Button(f"🚗 Км за день: {km:g}" if km else "🚗 Вписать км за день (ГСМ)", f"rtk:{day}")])
     nav = []
     if d > ctx.today - timedelta(days=6):
         nav.append(Button("◀ Вчера" if d == ctx.today else "◀", f"rt:{(d - timedelta(days=1)).isoformat()}"
@@ -164,6 +166,31 @@ def point(ctx, day, code, act=None, value=None):
         kb += rows([Button(("● " if d["why"] == r else "") + r, f"{pre}:r:{i}") for i, r in enumerate(REASONS)], 3)
     kb.append(ok_row(pre))
     return Reply(view=v, buttons=kb)
+
+
+@screen("rtk", module=M)
+def km_day(ctx, day):
+    """Торговый сам вписывает км за день — для ГСМ «за км» (в общую зарплату)."""
+    if not ctx.me or not _can_mark(ctx, ctx.me["id"], day):
+        return Reply(text="Км вписываются за сегодня и вчера.")
+    return ctx.ask("rt_km", "Сколько км проехали за день? Числом, например 120. 0 — убрать.", {"day": day},
+                   buttons=[[Button("✖️ Отмена", f"rt:{day}")]])
+
+
+@text_input("rt_km")
+def on_km(ctx, text, data):
+    t = (text or "").replace(" ", "").replace(",", ".").replace("км", "")
+    try:
+        km = float(t)
+        if not 0 <= km < 3000:
+            raise ValueError
+    except ValueError:
+        return ctx.ask("rt_km", "Нужно число км, например 120.", data)
+    day = data["day"]
+    ctx.db.x("DELETE FROM timesheet WHERE day = ? AND emp_id = ? AND kind = 'km'", day, ctx.me["id"])
+    if km:
+        ctx.db.add_timesheet(day, ctx.me["id"], "km", amount=km, who=ctx.author())
+    return route(ctx, day)
 
 
 def _save(ctx, day, code, status, reason, amount):

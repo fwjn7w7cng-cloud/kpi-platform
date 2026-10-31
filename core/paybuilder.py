@@ -52,7 +52,7 @@ F = {
     "cut_price": ("Минус за ошибку", "money"), "min_total": ("Гарантированный минимум", "money"),
     "max_variable": ("Потолок премии", "money"), "rate61": ("За 61–90 дней", "pct"), "rate91": ("За 91+ дней", "pct"),
     "rate_over": ("Сверх последней ступени", "pct"), "allow": ("Выходных на человека", "int"), "km": ("От, км в день", "int"),
-    "truancy": ("Прогул", "money"), "late": ("Опоздания", "steps_min"), "fines": ("Свои штрафы", "named"),
+    "truancy": ("Прогул", "money"), "l100": ("Расход, л на 100 км", "int"), "fuel_price": ("Цена литра", "money"), "late": ("Опоздания", "steps_min"), "fines": ("Свои штрафы", "named"),
     "groups": ("Свои ставки по группам", "groups"), "items": ("Показатели и веса", "weights"), "pcoefs": ("Коэффициенты", "coefs"),
     "metric": ("Показатель", "choice", METRICS), "scope": ("Чьи", "choice", SCOPES),
     "grow": ("Сверх 100 %", "choice", YESNO_GROW), "when": ("Просрочка", "choice", WHEN),
@@ -83,7 +83,7 @@ UNITS = {   # единица сдельной оплаты: (подпись, д�
 }
 UNIT_EXTRA = {"long_day": {"km": 400}}             # свои поля единицы
 RATE_UNITS = {"ret_own", "fuel_save", "fuel_over"}
-ONCE = {"salary", "timesheet", "limits", "seniority"}
+ONCE = {"salary", "timesheet", "limits", "seniority", "fuel"}
 
 _LATE = [[10, 100], [30, 300], [60, 500]]
 _FINES = [["Нет на собрании", 500], ["Нет отчёта", 500]]
@@ -94,7 +94,16 @@ BRICKS = {
         ("days", "за отработанные дни", {"amount": 30000}, {"type": "salary", "mode": "days"}),
         ("fixed", "фикс за месяц", {"amount": 30000}, {"type": "salary", "mode": "fixed"}),
         ("calendar", "по календарным дням", {"amount": 30000}, {"type": "salary", "mode": "calendar"}),
-    ], "постоянная часть"),
+        ("shift", "за смену (выходы по табелю)", {"amount": 2000}, {"type": "salary", "mode": "shift"}),
+        ("floor", "сдельная, но не меньше оклада", {"amount": 30000}, {"type": "limits", "name": "Доплата до оклада"}),
+        ("advance", "оклад как аванс — вычитается из сдельной", {"amount": 15000}, {"type": "salary", "mode": "advance"}),
+    ], "только оклад, только сдельная (без этого блока), оклад + сдельная, за смену, не меньше оклада"),
+    "fuel": ("Основа", "⛽", "ГСМ", ALL, [
+        ("fixed", "фикс в месяц", {"amount": 5000}, {"type": "fuel_comp", "mode": "fixed"}),
+        ("day", "за отработанный день", {"price": 300}, {"type": "fuel_comp", "mode": "day"}),
+        ("km", "за км (рейсы или вписанные км)", {"price": 5}, {"type": "fuel_comp", "mode": "km"}),
+        ("norm", "по норме: км × расход × цена литра", {"l100": 10, "fuel_price": 60}, {"type": "fuel_comp", "mode": "norm"}),
+    ], "в общую зарплату; км — из рейсов или вписанные руками (торговый сам за день)"),
     "timesheet": ("Основа", "📅", "Табель и штрафы", ALL, [
         ("rules", "опоздания, прогулы и свои штрафы",
          {"late": _LATE, "truancy": 1000, "fines": _FINES, "extra_coef": 1, "newbie_free": True}, {"type": "timesheet"}),
@@ -339,6 +348,8 @@ def to_comp(pos, item):
         c.setdefault("name", ("Удержание: " + nm) if cut else nm[:1].upper() + nm[1:])
     if c["type"] == "fixed_bonus" and c.get("cut_price") is None:
         c.pop("cut_unit", None)
+    if c["type"] == "limits" and "amount" in c:             # «сдельная, но не меньше оклада» — доплата до суммы
+        c["min_total"] = c.pop("amount")
     return c
 
 
