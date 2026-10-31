@@ -3,6 +3,17 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-01 01:50 (Альфред) — демо и сайт переехали на новый сервер 103.214.71.188; добавлен alapa.pro
+Старый: stop + disable kpi@demo, kpi-web@demo, caddy 01:47:56, процессов нет. rsync kpi-platform (без venv) — demo.db sha256 совпал
+(22391b35…); /var/www/kpi и /var/lib/caddy/.local/share/caddy (caddy:caddy). Новый: Caddyfile.bak-2026-11-01-move; к kpibotsmith.ru и
+demo.kpibotsmith.ru добавлены alapa.pro (file_server /var/www/kpi/site), www.alapa.pro (redir → https://alapa.pro), demo.alapa.pro
+(reverse_proxy 127.0.0.1:8101); validate ок. enable --now 01:48:43: все три active, NRestarts 0; kpi@demo 43 МБ, «редакция company», ошибок
+и Conflict нет; kpi-web@demo 20 МБ, 127.0.0.1:8101 → 200; caddy 13 МБ. Локально https kpibotsmith.ru и demo.kpibotsmith.ru → 200
+(сертификаты перенесены). **DNS:** kpibotsmith.ru и demo.kpibotsmith.ru ещё → 216.73.157.121 (старый, Caddy там выключен) — снаружи сайт и
+демо недоступны до смены A-записей на 103.214.71.188. alapa.pro и www → 95.163.244.138 (не наш), demo.alapa.pro — NXDOMAIN; ACME для них
+ожидаемо падает. Домен kpibotsmith зашит: clients/demo/.env WEB_URL, core/ui/web.py DOMAIN, core/push.py CONTACT (mailto), core/demo.py
+(тексты), modules/maximum.py, web/site/index.html (+ /var/www/kpi/site). chogbot не трогал.
+
 ## 2026-10-31 16:51 (Альфред) — kpi-web@demo обновлено до b1c395d (значок и название с версией в адресе)
 git pull → b1c395d (3 файла; requirements, миграции, deploy, web/site не менялись). py_compile ок. Копия data/demo.db.bak-2026-10-31-1449.
 restart 16:49:59 — active, NRestarts 0, 21 МБ, ошибок нет; demo 200, визитка 200. В странице: manifest.webmanifest?v=193899d334 и
