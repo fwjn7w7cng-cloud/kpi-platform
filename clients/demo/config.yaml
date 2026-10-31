@@ -12,7 +12,7 @@ company:
 # Что куплено. Готовый набор: start | business | control (Премиум) | company | max — или свой набор пакетами:
 #   packages: {sales: business, stock: true, logistics: true, office: false, max: false}
 # (sales — уровень start / business / control или false; остальные — true / false). В демо собирается кнопкой «🧩 Собрать».
-edition: max
+edition: company
 
 work_week:
   weekend: [sun]              # выходные дни: mon tue wed thu fri sat sun

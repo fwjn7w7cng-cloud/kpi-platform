@@ -42,11 +42,34 @@
   seniority      за стаж: amount за каждый полный год, не больше max
   limits         min_total — гарантированный минимум (доплата до него), max_variable — потолок всего, кроме оклада.
                  Считается последним.
+
+Добавлено 31.10, вторая волна (Адам: «все расчёты, которые только есть», цифры по умолчанию — круглые):
+  plan_bonus     grow — сверх 100 % бонус растёт (× выполнение, до cap); mode below — минус amount, если план ниже min;
+                 mode each_group — фикс за каждую фокусную группу с планом не ниже min (by_exec — × выполнение общего плана)
+  sales_percent  debt_rates [[доля просрочки, ставка]] — ставка зависит от просрочки (берётся первая ступень, куда уложились);
+                 groups: ставка 0 — группа не идёт в процент
+  debt_penalty   mode buckets — rate61 от просрочки 61–90 и rate91 от 91+; when: last (на последнюю дату) | avg (в среднем
+                 по всем срезам месяца)
+  growth_bonus   рост к прошлому году (vs: ly) или к прошлому месяцу (vs: pm): steps [[рост, сумма]], rate_over — % от продаж сверх
+                 последней ступени
+  kpi_card       KPI-карта: items [[показатель, вес]], amount × Σ вес × выполнение (выполнение до cap), min — порог карты
+  orders         заказы (клиент × день): mode each — price за заказ; mode avg — amount, если средний чек не меньше norm
+  new_clients    kind: new (никогда не брал) | back (вернувшиеся «спящие») | both
+  team_days      супервайзеру: amount, если команда отработала норму дней (минус allow выходных на человека)
+  old_debt       rate от денег, собранных с клиентов, у которых в начале месяца была просрочка days+ (по умолчанию 91)
+  period_bonus   за квартал / год (period: quarter | year): steps по сумме плана и факта всех месяцев; платится в последнем месяце
+  awards         за значки доски почёта: amount за каждый, не больше max
+  pool           котёл отдела: price × отгрузки отдела (или rate × продажи отдела), делится по коэффициентам должностей
+                 (coefs {часть названия должности: коэф.}) и отработанным дням
+  fixed_bonus    cut_unit + cut_price — минус за каждую ошибку (единица сдельной оплаты); hand — «на руки», не в ведомость
+  timesheet      свои правила должности: late [[минуты, сумма]], truancy — прогул, fines [[название, сумма]] — свои штрафы,
+                 extra_coef — выход в выходной (1 или 2 дня), newbie_free — новичкам без штрафов
 """
 
 # Единицы для сдельных кубиков: код → (название, модуль). Считает их модуль: ``unit("km", fn)``,
 # fn(payroll, emp) → количество за месяц. Модуль не подключён — кубик даёт ноль с пояснением.
 UNIT_TITLES = {
+    "long_day": ("Длинные дни, дн.", "logistics"), "quiz_ok": ("Сданные тесты, шт.", "quiz"), "quiz_fail": ("Несданные тесты, шт.", "quiz"),
     "km": ("Пробег, км", "logistics"), "kg": ("Вес, кг", "logistics"), "m3": ("Объём, м³", "logistics"),
     "points": ("Точки доставки", "logistics"), "trips": ("Рейсы", "logistics"),
     "ret_own": ("Возвраты по своей вине, ₽", "returns"), "ret_err": ("Ошибки в возвратах", "returns"),
@@ -104,17 +127,17 @@ def check(c):
             st = c.get("steps")
             if not st or not all(isinstance(s, (list, tuple)) and len(s) == 2 and _num(s[0]) and _num(s[1]) for s in st):
                 p.append("plan_bonus.steps — список пар [доля плана, сумма], например [[0.8, 5000], [1.0, 15000]]")
-        elif mode in ("linear", "fixed"):
+        elif mode in ("linear", "fixed", "below", "each_group"):
             if not _num(c.get("amount")):
                 p.append("plan_bonus.amount — сумма бонуса за 100% плана")
         else:
-            p.append(f"plan_bonus.mode «{mode}» — steps, linear или fixed")
+            p.append(f"plan_bonus.mode «{mode}» — steps, linear, fixed, below или each_group")
     elif t == "fixed_bonus":
         if not _num(c.get("amount")):
             p.append("fixed_bonus.amount — сумма бонуса")
     elif t in ("debt_penalty", "debt_bonus"):
         mode = c.get("mode", "fixed")
-        allowed = ("fixed", "percent", "steps") if t == "debt_penalty" else ("fixed", "steps")
+        allowed = ("fixed", "percent", "steps", "buckets") if t == "debt_penalty" else ("fixed", "steps")
         if mode not in allowed:
             p.append(f"{t}.mode «{mode}» — {', '.join(allowed)}")
         elif mode == "fixed" and (not _num(c.get("amount")) or not _num(c.get("share", 0.1))):
@@ -130,7 +153,35 @@ def check(c):
         if c.get("of", "sales") not in ("sales", "month", "30d", "debt"):
             p.append(f"{t}.of — sales, 30d или debt")
     elif t == "timesheet":
-        pass
+        for f in c.get("fines") or []:
+            if not (isinstance(f, (list, tuple)) and len(f) == 2 and isinstance(f[0], str) and _num(f[1])):
+                p.append("timesheet.fines — пары [название, сумма]: [[«Нет на собрании», 500]]")
+                break
+    elif t == "growth_bonus":
+        if c.get("vs", "ly") not in ("ly", "pm"):
+            p.append("growth_bonus.vs — ly (прошлый год) или pm (прошлый месяц)")
+        st = c.get("steps")
+        if not st or not all(isinstance(x, (list, tuple)) and len(x) == 2 and _num(x[0]) and _num(x[1]) for x in st):
+            p.append("growth_bonus.steps — пары [рост, сумма]: «10% → 5 000; 20% → 10 000»")
+    elif t == "kpi_card":
+        it = c.get("items")
+        if not it or not all(isinstance(x, (list, tuple)) and len(x) == 2 and _metric_ok(x[0]) and _num(x[1]) for x in it):
+            p.append("kpi_card.items — пары [показатель, вес]: [[sales, 0.5], [akb, 0.3]]")
+        if not _num(c.get("amount")):
+            p.append("kpi_card.amount — премия за 100% карты")
+    elif t == "orders":
+        if c.get("mode", "each") == "each" and not _num(c.get("price")):
+            p.append("orders.price — сумма за заказ")
+        if c.get("mode") == "avg" and not (_num(c.get("amount")) and _num(c.get("norm"))):
+            p.append("orders: amount — сумма, norm — средний чек от")
+    elif t == "period_bonus":
+        if c.get("period", "quarter") not in ("quarter", "year"):
+            p.append("period_bonus.period — quarter или year")
+    elif t in ("team_days", "old_debt", "awards", "pool"):
+        if t == "old_debt" and not _num(c.get("rate")):
+            p.append("old_debt.rate — доля от собранных денег")
+        if t in ("team_days", "awards") and not _num(c.get("amount")):
+            p.append(f"{t}.amount — сумма")
     elif t == "multiplier":
         if c.get("metric") != "overdue" and not _metric_ok(c.get("metric")):
             p.append(f"multiplier.metric «{c.get('metric')}» — показатель плана или overdue")
@@ -226,6 +277,14 @@ def sales_percent(ctx, emp, c):
     where = {"team": " команды", "dept": " отдела", "all": " компании"}.get(c.get("scope", "self"), "")
     title = f"% от {PCT_TITLE.get(base, base)}{where}"
     pct = m.pct or 0
+    if c.get("debt_rates"):
+        _o, _b, share, dnote, _d_ = _debt(ctx, emp, c)
+        got = 0
+        for s_, r_ in sorted(c["debt_rates"]):
+            if share <= s_ + 1e-9:
+                got = r_
+                break
+        return [(title, m.fact * got, f"{_n(m.fact)} × {_p(got, 2)} — просрочка {_p(share, 1)}")]
     if c.get("min_plan") and pct < c["min_plan"] - 1e-9:
         return [(title, 0, f"план {_p(pct)} — платится от {_p(c['min_plan'])}")]
     if c.get("rate_steps"):
@@ -271,6 +330,9 @@ def _group_percent(ctx, emp, c):
             rest += v
     for (kind, g), (v, r) in sorted(by_rate.items()):
         name = "фокусные группы" if kind == "focus" else k.group_name(g)
+        if not r:
+            out.append((f"% от продаж: {name}", 0, f"{_n(v)} — не идёт в процент"))
+            continue
         out.append((f"% от продаж: {name}", v * r, f"{_n(v)} × {_p(r, 2)}"))
     if base_rate and rest:
         out.append(("% от продаж: остальное", rest * base_rate, f"{_n(rest)} × {_p(base_rate, 2)}"))
@@ -278,6 +340,9 @@ def _group_percent(ctx, emp, c):
 
 
 def plan_bonus(ctx, emp, c):
+    mode = c.get("mode", "steps")
+    if mode == "each_group":
+        return _each_group(ctx, emp, c)
     m = _scope_metric(ctx, emp, c, c["metric"])
     if m is None or not m.plan:
         return []
@@ -285,47 +350,138 @@ def plan_bonus(ctx, emp, c):
     title = f"Бонус: {m.title if m.title.isupper() or c['metric'].startswith('grp:') else m.title.lower()}"
     if c.get("scope", "self") != "self":
         title += {"team": " (команда)", "dept": " (отдел)", "all": " (компания)"}[c["scope"]]
-    if c.get("mode") == "fixed":
+    grow = bool(c.get("grow")) and pct > 1
+
+    def over(amount, note):
+        if not (grow and amount):
+            return amount, note
+        k = min(pct, c.get("cap") or 10)
+        return amount * k, note + f" · сверх плана ×{_p(k)}"
+
+    if mode == "below":
+        need = c.get("min", 0.8)
+        if pct < need - 1e-9:
+            return [(f"План ниже {_p(need)}", -c["amount"], f"план {_p(pct)}")]
+        return []
+    if mode == "fixed":
         need = c.get("min", 1.0)
-        return [(title, c["amount"] if pct >= need - 1e-9 else 0, f"план {_p(pct)} · фикс при {_p(need)}")]
-    if c.get("mode", "steps") == "steps":
+        a, note = over(c["amount"] if pct >= need - 1e-9 else 0, f"план {_p(pct)} · фикс при {_p(need)}")
+        return [(title, a, note)]
+    if mode == "steps":
         got = 0
         for share, amount in sorted(c["steps"]):
             if pct >= share - 1e-9:
                 got = amount
         nxt = next(((s, a) for s, a in sorted(c["steps"]) if pct < s - 1e-9), None)
         note = f"план {_p(pct)}" + (f" · до {_n(nxt[1])} нужно {_p(nxt[0])}" if nxt else "")
+        got, note = over(got, note)
         return [(title, got, note)]
     lo, cap = c.get("min", 0), c.get("cap", 10)
+    if not c.get("grow", True):
+        cap = min(cap, 1.0)                       # «сверх 100 % не растёт»
     k = 0 if pct < lo else min(pct, cap)
     if pct < lo:
         return [(title, 0, f"план {_p(pct)} — бонус от {_p(lo)}")]
     return [(title, c["amount"] * k, f"{_n(c['amount'])} × {_p(k)}" + (f" (потолок {_p(cap)})" if pct > cap else ""))]
 
 
+def _each_group(ctx, emp, c):
+    """Фикс за каждую фокусную группу, где план выполнен не меньше min; by_exec — × выполнение общего плана."""
+    k = ctx.kpi
+    need = c.get("min", 1.0)
+    done, total = 0, 0
+    for g in sorted(k.focus):
+        m = _scope_metric(ctx, emp, c, f"grp:{g}")
+        if m is None or not m.plan:
+            continue
+        total += 1
+        if (m.pct or 0) >= need - 1e-9:
+            done += 1
+    if not total:
+        return []
+    amount = done * c["amount"]
+    note = f"{done} из {total} групп × {_n(c['amount'])}"
+    if c.get("by_exec"):
+        s_ = _scope_metric(ctx, emp, c, "sales")
+        ex = min(s_.pct or 0, c.get("cap") or 10) if s_ and s_.plan else 0
+        amount *= ex
+        note += f" × план {_p(ex)}"
+    return [("Фокусные группы", amount, note)]
+
+
+HAND = " · на руки"          # строка «на руки»: в фонде есть, в ведомость кассы не идёт (бонус от начальника)
+
+
 def fixed_bonus(ctx, emp, c):
     miss = ctx.missed_days(emp)
     cut = c.get("cut_per_miss", 0) * miss
+    notes = [f"−{_n(cut)} за {miss} пропуск."] if cut else []
+    if c.get("cut_unit") and c.get("cut_price"):
+        fn = UNITS.get(c["cut_unit"])
+        n_err = (fn(ctx, emp) or 0) if fn else 0
+        if n_err:
+            cut += n_err * c["cut_price"]
+            notes.append(f"−{_n(n_err * c['cut_price'])} за {_d(n_err)} ошиб.")
     amount = max(c["amount"] - cut, 0)
-    note = f"−{_n(cut)} за {miss} пропуск." if cut else "без пропусков"
-    return [(c.get("name", "Бонус"), amount, note)]
+    name = c.get("name", "Бонус") + (HAND if c.get("hand") else "")
+    plain = not c.get("cut_per_miss") and not c.get("cut_unit")
+    return [(name, amount, ", ".join(notes) or ("" if plain else "без пропусков и ошибок"))]
+
+
+def _ids(ctx, emp, c):
+    k = ctx.kpi
+    scope = c.get("scope", "self")
+    if scope == "self":
+        return [emp["id"]]
+    if scope == "all":
+        return k.members("all")
+    return k.members("team" if scope == "team" else "dept", emp["team"] if scope == "team" else emp["dept"])
+
+
+def _debt_snapshots(ctx, ids, days):
+    """[(дата, просрочка)] по всем срезам дебиторки месяца — для «в среднем за месяц»."""
+    k = ctx.kpi
+    ids = set(ids)
+    by = {}
+    for r in ctx.db.c.execute('SELECT "on", emp_key, total, d0_30, d31_60, d61_90, d91 FROM debts WHERE "on" BETWEEN ? AND ?',
+                              (str(k.start), str(k.end))):
+        if k.who(r[1], r[0]) in ids:
+            row = {"total": r[2], "d0_30": r[3], "d31_60": r[4], "d61_90": r[5], "d91": r[6]}
+            by[r[0]] = by.get(r[0], 0) + k.overdue_amount(row, days)
+    return sorted(by.items())
 
 
 def _debt(ctx, emp, c):
-    """(просрочка, база, доля, подпись) для кубиков дебиторки по scope/days/of."""
+    """(просрочка, база, доля, подпись) для кубиков дебиторки по scope/days/of; when avg — среднее по срезам месяца."""
     k = ctx.kpi
     scope = c.get("scope", "self")
-    ids = [emp["id"]] if scope == "self" else k.members("team" if scope == "team" else "dept",
-                                                          emp["team"] if scope == "team" else emp["dept"])
+    ids = _ids(ctx, emp, c)
     days = c.get("days") or k.debt_days
     over, base, share = k.debt_share(ids, days, c.get("of"))
+    if c.get("when") == "avg":
+        snaps = _debt_snapshots(ctx, ids, days)
+        if snaps:
+            over = sum(v for _, v in snaps) / len(snaps)
+            share = over / base if base > 0 else (1.0 if over else 0.0)
     of = {"sales": "month"}.get(c.get("of"), c.get("of")) or k.debt_base
-    where = {"team": " команды", "dept": " отдела"}.get(scope, "")
+    where = {"team": " команды", "dept": " отдела", "all": " компании"}.get(scope, "")
     base_t = {"month": "продаж", "30d": "продаж 30 дн.", "debt": "долга"}[of]
-    return over, base, share, f"{days}+{where}: {_n(over)} · {_p(share, 1)} от {base_t}", days
+    avg = " в среднем за месяц" if c.get("when") == "avg" else ""
+    return over, base, share, f"{days}+{where}{avg}: {_n(over)} · {_p(share, 1)} от {base_t}", days
 
 
 def debt_penalty(ctx, emp, c):
+    if c.get("mode") == "buckets":
+        k = ctx.kpi
+        rows = [r for i in _ids(ctx, emp, c) for r in k.debts.get(i, [])]
+        d61 = sum(r.get("d61_90", 0) or 0 for r in rows)
+        d91 = sum(r.get("d91", 0) or 0 for r in rows)
+        out = []
+        if d61 and c.get("rate61"):
+            out.append((f"Просрочка 61–90 дн. (−{_p(c['rate61'])})", -d61 * c["rate61"], _n(d61)))
+        if d91 and c.get("rate91"):
+            out.append((f"Просрочка 91+ дн. (−{_p(c['rate91'])})", -d91 * c["rate91"], _n(d91)))
+        return out
     over, base, share, note, days = _debt(ctx, emp, c)
     if not over:
         return []
@@ -367,11 +523,19 @@ def debt_bonus(ctx, emp, c):
 
 
 def timesheet(ctx, emp, c):
-    fines = ctx.fines(emp)
-    if not fines:
-        return []
-    total = sum(a for a, _ in fines)
-    return [("Штрафы по табелю", -total, ", ".join(n for _, n in fines[:4]) + ("…" if len(fines) > 4 else ""))]
+    fines = ctx.fines(emp, c)
+    out = []
+    if fines:
+        total = sum(a for a, _ in fines)
+        out.append(("Штрафы по табелю", -total, ", ".join(n for _, n in fines[:4]) + ("…" if len(fines) > 4 else "")))
+    coef = c.get("extra_coef", 1)
+    if coef and coef > 1:
+        extra = sum(1 for r in ctx._ts.get(emp["id"], []) if r["kind"] == "extra")
+        if extra:
+            base = emp.get("salary") or ctx.default_salary or 0
+            day = base / ctx.salary_days if ctx.salary_days else 0
+            out.append(("Работа в выходной", extra * day * (coef - 1), f"{extra} дн. × ещё {_d(coef - 1)} дня"))
+    return out
 
 
 def per_unit(ctx, emp, c):
@@ -383,8 +547,15 @@ def per_unit(ctx, emp, c):
     fn = UNITS.get(code)
     if fn is None:
         return [(name, 0, "нет данных")]
-    qty = fn(ctx, emp) or 0
+    try:
+        qty = fn(ctx, emp, c) or 0
+    except TypeError:
+        qty = fn(ctx, emp) or 0
     sign = -1 if c.get("cut") else 1
+    if c.get("day_rate"):                         # ночёвка и т. п. — по дневному окладу
+        base = emp.get("salary") or ctx.default_salary or 0
+        price = base / ctx.salary_days if ctx.salary_days else 0
+        return [(name, sign * qty * price, f"{_d(qty)} × {_n(price)} (оклад ÷ {ctx.salary_days})")] if qty else []
     if _num(c.get("rate")):
         return [(name, sign * qty * c["rate"], f"{_n(qty)} × {_p(c['rate'], 1)}")] if qty else []
     if not qty:
@@ -411,8 +582,15 @@ def new_clients(ctx, emp, c):
         cache[since] = {r[0] for r in ctx.db.c.execute(
             "SELECT DISTINCT client FROM sales WHERE day >= ? AND day < ? AND amount > 0", (since, start.isoformat()))}
     new = [cl for cl in now if cl not in cache[since]]
-    return [(c.get("name", "Новые клиенты"), len(new) * c["amount"],
-             f"{len(new)} × {_n(c['amount'])} (не брали {months} мес.)" if new else f"новых нет (не брали {months} мес.)")]
+    kind = c.get("kind", "both")
+    if kind != "both":
+        ever = cache.setdefault(("ever", since), {r[0] for r in ctx.db.c.execute(
+            "SELECT DISTINCT client FROM sales WHERE day < ? AND amount > 0", (since,))})
+        new = [cl for cl in new if (cl in ever) == (kind == "back")]
+    what = {"new": "новых", "back": "вернувшихся", "both": "новых и вернувшихся"}[kind]
+    title = c.get("name") or {"new": "Новые клиенты", "back": "Вернувшиеся клиенты", "both": "Новые клиенты"}[kind]
+    return [(title, len(new) * c["amount"],
+             f"{len(new)} × {_n(c['amount'])} (не брали {months} мес.)" if new else f"{what} нет (не брали {months} мес.)")]
 
 
 def discount_penalty(ctx, emp, c):
@@ -460,9 +638,211 @@ def seniority(ctx, emp, c):
     return [(c.get("name", "За стаж"), amount, f"{years} г. × {_n(c['amount'])}")]
 
 
+def _sales_of(ctx, emp, start, end):
+    """Продажи сотрудника за любой период (по ключам источника)."""
+    k = ctx.kpi
+    tot = 0.0
+    for r in ctx.db.c.execute("SELECT day, emp_key, amount FROM sales WHERE day BETWEEN ? AND ?", (str(start), str(end))):
+        if k.who(r[1], r[0]) == emp["id"]:
+            tot += r[2]
+    return tot
+
+
+def growth_bonus(ctx, emp, c):
+    """Рост продаж к тому же месяцу прошлого года (vs ly) или к прошлому месяцу (vs pm)."""
+    import calendar as _cal
+    from datetime import date as _date
+    k = ctx.kpi
+    st = _date.fromisoformat(str(k.start))
+    if c.get("vs", "ly") == "ly":
+        a = _date(st.year - 1, st.month, 1)
+        what = "к прошлому году"
+    else:
+        a = _date(st.year - (st.month == 1), st.month - 1 or 12, 1)
+        what = "к прошлому месяцу"
+    b = _date(a.year, a.month, _cal.monthrange(a.year, a.month)[1])
+    if not k.cal.closed:                                   # месяц идёт — сравниваем те же дни
+        b = min(b, _date(a.year, a.month, min(k.cal.today.day, b.day)))
+    was = _sales_of(ctx, emp, a, b)
+    now = k.sales.get(emp["id"], 0.0)
+    title = c.get("name") or f"Рост {what}"
+    if was <= 0:
+        return [(title, 0, f"нет продаж за {a:%m.%Y} для сравнения")]
+    g = now / was - 1
+    got, top = 0, None
+    for share, amount in sorted(c["steps"]):
+        if g >= share - 1e-9:
+            got, top = amount, share
+    note = f"{_n(now)} против {_n(was)} → {'+' if g >= 0 else ''}{_p(g)}"
+    if top is not None and c.get("rate_over"):
+        extra_ = max(now - was * (1 + top), 0) * c["rate_over"]
+        got += extra_
+        note += f" · сверх +{_p(top)}: {_n(extra_)}"
+    return [(title, got, note)]
+
+
+def kpi_card(ctx, emp, c):
+    """KPI-карта: премия × Σ вес × выполнение; выполнение показателя — до cap; карта ниже min — ноль."""
+    total, parts, w_all = 0.0, [], 0.0
+    cap = c.get("cap", 1.2)
+    for metric, w in c["items"]:
+        m = _scope_metric(ctx, emp, c, metric)
+        w_all += w
+        if m is None or not m.plan:
+            parts.append(f"{metric}: нет плана")
+            continue
+        pct = min(m.pct or 0, cap)
+        total += w * pct
+        parts.append(f"{m.title.lower()} {_p(pct)}×{_d(w)}")
+    k = total / w_all if w_all else 0
+    title = c.get("name") or "KPI-карта"
+    if k < c.get("min", 0) - 1e-9:
+        return [(title, 0, f"карта {_p(k)} — платится от {_p(c['min'])}")]
+    return [(title, c["amount"] * k, f"{_n(c['amount'])} × {_p(k)} ({'; '.join(parts)})")]
+
+
+def orders(ctx, emp, c):
+    """Заказы = клиент × день с продажей. each — за каждый; avg — фикс, если средний чек не меньше norm."""
+    k = ctx.kpi
+    ids = set(_ids(ctx, emp, c))
+    seen, s = set(), 0.0
+    for r in ctx.db.c.execute("SELECT day, emp_key, client, amount FROM sales WHERE day BETWEEN ? AND ? AND amount > 0",
+                              (str(k.start), str(k.end))):
+        if k.who(r[1], r[0]) in ids:
+            seen.add((r[0], r[2]))
+            s += r[3]
+    n = len(seen)
+    if c.get("mode", "each") == "avg":
+        avg = s / n if n else 0
+        ok = avg >= c["norm"]
+        return [(c.get("name") or "Средний чек", c["amount"] if ok else 0, f"{_n(avg)} при норме {_n(c['norm'])} ({n} заказов)")]
+    return [(c.get("name") or "За заказы", n * c["price"], f"{n} × {_n(c['price'])}")] if n else []
+
+
+def team_days(ctx, emp, c):
+    """Супервайзеру: команда отработала норму дней (каждому можно allow выходных за свой счёт)."""
+    k = ctx.kpi
+    ids = [i for i in k.members("team", emp["team"]) if i != emp["id"]]
+    if not ids:
+        return []
+    allow = c.get("allow", 3)
+    got = sum(ctx.worked_days(k.employees[i]) for i in ids)
+    need = sum(max(len(ctx._span(k.employees[i])[0]) - allow, 0) for i in ids)
+    title = c.get("name") or "Команда отработала месяц"
+    if not k.cal.closed:
+        return [(title, 0, f"считается в конце месяца: сейчас {_d(got)} из {need} дн.")]
+    return [(title, c["amount"] if got >= need else 0, f"{_d(got)} из {need} дн.")]
+
+
+def old_debt(ctx, emp, c):
+    """% от денег, собранных с клиентов, у которых на первую дату месяца была просрочка days+ (старые долги)."""
+    k = ctx.kpi
+    days = c.get("days", 91)
+    first = ctx.db.c.execute('SELECT MIN("on") FROM debts WHERE "on" BETWEEN ? AND ?', (str(k.start), str(k.end))).fetchone()[0]
+    if not first:
+        return []
+    bad = set()
+    for r in ctx.db.c.execute('SELECT emp_key, client, total, d0_30, d31_60, d61_90, d91 FROM debts WHERE "on" = ?', (first,)):
+        if k.who(r[0], first) == emp["id"]:
+            row = {"total": r[2], "d0_30": r[3], "d31_60": r[4], "d61_90": r[5], "d91": r[6]}
+            if k.overdue_amount(row, days) > 0:
+                bad.add(r[1])
+    got = 0.0
+    for r in ctx.db.c.execute("SELECT day, emp_key, client, amount FROM payments WHERE day BETWEEN ? AND ?", (str(k.start), str(k.end))):
+        if r[2] in bad and k.who(r[1], r[0]) == emp["id"]:
+            got += r[3]
+    title = c.get("name") or f"Собрано старых долгов {days}+"
+    return [(title, got * c["rate"], f"{_n(got)} × {_p(c['rate'], 1)} ({len(bad)} клиентов)")] if got else \
+        [(title, 0, f"с должников {days}+ денег не было")]
+
+
+def period_bonus(ctx, emp, c):
+    """За квартал или год: сумма факта и плана всех месяцев периода; платится в последнем месяце периода."""
+    from core.kpi.engine import Kpi
+    month = ctx.kpi.month
+    y, m = int(month[:4]), int(month[5:7])
+    period = c.get("period", "quarter")
+    last = m in (3, 6, 9, 12) if period == "quarter" else m == 12
+    first = (m - 1) // 3 * 3 + 1 if period == "quarter" else 1
+    title = c.get("name") or ("Бонус за квартал" if period == "quarter" else "Бонус за год")
+    fact = plan = 0.0
+    metric = c.get("metric", "sales")
+    for mm in range(first, m + 1):
+        k = ctx.kpi if mm == m else Kpi(ctx.cfg, ctx.db, f"{y}-{mm:02d}", ctx.cal.today, ctx.hooks)
+        x = k.emp(emp["id"]).get(metric)
+        if x is not None:
+            fact += x.fact
+            plan += x.plan
+    pct = fact / plan if plan else 0
+    got = 0
+    for share, amount in sorted(c.get("steps") or []):
+        if pct >= share - 1e-9:
+            got = amount
+    when = "квартала" if period == "quarter" else "года"
+    if not last:
+        return [(title, 0, f"с начала {when} {_p(pct)} — платится в конце {when}")]
+    return [(title, got, f"{when}: {_n(fact)} из {_n(plan)} — {_p(pct)}")]
+
+
+class _UiLike:
+    """Для доски почёта: ей нужен ctx.kpi(месяц) и ctx.cfg, как у экранов."""
+    def __init__(self, pay):
+        self._p = pay
+        self.cfg = pay.cfg
+        self.month = pay.kpi.month
+
+    def kpi(self, month=None):
+        from core.kpi.engine import Kpi
+        if not month or month == self._p.kpi.month:
+            return self._p.kpi
+        return Kpi(self._p.cfg, self._p.db, month, self._p.cal.today, self._p.hooks)
+
+
+def awards(ctx, emp, c):
+    """За значки доски почёта месяца (план, лидер, клиенты, ассортимент, чистые долги, рывок)."""
+    try:
+        from modules.achievements import awards as _aw
+        got = _aw(_UiLike(ctx)).get(emp["id"], [])
+    except Exception:                              # noqa: BLE001 — доски почёта нет в наборе
+        return []
+    amount = len(got) * c["amount"]
+    if c.get("max"):
+        amount = min(amount, c["max"])
+    return [(c.get("name") or "За значки", amount, f"{len(got)} знач. × {_n(c['amount'])}" if got else "значков нет")]
+
+
+def pool(ctx, emp, c):
+    """Котёл отдела: price × отгрузки отдела (all_points) или rate × продажи отдела; делится по коэффициентам и дням."""
+    k = ctx.kpi
+    if c.get("base", "points") == "points":
+        fn = UNITS.get("all_points")
+        qty = (fn(ctx, emp) or 0) if fn else 0
+        total = qty * c.get("price", 0)
+        what = f"{_d(qty)} отгрузок × {_n(c.get('price', 0))}"
+    else:
+        ids = k.members("dept", next((d.id for d in ctx.cfg.departments if d.kind == "sales"), None))
+        sales = sum(k.sales.get(i, 0) for i in ids)
+        total = sales * c.get("rate", 0)
+        what = f"{_n(sales)} × {_p(c.get('rate', 0), 2)}"
+    coefs = {str(a).lower(): float(b) for a, b in (c.get("coefs") or {}).items()}
+
+    def coef(e):
+        pos = (ctx.positions.get(e.get("position")) or {}).get("name", e.get("position") or "").lower()
+        return next((v for key, v in coefs.items() if key in pos), 1.0)
+
+    team = [e for e in k.employees.values() if e["active"] and e["dept"] == emp["dept"]
+            and ctx.scheme_of(e) == ctx.scheme_of(emp)]
+    w = {e["id"]: coef(e) * ctx.worked_days(e) for e in team}
+    allw = sum(w.values())
+    mine = total * w.get(emp["id"], 0) / allw if allw else 0
+    return [(c.get("name") or "Котёл отдела", mine, f"{what} = {_n(total)}, доля {_p(w.get(emp['id'], 0) / allw if allw else 0, 1)}")]
+
+
 # Кубики, которые считаются после остальных: множитель и пределы. Строка расчёта помнит свой кубик (kind).
 PERCENT_KINDS = {"sales_percent"}
-BONUS_KINDS = {"plan_bonus", "fixed_bonus", "debt_bonus", "new_clients", "rank_bonus", "per_unit", "seniority"}
+BONUS_KINDS = {"plan_bonus", "fixed_bonus", "debt_bonus", "new_clients", "rank_bonus", "per_unit", "seniority",
+               "growth_bonus", "kpi_card", "orders", "team_days", "period_bonus", "awards", "pool"}
+PERCENT_KINDS |= {"old_debt"}
 
 
 def multiplier(ctx, emp, c, rows):
@@ -515,7 +895,9 @@ POST = {"multiplier": multiplier, "limits": limits}
 
 BUILTIN = {"new_clients": new_clients, "discount_penalty": discount_penalty, "rank_bonus": rank_bonus,
            "seniority": seniority, "salary": salary, "sales_percent": sales_percent, "plan_bonus": plan_bonus, "fixed_bonus": fixed_bonus,
-           "debt_penalty": debt_penalty, "debt_bonus": debt_bonus, "timesheet": timesheet, "per_unit": per_unit}
+           "debt_penalty": debt_penalty, "debt_bonus": debt_bonus, "timesheet": timesheet, "per_unit": per_unit,
+           "growth_bonus": growth_bonus, "kpi_card": kpi_card, "orders": orders, "team_days": team_days, "old_debt": old_debt,
+           "period_bonus": period_bonus, "awards": awards, "pool": pool}
 
 
 def _n(x):

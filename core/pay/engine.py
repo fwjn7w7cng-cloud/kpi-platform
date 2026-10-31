@@ -84,10 +84,15 @@ class Payroll:
     def missed_days(self, emp):
         return sum(1 for r in self._ts.get(emp["id"], []) if r["kind"] in ("absent", "truancy"))
 
-    def fines(self, emp):
-        """[(сумма, пояснение)] штрафов табеля."""
-        if emp.get("role") == "newbie":
+    def fines(self, emp, c=None):
+        """[(сумма, пояснение)] штрафов табеля. c — кубик timesheet должности со своими правилами (31.10):
+        late [[минуты, сумма]], truancy, fines [[название, сумма]] (свои штрафы), newbie_free."""
+        c = c or {}
+        if emp.get("role") == "newbie" and c.get("newbie_free", True):
             return []
+        late_scale = sorted(c["late"]) if c.get("late") else self.late_scale
+        absent_fine = c["truancy"] if "truancy" in c else self.absent_fine
+        named = {str(n).strip().lower(): a for n, a in (c.get("fines") or [])}
         out = []
         for r in self._ts.get(emp["id"], []):
             d = date.fromisoformat(r["day"])
@@ -96,15 +101,17 @@ class Payroll:
                 if self._ramadan_free(d):
                     continue                     # Рамадан: опоздание отмечено, но без штрафа
                 fine = 0
-                for minutes, amount in self.late_scale:
+                for minutes, amount in late_scale:
                     if r["minutes"] >= minutes:
                         fine = amount
                 if fine:
                     out.append((fine, f"опоздание {when} {r['minutes']} мин"))
-            elif r["kind"] == "truancy" and self.absent_fine:
-                out.append((self.absent_fine, f"прогул {when}"))
-            elif r["kind"] == "fine" and r["amount"]:
-                out.append((r["amount"], f"{r['note'] or 'штраф'} {when}"))
+            elif r["kind"] == "truancy" and absent_fine:
+                out.append((absent_fine, f"прогул {when}"))
+            elif r["kind"] == "fine":
+                amount = named.get((r["note"] or "").strip().lower(), r["amount"])      # свой штраф — сумма из схемы должности
+                if amount:
+                    out.append((amount, f"{r['note'] or 'штраф'} {when}"))
         return out
 
     def _ramadan_free(self, d):
@@ -133,25 +140,28 @@ class Payroll:
         self._cache[emp["id"]] = slip
         return slip
 
-    def slip_rows(self, emp, scheme, slip):
-        """Кубики схемы → строки расчёта. Множитель и пределы (C.POST) — после остальных, в том порядке, как в схеме."""
+    def slip_rows(self, emp, scheme, slip, owners=None):
+        """Кубики схемы → строки расчёта. Множитель и пределы (C.POST) — после остальных, в том порядке, как в схеме.
+        owners — список, куда записать номер кубика схемы для каждой строки (конструктор показывает, что дал каждый блок)."""
         tagged = []
         post = []
-        for comp in scheme:
+        for n, comp in enumerate(scheme):
             t = comp["type"]
             if t in C.POST:
-                post.append(comp)
+                post.append((n, comp))
                 continue
             fn = C.BUILTIN.get(t)
             if fn is None and self.hooks and t in self.hooks.components:
                 fn = self.hooks.components[t][0]
             if fn is None:
-                tagged.append((f"⚠️ нет кубика «{t}»", 0, "проверьте анкету", t))
+                tagged.append((f"⚠️ нет кубика «{t}»", 0, "проверьте анкету", t, n))
                 continue
-            tagged.extend(r + (t,) for r in _norm(fn(self, emp, comp)))
-        for comp in sorted(post, key=lambda c: c["type"] == "limits"):      # пределы — самыми последними
-            tagged.extend(r + (comp["type"],) for r in _norm(C.POST[comp["type"]](self, emp, comp, tagged)))
+            tagged.extend(r + (t, n) for r in _norm(fn(self, emp, comp)))
+        for n, comp in sorted(post, key=lambda x: x[1]["type"] == "limits"):      # пределы — самыми последними
+            tagged.extend(r + (comp["type"], n) for r in _norm(C.POST[comp["type"]](self, emp, comp, tagged)))
         slip.rows.extend(r[:3] for r in tagged)
+        if owners is not None:
+            owners.extend(r[4] for r in tagged)
         return slip
 
     def fund(self, emps):

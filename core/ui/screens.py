@@ -11,7 +11,7 @@ from core.calendar import MONTHS_GEN, day_title, month_of, month_title, shift_mo
 from core.config import INDUSTRIES
 from core.kpi.engine import MAIN, SELLERS
 from core.month import cycle
-from core.ui.kit import METRIC_HEAD, Button, Reply, fmt, metric_row, money, pct, rows
+from core.ui.kit import METRIC_HEAD, Button, Reply, fmt, metric_row, money, ok_row, pct, rows
 from core.ui.registry import MENU, menu, screen, text_input
 from core.ui.views import Card, Cell, Row, View, tone
 
@@ -229,7 +229,7 @@ def bottom_rows(ctx):
     items = [("🏠 Главная", "home")] + [x for x in items if x != fb] + [fb]
     out = [items[i:i + 3] for i in range(0, len(items), 3)]
     if ctx.demo:
-        out.append([("🎭 Роль", "sw:role"), ("🏭 Отрасль", "sw:ind"), ("🧩 Собрать", "sw:ed")])
+        out.append([("🎭 Роль", "sw:role"), ("🏭 Отрасль", "swi"), ("🧩 Собрать", "sw:ed")])
         if ctx.user_id in ctx.app.admins and ctx.app.demo_gate:
             out.append([("🛠 Пульт", "adm")])
         from core.demo import is_partner
@@ -596,29 +596,86 @@ def _ts_label(r):
     return s
 
 
+def named_fines(ctx):
+    """Свои штрафы фирмы с названиями: из схем зарплаты (блок «Табель и штрафы») и из анкеты (timesheet.fines)."""
+    out = {}
+    for comps in list((ctx.cfg.raw.get("pay_schemes") or {}).values()):
+        for c in comps or []:
+            if c.get("type") == "timesheet":
+                for n, a in c.get("fines") or []:
+                    out.setdefault(str(n), a)
+    for n, a in ((ctx.cfg.raw.get("timesheet") or {}).get("fines") or []):
+        out.setdefault(str(n), a)
+    if ctx.demo:                                         # в демо — ещё то, что собрали в конструкторе зарплаты
+        for items in (ctx.session.get("pb") or {}).values():
+            for it in items or []:
+                if it.get("b") == "timesheet":
+                    for n, a in (it.get("p") or {}).get("fines") or []:
+                        out.setdefault(str(n), a)
+        if not out:
+            from core.paybuilder import brick
+            out = {n: a for n, a in brick("timesheet")["p"]["fines"]}
+    return list(out.items())
+
+
 @screen("tsa")
-def ts_add(ctx, emp_id, kind=None, day=None, extra=None):
+def ts_add(ctx, emp_id, act=None, value=None):
+    """Отметить день в табеле — одним окном: что, какой день, сколько опоздал / какой штраф; «ОК» / «Отмена»."""
     emp = ctx.db.employee(int(emp_id))
     if not emp or not ctx.sees(emp) or ctx.scope == "self":
         return Reply(text="Нет доступа.")
     if not cycle.can_edit(ctx.db, ctx.month):
         return Reply(text="Месяц утверждён — табель закрыт.")
-    if not kind:
-        return Reply(text=f"Что отметить у {emp['fio']}?",
-                     buttons=rows([Button(t, f"tsa:{emp_id}:{k}") for k, t in TS_KINDS.items()], 2))
-    if not day:
-        days = [ctx.today - timedelta(days=i) for i in range(0, 7)]
-        days = [d for d in days if month_of(d) == ctx.month] or [ctx.kpi().cal.end]
-        return Reply(text="Какой день?", buttons=rows([Button(day_title(d), f"tsa:{emp_id}:{kind}:{d.isoformat()}")
-                                                         for d in days], 3))
-    if kind == "late" and not extra:
-        return Reply(text="Насколько опоздал?", buttons=[[Button(f"{m} мин", f"tsa:{emp_id}:late:{day}:{m}") for m in (10, 30, 60, 120)]])
-    if kind in ("fine", "comment") and not extra:
-        return ctx.ask("ts_text", "Напишите " + ("сумму и причину: «500 курил в зале»" if kind == "fine" else "комментарий"),
-                       {"emp": int(emp_id), "kind": kind, "day": day})
-    ctx.db.add_timesheet(day, int(emp_id), kind, minutes=int(extra) if kind == "late" else 0, who=ctx.author())
-    ctx.db.audit(ctx.author(), "timesheet", f"{emp['fio']} {day} {kind} {extra or ''}")
-    return timesheet(ctx, emp_id)
+    days = [ctx.today - timedelta(days=i) for i in range(0, 7)]
+    days = [d for d in days if month_of(d) == ctx.month] or [ctx.kpi().cal.end]
+    fines = named_fines(ctx)
+    d = ctx.session.get("ts_draft")
+    if act is None or not isinstance(d, dict) or d.get("emp") != int(emp_id):
+        d = {"emp": int(emp_id), "kind": None, "day": days[0].isoformat(), "min": 10, "fine": None}
+    if act == "no":
+        ctx.session.pop("ts_draft", None)
+        ctx.save()
+        return timesheet(ctx, emp_id)
+    if act == "k" and value in TS_KINDS:
+        d["kind"] = value
+    elif act == "d" and value:
+        d["day"] = value
+    elif act == "m" and (value or "").isdigit():
+        d["min"] = int(value)
+    elif act == "f" and value is not None:
+        d["fine"] = value
+    if act == "ok":
+        if not d["kind"]:
+            act = None                                   # ничего не выбрано — окно остаётся
+        else:
+            ctx.session.pop("ts_draft", None)
+            ctx.save()
+            kind, day = d["kind"], d["day"]
+            if kind == "fine" and (d["fine"] or "").isdigit() and int(d["fine"]) < len(fines):
+                name, amount = fines[int(d["fine"])]
+                ctx.db.add_timesheet(day, int(emp_id), "fine", amount=amount, note=name, who=ctx.author())
+            elif kind in ("fine", "comment"):
+                return ctx.ask("ts_text", "Напишите " + ("сумму и причину: «500 курил в зале»" if kind == "fine" else "комментарий"),
+                               {"emp": int(emp_id), "kind": kind, "day": day})
+            else:
+                ctx.db.add_timesheet(day, int(emp_id), kind, minutes=d["min"] if kind == "late" else 0, who=ctx.author())
+            ctx.db.audit(ctx.author(), "timesheet", f"{emp['fio']} {day} {kind}")
+            return timesheet(ctx, emp_id)
+    ctx.session["ts_draft"] = d
+    ctx.save()
+    v = View(f"➕ Отметить день · {emp['fio']}", "отметьте и нажмите «ОК»")
+    if act == "ok" and not d["kind"]:
+        v.note("Сначала отметьте, что случилось.")
+    pre = f"tsa:{emp_id}"
+    kb = [[Button(f"{'☑' if d['kind'] == k else '☐'} {t}", f"{pre}:k:{k}")] for k, t in TS_KINDS.items()]
+    kb += rows([Button(("● " if d["day"] == x.isoformat() else "") + day_title(x), f"{pre}:d:{x.isoformat()}") for x in days], 3)
+    if d["kind"] == "late":
+        kb.append([Button(("● " if d["min"] == m else "") + f"{m} мин", f"{pre}:m:{m}") for m in (10, 30, 60, 120)])
+    if d["kind"] == "fine":
+        kb += [[Button(f"{'☑' if d['fine'] == str(i) else '☐'} {n} — {money(a)}", f"{pre}:f:{i}")] for i, (n, a) in enumerate(fines)]
+        kb.append([Button(f"{'☑' if d['fine'] == 'other' else '☐'} Другой — напишу сумму и причину", f"{pre}:f:other")])
+    kb.append(ok_row(pre))
+    return Reply(view=v, buttons=kb)
 
 
 @text_input("ts_text")
@@ -670,12 +727,23 @@ def month_screen(ctx, action=None):
     if st == "open" and may_review:
         kb.append([Button("📨 На согласование", "month:review")])
     if st != "approved" and may_manage:
-        kb.append([Button("✅ Утвердить месяц", "month:approve")])
+        kb.append([Button("✅ Утвердить месяц", "monq")])
     if st == "approved" and may_manage:
         kb.append([Button("↩️ Открыть заново", "month:reopen")])
     kb.append([_mod(ctx, "✏️ Правки", "edits", "payroll"), _mod(ctx, "📑 Ведомость Excel", "month:xlsx", "payroll")])
     out.append(Reply(view=v, buttons=kb))
     return out
+
+
+@screen("monq")
+def month_confirm(ctx, act=None):
+    """«Утвердить месяц» — закрывает табель и правки, поэтому сначала «Точно?»."""
+    if act == "ok":
+        return month_screen(ctx, "approve")
+    if act == "no":
+        return month_screen(ctx)
+    return Reply(text=f"Утвердить {month_title(ctx.month).lower()}? Табель и правки закроются, ведомость уйдёт бухгалтеру. "
+                      "Открыть заново можно, но с причиной в журнале.", buttons=[ok_row("monq")])
 
 
 @text_input("reopen")
@@ -776,19 +844,18 @@ def demo(ctx, what=None, value=None, *more):
         ctx.save()
         return home(ctx.app.ctx(ctx.user_id))
     if what == "ind":
-        return Reply(text="🏭 Отрасль демо-фирмы:", buttons=rows([Button(("• " if k == ctx.industry else "") + t, f"sw:ind:{k}")
-                                                                   for k, t in INDUSTRIES.items()], 2))
+        return industry_window(ctx)
     from core.ui import tariff as T
     if what == "ed" and value in E.PRESETS:
         return T.set_packages(ctx, E.PRESETS[value]["packages"])
     if what == "ed":
         return T.build(ctx)
-    if what == "pk" and value:
-        return T.toggle(ctx, value, more[0] if more else None)
+    if what == "pk":
+        return T.packages_window(ctx)
     if what == "pn":
         return T.reset_counts(ctx) if value == "reset" else T.ask_counts(ctx)
     if what == "yr":
-        return T.toggle_year(ctx)
+        return T.packages_window(ctx)
     if what == "pdf":
         return T.pdf(ctx)
     if what == "pay":
@@ -803,6 +870,21 @@ def demo(ctx, what=None, value=None, *more):
         ctx.save()
         return [Reply(text="🔄 Демо заполнено заново."), home(ctx.app.ctx(ctx.user_id))]
     return home(ctx)
+
+
+@screen("swi")
+def industry_window(ctx, act=None, value=None):
+    """Отрасль демо-фирмы — окно: отметить, «ОК» / «Отмена»."""
+    from core.ui import pick
+    res = pick.one(ctx, "swi", act, value, list(INDUSTRIES.items()), ctx.industry, "🏭 Отрасль демо-фирмы",
+                   "отметьте и нажмите «ОК»", note="Названия клиентов, товаров и групп — как в этой отрасли.")
+    if res.done and res.value in INDUSTRIES and res.value != ctx.industry:
+        ctx.session["industry"] = res.value
+        ctx.save()
+        return home(ctx.app.ctx(ctx.user_id))
+    if res.done or res.cancel:
+        return home(ctx)
+    return res.reply
 
 
 def _role_picker(ctx):

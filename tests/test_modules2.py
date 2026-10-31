@@ -107,9 +107,12 @@ class Route(Base):
         self.assertTrue(pts)
         free = [c for c in pts if not ctx.db.one("SELECT 1 AS x FROM visit_marks WHERE day = ? AND emp_id = ? AND client = ?",
                                                  day, ctx.me["id"], c)]
-        self.assertTrue(self.app.press(301, f"rtp:{day}:{free[0]}:sold")[0].ask)
+        self.app.press(301, f"rtp:{day}:{free[0]}")
+        self.app.press(301, f"rtp:{day}:{free[0]}:s:sold")
+        self.assertTrue(self.app.press(301, f"rtp:{day}:{free[0]}:ok")[0].ask)       # «ОК» на «продал» — спросит сумму
         self.app.text(301, "12 500")
-        self.app.press(301, f"rtp:{day}:{free[1]}:missed:0")
+        for a in ("", ":s:missed", ":r:0", ":ok"):
+            self.app.press(301, f"rtp:{day}:{free[1]}{a}")
         m = {r["client"]: r for r in ctx.db.q("SELECT * FROM visit_marks WHERE day = ? AND emp_id = ?", day, ctx.me["id"])}
         self.assertEqual(m[free[0]]["amount"], 12500)
         self.assertEqual(m[free[1]]["reason"], "Закрыто")

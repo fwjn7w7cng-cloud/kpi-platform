@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from core.calendar import day_title
 from core.jobs.schedule import job
 from core.kpi.engine import SELLERS
-from core.ui.kit import Button, Reply, money, rows
+from core.ui.kit import Button, Reply, money, ok_row, rows
 from core.ui.registry import menu, screen, text_input
 from core.ui.screens import short
 from core.ui.views import Card, Cell, Row, View
@@ -125,26 +125,45 @@ def route(ctx, day=None, emp_id=None):
 
 
 @screen("rtp", module=M)
-def point(ctx, day, code, status=None, reason=None):
+def point(ctx, day, code, act=None, value=None):
+    """Отметка точки — окно: продал / был / не был (и почему), «ОК» / «Отмена». «Продал» после «ОК» спросит сумму заявки."""
     if not ctx.me or not _can_mark(ctx, ctx.me["id"], day) or code not in points(ctx, ctx.me["id"], day):
         return Reply(text="Отмечать можно свои точки за сегодня и вчера, пока отчёт не сформирован.")
     cl = _client(ctx, code)
-    if status == "sold":
-        return ctx.ask("rt_sum", f"✅ {cl['name']}: на какую сумму заявка? Напишите число или «-», если не знаете.",
-                       {"day": day, "code": code})
-    if status == "missed" and reason is None:
-        return Reply(text=f"❌ {cl['name']}: почему не были?",
-                     buttons=rows([Button(r, f"rtp:{day}:{code}:missed:{i}") for i, r in enumerate(REASONS)], 3))
-    if status in ST:
-        why = REASONS[int(reason)] if status == "missed" and reason is not None and reason.isdigit() and int(reason) < len(REASONS) else ""
-        _save(ctx, day, code, status, why, 0)
-        return route(ctx, day)
-    v = View(f"🏪 {cl['name']}", " · ".join(x for x in (cl["town"], day_title(date.fromisoformat(day))) if x))
     m = marks(ctx, ctx.me["id"], day).get(code)
+    pre = f"rtp:{day}:{code}"
+    d = ctx.session.get("rt_draft")
+    if act is None or not isinstance(d, dict) or d.get("k") != pre:
+        d = {"k": pre, "st": m["status"] if m else None, "why": m["reason"] if m else ""}
+    if act == "no":
+        ctx.session.pop("rt_draft", None)
+        ctx.save()
+        return route(ctx, day)
+    if act == "s" and value in ST:
+        d["st"] = value
+    elif act == "r" and (value or "").isdigit() and int(value) < len(REASONS):
+        d["why"] = REASONS[int(value)]
+    if act == "ok" and d["st"]:
+        ctx.session.pop("rt_draft", None)
+        ctx.save()
+        if d["st"] == "sold":
+            return ctx.ask("rt_sum", f"✅ {cl['name']}: на какую сумму заявка? Напишите число или «-», если не знаете.",
+                           {"day": day, "code": code})
+        _save(ctx, day, code, d["st"], d["why"] if d["st"] == "missed" else "", 0)
+        return route(ctx, day)
+    ctx.session["rt_draft"] = d
+    ctx.save()
+    v = View(f"🏪 {cl['name']}", " · ".join(x for x in (cl["town"], day_title(date.fromisoformat(day))) if x))
     v.cards([Card("Сейчас", ST[m["status"]] if m else "не отмечено", [m["reason"]] if m and m["reason"] else [],
                   phone=cl["phone"])])
-    return Reply(view=v, buttons=[[Button("✅ Продал", f"rtp:{day}:{code}:sold"), Button("👋 Был, без заказа", f"rtp:{day}:{code}:visited")],
-                                  [Button("❌ Не был", f"rtp:{day}:{code}:missed")], [Button("‹ Маршрут", f"rt:{day}")]])
+    if act == "ok":
+        v.note("Сначала отметьте, что было в точке.")
+    kb = [[Button(f"{'☑' if d['st'] == k else '☐'} {t}", f"{pre}:s:{k}")] for k, t in
+          (("sold", "✅ Продал"), ("visited", "👋 Был, без заказа"), ("missed", "❌ Не был"))]
+    if d["st"] == "missed":
+        kb += rows([Button(("● " if d["why"] == r else "") + r, f"{pre}:r:{i}") for i, r in enumerate(REASONS)], 3)
+    kb.append(ok_row(pre))
+    return Reply(view=v, buttons=kb)
 
 
 def _save(ctx, day, code, status, reason, amount):

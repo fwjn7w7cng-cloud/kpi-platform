@@ -117,6 +117,21 @@ def _all_points(pay, emp):
 C.unit("all_points", _all_points)
 
 
+def _long_day(pay, emp, c=None):
+    """Дни, когда водитель проехал не меньше km (по умолчанию 400) — доплата за длинный день."""
+    cache = pay.__dict__.setdefault("_trips", None)
+    if cache is None:
+        pay._trips = cache = Trips(pay.db, pay.kpi.month, pay.kpi.who)
+    lim = (c or {}).get("km", 400)
+    by = {}
+    for (day, _), t in cache.trips.get(emp["id"], {}).items():
+        by[day] = by.get(day, 0) + t["km"]
+    return sum(1 for v in by.values() if v >= lim)
+
+
+C.unit("long_day", _long_day)
+
+
 # ---------- «Мой день»: отметки водителя ----------
 # База: ключ dm:<месяц> = {id водителя: {день: {out, back, night, cash, pick: [[м³, кг, что]]}}}
 

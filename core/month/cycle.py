@@ -122,7 +122,7 @@ def registry_xlsx(cfg, month, slips):
     ws["A1"].font = Font(bold=True, size=14)
     ws.append(["Предварительный расчёт. Официальная зарплата — в бухгалтерии."])
     ws.append([])
-    head = ["Отдел", "Сотрудник", "Должность", "Дней", "Начислено", "Удержано", "К выплате"]
+    head = ["Отдел", "Сотрудник", "Должность", "Дней", "Начислено", "Удержано", "К выплате", "На руки отдельно"]
     ws.append(head)
     for c in ws[4]:
         c.font = Font(bold=True)
@@ -131,20 +131,21 @@ def registry_xlsx(cfg, month, slips):
     for s in sorted(slips, key=lambda s: ((cfg.dept(s.emp["dept"]).name if cfg.dept(s.emp["dept"]) else ""), s.emp["fio"])):
         if not s.rows:
             continue
-        plus = sum(r[1] for r in s.rows if r[1] > 0)
+        hand = sum(r[1] for r in s.rows if r[0].endswith(" · на руки"))        # бонус «на руки» — не в ведомость кассы
+        plus = sum(r[1] for r in s.rows if r[1] > 0) - hand
         minus = -sum(r[1] for r in s.rows if r[1] < 0)
         pos = cfg.position(s.emp["position"])
         dept = cfg.dept(s.emp["dept"])
         ws.append([dept.name if dept else s.emp["dept"], s.emp["fio"], pos["name"] if pos else s.emp["position"],
-                   s.days, round(plus), round(minus), s.total])
-        total += s.total
+                   s.days, round(plus), round(minus), round(s.total - hand), round(hand) or ""])
+        total += s.total - hand
     ws.append([])
-    ws.append(["", "Итого", "", "", "", "", total])
+    ws.append(["", "Итого", "", "", "", "", round(total)])
     ws.cell(ws.max_row, 2).font = Font(bold=True)
     ws.cell(ws.max_row, 7).font = Font(bold=True)
-    for col, w in zip("ABCDEFG", (16, 34, 26, 7, 13, 12, 13)):
+    for col, w in zip("ABCDEFGH", (16, 34, 26, 7, 13, 12, 13, 14)):
         ws.column_dimensions[col].width = w
-    for row in ws.iter_rows(min_row=5, min_col=5, max_col=7):
+    for row in ws.iter_rows(min_row=5, min_col=5, max_col=8):
         for c in row:
             c.number_format = "# ##0"
             c.alignment = Alignment(horizontal="right")

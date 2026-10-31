@@ -10,7 +10,7 @@ import re
 from datetime import date
 
 from core.calendar import RAMADAN_DEFAULT, in_ramadan, ramadan
-from core.ui.kit import Button, Reply, pct
+from core.ui.kit import Button, Reply, ok_row, pct
 from core.ui.registry import menu, screen, text_input
 from core.ui.views import Card, View
 
@@ -55,11 +55,53 @@ def ramadan_screen(ctx, action=None, value=None):
                   [f"Рассылки: утро {r['morning']}, вечер {r['evening']}",
                    "Опоздания: без штрафа" if r.get("late_free") else "Опоздания: штраф как обычно",
                    f"Планы «как в прошлом месяце»: {pct(r['plan'])} за дни поста"], color="good" if now else None)])
-    kb = [[Button("🕘 Время рассылок", "rmd:time"),
-           Button("⏰ Штраф за опоздания: " + ("выкл" if r.get("late_free") else "вкл"), "rmd:late")],
-          [Button(("• " if abs(r["plan"] - p / 100) < 1e-9 else "") + f"План {p}%", f"rmd:plan:{p}") for p in (100, 90, 85, 80)],
-          [Button("📅 Другие даты", "rmd:on"), Button("✖️ Выключить", "rmd:off")]]
+    kb = [[Button("⚙️ План и опоздания", "rmw")],
+          [Button("🕘 Время рассылок", "rmd:time"), Button("📅 Другие даты", "rmd:on")],
+          [Button("✖️ Выключить", "rmq")]]
     return Reply(view=v, buttons=kb)
+
+
+@screen("rmw")
+def settings_window(ctx, act=None, value=None):
+    """План в дни поста и штраф за опоздания — окно: отметить, «ОК» / «Отмена»."""
+    if ctx.role not in WHO:
+        return Reply(text="Режим Рамадана включает руководитель.")
+    r = ramadan(ctx.db)
+    if not r:
+        return ramadan_screen(ctx)
+    d = ctx.session.get("rmd_draft")
+    if act is None or not isinstance(d, dict):
+        d = {"plan": round(r["plan"] * 100), "late_free": bool(r.get("late_free"))}
+    if act == "no":
+        ctx.session.pop("rmd_draft", None)
+        ctx.save()
+        return ramadan_screen(ctx)
+    if act == "ok":
+        ctx.session.pop("rmd_draft", None)
+        ctx.save()
+        ctx.db.put("ramadan", {**(ctx.db.get("ramadan") or {}), "plan": d["plan"] / 100, "late_free": d["late_free"]})
+        ctx.db.audit(ctx.author(), "ramadan", f"план {d['plan']}%, опоздания {'без штрафа' if d['late_free'] else 'со штрафом'}")
+        return ramadan_screen(ctx)
+    if act == "p" and (value or "").isdigit():
+        d["plan"] = int(value)
+    elif act == "l":
+        d["late_free"] = not d["late_free"]
+    ctx.session["rmd_draft"] = d
+    ctx.save()
+    v = View("⚙️ Рамадан: план и опоздания", "отметьте и нажмите «ОК»")
+    kb = [[Button(f"{'☑' if d['plan'] == p else '☐'} План {p}% за дни поста", f"rmw:p:{p}")] for p in (100, 90, 85, 80)]
+    kb.append([Button(f"{'☑' if d['late_free'] else '☐'} Опоздания без штрафа", "rmw:l")])
+    kb.append(ok_row("rmw"))
+    return Reply(view=v, buttons=kb)
+
+
+@screen("rmq")
+def confirm_off(ctx, act=None):
+    if act == "ok":
+        return ramadan_screen(ctx, "off")
+    if act == "no":
+        return ramadan_screen(ctx)
+    return Reply(text="Выключить режим Рамадана? Опоздания снова со штрафом, рассылки — в обычное время.", buttons=[ok_row("rmq")])
 
 
 @text_input("ramadan_dates")

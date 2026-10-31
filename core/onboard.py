@@ -17,6 +17,7 @@ from datetime import datetime
 from core.access import editions as E
 from core.access import pricing as P
 from core.config import INDUSTRIES
+from core.ui import pick
 from core.ui.kit import Button, Reply, money, rows
 from core.ui.registry import screen, text_input
 from core.ui.views import Card, Cell, Row, View, to_pdf
@@ -289,7 +290,7 @@ def group(ctx, uid, g):
     v = View(GROUP_TITLE[g], _title(c))
     v.lines([f"{'●' if c['f'].get(f) else '○'} {label}: {c['f'].get(f) or ('— обязательно' if req else '—')}"
              + (f"  ({hint})" if isinstance(hint, str) and hint and not c["f"].get(f) else "") for f, label, kind, req, hint in fs])
-    kb = [[Button(f"✏️ {label[:30]}", f"cdf:{uid}:{f}")] for f, label, _, _, _ in fs]
+    kb = [[Button(f"✏️ {label[:30]}", f"{'cdv' if kind == 'choice' else 'cdf'}:{uid}:{f}")] for f, label, kind, _, _ in fs]
     kb.append([Button("‹ Анкета", f"cd:{uid}")])
     return Reply(view=v, buttons=kb)
 
@@ -302,24 +303,28 @@ def field(ctx, uid, f):
     c = ensure(ctx, uid)
     cur = c["f"].get(f, "")
     if kind == "choice":
-        kb = rows([Button(("• " if cur == o else "") + o, f"cdv:{uid}:{f}:{i}") for i, o in enumerate(opts)], 2)
-        kb.append([Button("‹ Назад", f"cdg:{uid}:{g}")])
-        return Reply(text=f"{label}:", buttons=kb)
+        return choose(ctx, uid, f)
     return ctx.ask("card_text", f"{label}" + (f" ({opts})" if opts else "") + (f"\n\nСейчас: {cur}" if cur else "") +
                    "\n\nНапишите в ответ. «-» — очистить.", {"uid": str(uid), "f": f},
                    buttons=[[Button("✖️ Отмена", f"cdg:{uid}:{g}")]])
 
 
 @screen("cdv")
-def choose(ctx, uid, f, i):
+def choose(ctx, uid, f, act=None, value=None):
+    """Поле с вариантами — окно: отметить вариант, «ОК» / «Отмена»."""
     if not may(ctx, uid) or f not in FIELDS or FIELDS[f][2] != "choice":
         return show(ctx, uid)
-    opts = FIELDS[f][4]
+    g, label, _, _, opts = FIELDS[f]
     c = ensure(ctx, uid)
-    if 0 <= int(i) < len(opts):
-        c["f"][f] = opts[int(i)]
+    cur = c["f"].get(f, "")
+    res = pick.one(ctx, f"cdv:{uid}:{f}", act, value, [(str(i), o) for i, o in enumerate(opts)],
+                   str(opts.index(cur)) if cur in opts else None, f"📋 {label}", _title(c))
+    if res.done and res.value is not None and 0 <= int(res.value) < len(opts):
+        c["f"][f] = opts[int(res.value)]
         save(ctx.office, uid, c)
-    return group(ctx, uid, FIELDS[f][0])
+    if res.done or res.cancel:
+        return group(ctx, uid, g)
+    return res.reply
 
 
 @text_input("card_text")

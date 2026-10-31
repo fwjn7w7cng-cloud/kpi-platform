@@ -163,9 +163,12 @@ class Hr(Base):
         self.assertEqual((p["fio"], p["salary"], p["status"]), ("Тестов Тест Тестович", 40000, "open"))
         self.assertIn("пункты", self.app.press(31, f"hra:{p['id']}")[0].text)      # не всё закрыто — провести нельзя
         self.role(32, "owner")
+        self.app.press(32, f"hrc:{p['id']}")
         for i in range(len(p["items"])):
-            self.app.press(32, f"hrc:{p['id']}:{i}")
-        out = self.app.press(32, f"hra:{p['id']}")
+            self.app.press(32, f"hrc:{p['id']}:t:{i}")
+        self.app.press(32, f"hrc:{p['id']}:ok")                                      # отмеченные — закрыты разом
+        self.assertIn("Отменить потом нельзя", self.app.press(32, f"hrq:{p['id']}")[0].text)   # необратимо — «Точно?»
+        out = self.app.press(32, f"hrq:{p['id']}:ok")
         f = next(r for r in out if r.files)
         self.assertTrue(f.files[0][0].endswith(".docx"))
         doc = zipfile.ZipFile(io.BytesIO(f.files[0][1])).read("word/document.xml").decode()
@@ -183,10 +186,15 @@ class Hr(Base):
         fire = next(p for p in procs(self.app.ctx(34).db) if p["kind"] == "fire")
         i_acc = next(i for i, it in enumerate(fire["items"]) if it[1] == "accountant")
         i_hr = next(i for i, it in enumerate(fire["items"]) if it[1] == "hr" and not it[2])
-        self.assertIn("кадры", self.app.press(34, f"hrc:{fire['id']}:{i_hr}")[0].text)
-        self.app.press(34, f"hrc:{fire['id']}:{i_acc}")
+        w = self.app.press(34, f"hrc:{fire['id']}")[0]
+        tos = [b.to for b in w.all_buttons()]
+        self.assertNotIn(f"hrc:{fire['id']}:t:{i_hr}", tos)                         # пункт кадров бухгалтеру не дают
+        self.app.press(34, f"hrc:{fire['id']}:t:{i_hr}")
+        self.app.press(34, f"hrc:{fire['id']}:t:{i_acc}")
+        self.app.press(34, f"hrc:{fire['id']}:ok")
         fire = next(p for p in procs(self.app.ctx(34).db) if p["kind"] == "fire")
         self.assertTrue(fire["items"][i_acc][2])
+        self.assertFalse(fire["items"][i_hr][2])
 
 
 class Maximum(Base):

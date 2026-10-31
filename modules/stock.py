@@ -17,7 +17,7 @@ from datetime import date, datetime, timedelta
 
 from core.calendar import day_title
 from core.jobs.schedule import job
-from core.ui.kit import Button, Reply, money, num, rows
+from core.ui.kit import Button, Reply, money, num, ok_row, rows
 from core.ui.registry import free_text, menu, screen, text_input
 from core.ui.screens import short
 from core.ui.views import Card, Cell, Row, View
@@ -255,7 +255,29 @@ def assign(ctx, i=None, emp=None):
     v.table(["Поставщик", "Менеджер"], [Row([sup, short(names[own[sup]]) if own.get(sup) in names else Cell("не назначен", "warn")])
                                        for sup, _ in sups])
     v.note("Менеджер видит в «📦 Склад» и в заказах только своих поставщиков.")
-    return Reply(view=v, buttons=rows([Button(sup[:24], f"sku:{n}") for n, (sup, _) in enumerate(sups)], 2))
+    return Reply(view=v, buttons=rows([Button(sup[:24], f"skm:{n}") for n, (sup, _) in enumerate(sups)], 2))
+
+
+@screen("skm", module=M)
+def assign_one(ctx, i, act=None, value=None):
+    """Кто отвечает за поставщика — окно: отметить менеджера, «ОК» / «Отмена»."""
+    from core.ui import pick
+    if not boss(ctx):
+        return Reply(text="Назначает начальник закупок или директор.")
+    sups = load(ctx).suppliers()
+    if not i.isdigit() or int(i) >= len(sups):
+        return assign(ctx)
+    sup = sups[int(i)][0]
+    buyers = [e for e in ctx.db.employees() if ctx.cfg.dept(e["dept"]) and ctx.cfg.dept(e["dept"]).kind == "purchasing"
+              and e["role"] == "staff"]
+    own = owners(ctx.db)
+    res = pick.one(ctx, f"skm:{i}", act, value, [(str(e["id"]), short(e["fio"])) for e in buyers],
+                   str(own.get(sup)) if own.get(sup) else None, f"👥 Кто отвечает за «{sup}»", "отметьте и нажмите «ОК»")
+    if res.done and res.value:
+        return assign(ctx, i, res.value)
+    if res.done or res.cancel:
+        return assign(ctx)
+    return res.reply
 
 
 # ---------- заказы ----------

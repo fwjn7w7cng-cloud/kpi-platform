@@ -21,6 +21,7 @@ from pathlib import Path
 import yaml
 
 from core.jobs.schedule import job
+from core.pay import components as C
 from core.ui.kit import Button, Reply, pct, rows
 from core.ui.registry import menu, screen, text_input
 from core.ui.screens import short
@@ -331,3 +332,22 @@ def invite(ctx):
         return None
     return Reply(text=f"📝 Тест недели готов: {min(settings(ctx.cfg)['count'], len(bank(ctx)))} вопросов, пара минут.",
                  buttons=[[Button("📝 Пройти", f"qzs:test:{week_ref(ctx.today)}")]])
+
+
+# ---------- тесты в зарплате (31.10): сданные / несданные тесты месяца — единицы сдельной оплаты ----------
+
+def _quiz_unit(ok):
+    def fn(pay, emp, c=None):
+        k = pay.kpi
+        need = (c or {}).get("pass", 0.8)
+        best = {}
+        for r in pay.db.q("SELECT ref, score, total FROM quiz_results WHERE emp_id = ? AND kind = 'test' AND ts BETWEEN ? AND ?",
+                          emp["id"], str(k.start), str(k.end) + "T99"):
+            p = r["score"] / r["total"] if r["total"] else 0
+            best[r["ref"]] = max(best.get(r["ref"], 0), p)
+        return sum(1 for v in best.values() if (v >= need) == ok)
+    return fn
+
+
+C.unit("quiz_ok", _quiz_unit(True))
+C.unit("quiz_fail", _quiz_unit(False))

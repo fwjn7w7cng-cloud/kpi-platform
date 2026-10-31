@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta
 from xml.sax.saxutils import escape
 
 from core.calendar import MONTHS_GEN, day_title, first_day, last_day, month_of, shift_month
-from core.ui.kit import Button, Reply, money, rows
+from core.ui.kit import Button, Reply, money, ok_row, rows
 from core.ui.registry import menu, screen, text_input
 from core.ui.screens import short
 from core.ui.views import Card, View
@@ -144,38 +144,90 @@ def proc(ctx, pid):
     lines, kb = [], []
     for i, (t, who, by, ts) in enumerate(p["items"]):
         lines.append(f"{'●' if by else '○'} {t} — {WHO[who]}" + (f" · {by}, {ts}" if by else ""))
-        if not by and p["status"] == "open" and may_close(ctx, p, who):
-            kb.append([Button(f"✅ {t[:30]}", f"hrc:{p['id']}:{i}")])
+    if p["status"] == "open" and any(not by and may_close(ctx, p, who) for t, who, by, ts in p["items"]):
+        kb.append([Button("☑️ Отметить выполненные пункты", f"hrc:{p['id']}")])
     v.lines(lines, title="Чек-лист")
     v.note(f"Запустил {p['author']} {p['created']}." + (f" Приказ №{p['order']}." if p.get("order") else ""))
     if p["status"] == "open" and all(it[2] for it in p["items"]) and (starts(ctx) or ctx.role in ("owner", "admin")):
-        kb.append([Button("✅ Провести и выпустить приказ", f"hra:{p['id']}")])
+        kb.append([Button("✅ Провести и выпустить приказ", f"hrq:{p['id']}")])
     if p.get("order"):
         kb.append([Button("📄 Приказ (Word)", f"hrd:{p['id']}")])
     if p["status"] == "open" and (ctx.role in ("owner", "admin") or p.get("author_id") == (ctx.me or {}).get("id")):
-        kb.append([Button("✖️ Отменить", f"hrx:{p['id']}")])
+        kb.append([Button("✖️ Отменить процесс", f"hrz:{p['id']}")])
     kb.append([Button("‹ Кадры", "hr")])
     return Reply(view=v, buttons=kb)
 
 
 @screen("hrc", module=M)
-def close_item(ctx, pid, i):
+def close_items(ctx, pid, act=None, value=None):
+    """Отметить выполненные пункты — окно с галочками, «ОК» закрывает отмеченные."""
     ps = procs(ctx.db)
     p = next((x for x in ps if x["id"] == int(pid)), None)
-    if not p or p["status"] != "open" or int(i) >= len(p["items"]):
-        return Reply(text="Пункт уже закрыт.")
-    it = p["items"][int(i)]
-    if it[2] or not may_close(ctx, p, it[1]):
-        return Reply(text="Этот пункт закрывает " + WHO[it[1]] + ".")
-    it[2], it[3] = short(ctx.name()) if ctx.me else ctx.name(), datetime.now().strftime("%d.%m %H:%M")
-    _save(ctx.db, ps)
-    ctx.db.audit(ctx.author(), "hr_item", f"{KINDS[p['kind']][1]} {p['fio']}: {it[0]}")
-    out = []
-    if all(x[2] for x in p["items"]):
-        out.append(Reply(text=f"🎉 Все пункты закрыты: {KINDS[p['kind']][1]} · {p['fio']}. Можно проводить."))
-        out += _tell(ctx, p, f"✅ {KINDS[p['kind']][1].capitalize()} · {p['fio']}: все пункты закрыты — можно проводить.",
-                     ("hr",))
-    return out + [proc(ctx, pid)]
+    if not p or p["status"] != "open":
+        return Reply(text="Процесс уже проведён или отменён.")
+    mine = [i for i, it in enumerate(p["items"]) if not it[2] and may_close(ctx, p, it[1])]
+    pre = f"hrc:{p['id']}"
+    d = ctx.session.get("hr_pick")
+    if act is None or not isinstance(d, dict) or d.get("k") != pre:
+        d = {"k": pre, "sel": []}
+    if act == "no":
+        ctx.session.pop("hr_pick", None)
+        ctx.save()
+        return proc(ctx, pid)
+    if act == "t" and (value or "").isdigit() and int(value) in mine:
+        i = int(value)
+        d["sel"] = [x for x in d["sel"] if x != i] if i in d["sel"] else d["sel"] + [i]
+    if act == "ok":
+        ctx.session.pop("hr_pick", None)
+        ctx.save()
+        who = short(ctx.name()) if ctx.me else ctx.name()
+        for i in d["sel"]:
+            if i in mine:
+                it = p["items"][i]
+                it[2], it[3] = who, datetime.now().strftime("%d.%m %H:%M")
+                ctx.db.audit(ctx.author(), "hr_item", f"{KINDS[p['kind']][1]} {p['fio']}: {it[0]}")
+        _save(ctx.db, ps)
+        out = []
+        if d["sel"] and all(x[2] for x in p["items"]):
+            out.append(Reply(text=f"🎉 Все пункты закрыты: {KINDS[p['kind']][1]} · {p['fio']}. Можно проводить."))
+            out += _tell(ctx, p, f"✅ {KINDS[p['kind']][1].capitalize()} · {p['fio']}: все пункты закрыты — можно проводить.",
+                         ("hr",))
+        return out + [proc(ctx, pid)]
+    ctx.session["hr_pick"] = d
+    ctx.save()
+    v = View(f"☑️ Пункты · {p['fio']}", "отметьте выполненные и нажмите «ОК»")
+    if not mine:
+        v.note("Ваших открытых пунктов нет.")
+    kb = [[Button(f"{'☑' if i in d['sel'] else '☐'} {p['items'][i][0]}", f"{pre}:t:{i}")] for i in mine]
+    kb.append(ok_row(pre))
+    return Reply(view=v, buttons=kb)
+
+
+@screen("hrq", module=M)
+def confirm_apply(ctx, pid, act=None):
+    """«Провести и выпустить приказ» — необратимо, поэтому сначала «Точно?»."""
+    if act == "ok":
+        return apply(ctx, pid)
+    if act == "no":
+        return proc(ctx, pid)
+    p = _find(ctx, pid)
+    if not p:
+        return Reply(text="Нет такого процесса.")
+    return Reply(text=f"Провести: {KINDS[p['kind']][1]} · {p['fio']}? Сотрудник изменится в приложении, выйдет приказ. "
+                      "Отменить потом нельзя.", buttons=[ok_row(f"hrq:{p['id']}")])
+
+
+@screen("hrz", module=M)
+def confirm_cancel(ctx, pid, act=None):
+    if act == "ok":
+        return cancel(ctx, pid)
+    if act == "no":
+        return proc(ctx, pid)
+    p = _find(ctx, pid)
+    if not p:
+        return Reply(text="Нет такого процесса.")
+    return Reply(text=f"Отменить процесс: {KINDS[p['kind']][1]} · {p['fio']}? Пункты чек-листа пропадут.",
+                 buttons=[ok_row(f"hrz:{p['id']}")])
 
 
 @screen("hrx", module=M)

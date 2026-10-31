@@ -30,8 +30,22 @@ MODULES = ["debts", "reminders", "achievements", "staff", "payroll", "tasks", "a
 
 
 RESET = {"home", "mon"}          # главная и смена месяца: путь «Назад» начинается заново
-STAY = {"pbs", "pbe"}            # окна с «ОК / Отмена» (конструктор зарплаты): в путь не попадают, «‹ Назад» из них — на экран
-REPLACE = {"pb"}                 # переключение внутри экрана (должность в конструкторе) — не копит шаги «Назад»
+REPLACE = {"pb", "rating"}       # вкладки внизу одного экрана (должность в конструкторе, показатель рейтинга) — не копят шаги «Назад»
+STEPLESS = {"qzs", "qza"}        # прохождение теста: вопросы не копятся в путь, «‹ Назад» — к списку тестов
+
+
+def window_of(r):
+    """Окно выбора (Адам 31.10): на листе несколько вариантов, внизу «✅ ОК / ✖️ Отмена» (кнопки <окно>:ok и <окно>:no).
+    → адрес окна (то, что перед :ok) или None."""
+    for row in (r.buttons or []):
+        tos = [b.to or "" for b in row]
+        if len(tos) == 2 and tos[0].endswith(":ok") and tos[1].endswith(":no") and tos[0][:-3] == tos[1][:-3]:
+            return tos[0][:-3]
+    return None
+
+
+def is_window(r):
+    return window_of(r) is not None
 TRAIL = 12
 MAX_OPEN = 40                    # демо: сколько копий фирмы держать открытыми одновременно
 
@@ -181,7 +195,7 @@ class App:
         out = [("start", "🏠 Главная", "home"), ("help", "❓ Как пользоваться", "help"),
                ("feedback", "🐞 Не работает / предложение", "fb")]
         if self.demo:
-            out += [("role", "🎭 Сменить роль", "sw:role"), ("industry", "🏭 Сменить отрасль", "sw:ind"),
+            out += [("role", "🎭 Сменить роль", "sw:role"), ("industry", "🏭 Сменить отрасль", "swi"),
                     ("build", "🧩 Собрать бота и цена", "sw:ed"), ("restart", "🔄 Начать демо заново", "sw:reset")]
         return out
 
@@ -242,16 +256,31 @@ class App:
         rev = ctx.db.rev()
         out = self._run(ctx, sid, args, finish=False)
         mine = [r for r in out if not r.to]
-        # Экран можно открыть ещё раз кнопкой «Назад», только если он ничего не менял и никому не писал.
-        safe = sid not in RESET and sid not in STAY and ctx.db.rev() == rev and len(mine) == len(out) and not (mine and mine[-1].ask)
-        if safe and trail and sid in REPLACE and trail[-1].split(":")[0] == sid:
-            trail[-1] = data
-        elif safe and (not trail or trail[-1] != data):
-            trail.append(data)
-        ctx.session["trail"] = trail[-TRAIL:]
-        back = len(trail) - 1 if safe else len(trail)
-        if sid in STAY and args and args[-1] in ("ok", "no") and trail and trail[-1].split(":")[0] in REPLACE:
-            back = len(trail) - 1                     # «ОК» / «Отмена» вернули на экран — «Назад» туда же, куда у самого экрана
+        window = window_of(mine[-1]) if mine else None
+        same = bool(trail) and trail[-1].split(":")[0] == sid
+        if args and args[-1] in ("ok", "no") and same:
+            # «ОК» / «Отмена»: окно закрылось — из пути его убираем, «‹ Назад» дальше — как у экрана, куда вернулись
+            trail = trail[:-1]
+            ctx.session["trail"] = trail[-TRAIL:]
+            back = len(trail) - 1
+        elif window:
+            # окно: открылось — один шаг в пути; галочки и цифры внутри — без новых шагов; «‹ Назад» = выйти без изменений
+            wsid = window.split(":")[0]
+            if not trail or trail[-1].split(":")[0] != wsid:
+                trail.append(window)
+            ctx.session["trail"] = trail[-TRAIL:]
+            back = len(trail) - 1
+        else:
+            # Экран можно открыть ещё раз кнопкой «Назад», только если он ничего не менял и никому не писал.
+            safe = sid not in RESET and ctx.db.rev() == rev and len(mine) == len(out) and not (mine and mine[-1].ask)
+            if sid in STEPLESS:
+                safe = False
+            elif safe and same and sid in REPLACE:
+                trail[-1] = data
+            elif safe and (not trail or trail[-1] != data):
+                trail.append(data)
+            ctx.session["trail"] = trail[-TRAIL:]
+            back = len(trail) - 1 if safe else len(trail)
         return self._with_keyboard(user_id, self._finish(ctx, out, sid, back=back))
 
     def _with_keyboard(self, user_id, out, force=False):
@@ -324,7 +353,9 @@ class App:
         last = mine[-1] if mine else None
         if back is None:                             # ответ на ввод текста — назад на экран, с которого спросили
             back = len(ctx.session.get("trail") or [])
-        if last and sid not in RESET and not last.ask and not last.noback and \
+            if last is not None and is_window(last):      # вернулись в окно — «‹ Назад» = выйти из окна без изменений
+                back -= 1
+        if last and sid not in RESET and not last.ask and \
                 not any(b.to == "home" or (b.to or "").startswith("bk:") for b in last.all_buttons()):
             last.buttons = list(last.buttons) + [[Button("‹ Назад", f"bk:{max(back, 0)}")]]
         ctx.save()

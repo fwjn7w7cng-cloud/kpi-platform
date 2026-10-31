@@ -74,6 +74,18 @@ PRESETS = {
     "max":      {"title": "Максимум", "packages": {"sales": "control", "stock": True, "logistics": True, "office": True, "max": True},
                  "for": "всё плюс свой бренд, филиалы и функции на заказ"},
 }
+# Готовый набор — под размер фирмы (Адам 31.10: «редакции — для размеров фирмы, а внутренние настройки — каждому
+# индивидуально»): при выборе набора в демо люди по отделам ставятся типовые для такого размера, дальше правятся вручную.
+SIZES = {
+    "start":    ("маленькая фирма · до 10 человек", {"sales": 6}),
+    "business": ("небольшая · 10–25 человек", {"sales": 15}),
+    "control":  ("растущий отдел продаж · 25–50 человек", {"sales": 30}),
+    "company":  ("средняя фирма · 50–100 человек, все отделы", {"sales": 30, "stock": 12, "logistics": 15, "office": 6}),
+    "max":      ("крупная · 100+ человек, филиалы", {"sales": 60, "stock": 25, "logistics": 30, "office": 12}),
+}
+for _k, (_size, _people) in SIZES.items():
+    PRESETS[_k]["size"] = _size
+    PRESETS[_k]["people"] = {d: _people.get(d, 0) for d in ("sales", "stock", "logistics", "office")}
 ORDER = list(PRESETS)
 EDITIONS = PRESETS          # старое имя
 CUSTOM = "custom"           # «свой набор» — не совпадает ни с одним готовым

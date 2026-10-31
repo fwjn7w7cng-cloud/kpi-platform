@@ -46,11 +46,23 @@ class Base(unittest.TestCase):
     def add(self, who, dept, name, pos, team=None):
         self.app.press(who, f"pad:{dept}")
         self.app.text(who, name)
-        out = self.app.press(who, f"padp:{pos}")
+        self.app.press(who, f"padw:t:{pos}")
         if team:
-            out = self.app.press(who, f"padt:{team}")
+            self.app.press(who, f"padw:m:{team}")
+        out = self.app.press(who, "padw:ok")
         card = next(r for r in out if r.view)
         return int(next(b for b in buttons(card) if b.startswith("pap:")).split(":")[1])
+
+
+def _choose(self, prefix, value, uid=None):
+    """Окно выбора: открыть, отметить вариант, «ОК»."""
+    uid = ADMIN if uid is None else uid
+    self.app.press(uid, prefix)
+    self.app.press(uid, f"{prefix}:t:{value}")
+    return self.app.press(uid, f"{prefix}:ok")
+
+
+Base.choose = _choose
 
 
 class Access(Base):
@@ -112,18 +124,23 @@ class Access(Base):
 
     def test_position_team_role(self):
         emp = self.add(ADMIN, "sales", "Сидоров Али", "rep", "north")
-        self.app.press(ADMIN, f"pap:{emp}:sv")
+        self.choose(f"pap:{emp}", "sv")
         self.assertEqual(self.db.employee(emp)["role"], "sv")
-        self.app.press(ADMIN, f"pat:{emp}:south")
+        self.choose(f"pat:{emp}", "south")
         self.assertEqual(self.db.employee(emp)["team"], "south")
-        self.app.press(ADMIN, f"par:{emp}:newbie")
+        self.choose(f"par:{emp}", "rep")
+        self.choose(f"par:{emp}", "newbie")                                # «новичок» — у торгового
         self.assertEqual(self.db.employee(emp)["role"], "newbie")
-        self.app.press(ADMIN, f"pap:{emp}:storekeeper")                          # чужого отдела — нельзя
+        self.app.press(ADMIN, f"par:{emp}")
+        self.app.press(ADMIN, f"par:{emp}:t:sv")
+        self.app.press(ADMIN, f"par:{emp}:no")                             # «Отмена» — роль прежняя
+        self.assertEqual(self.db.employee(emp)["role"], "newbie")
+        self.choose(f"pap:{emp}", "storekeeper")                          # чужого отдела — нельзя
         self.assertEqual(self.db.employee(emp)["position"], "sv")
 
     def test_client_admin_runs_people_but_rep_cannot(self):
         acc = self.add(ADMIN, "office", "Бухгалтерова Аза", "accountant")
-        self.app.press(ADMIN, f"par:{acc}:admin")
+        self.choose(f"par:{acc}", "admin")
         self.app.start(700, arg=code_of(self.app.press(ADMIN, f"pai:{acc}")))
         ctx = self.app.ctx(700)
         self.assertTrue(ctx.admin)

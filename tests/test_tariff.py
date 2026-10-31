@@ -67,7 +67,33 @@ class Base(unittest.TestCase):
         return dict((a, b) for a, b, _ in next(b for k, b in r.view.blocks if k == "tiles"))
 
 
+def pick(app, uid, *acts):
+    """Окно «☑️ Выбрать пакеты»: отметить и нажать «ОК»."""
+    app.press(uid, "swe")
+    for a in acts:
+        app.press(uid, f"swe:{a}")
+    return app.press(uid, "swe:ok")
+
+
 class Builder(Base):
+    def test_window_ok_and_cancel(self):
+        self.owner(16)
+        before = dict(self.app.ctx(16).cfg.packages)
+        self.app.press(16, "sw:ed")
+        w = self.app.press(16, "swe")[0]
+        self.assertEqual([b.label for b in w.buttons[-2]], ["✅ ОК", "✖️ Отмена"])
+        w2 = self.app.press(16, "swe:t:stock")[0]                  # в окне сумма уже пересчитана
+        self.assertNotEqual(self.tiles(w)["Дальше, в месяц"], self.tiles(w2)["Дальше, в месяц"])
+        self.assertEqual(self.app.ctx(16).cfg.packages, before)     # до «ОК» ничего не поменялось
+        self.app.press(16, "swe:no")
+        self.assertEqual(self.app.ctx(16).cfg.packages, before)     # «Отмена» — как было
+        back = w.buttons[-1][0].to
+        self.assertTrue(back.startswith("bk:"))
+        self.app.press(16, "swe")
+        self.app.press(16, "swe:t:stock")
+        self.assertEqual(self.app.press(16, self.app.press(16, "swe:t:office")[0].buttons[-1][0].to)[0].view.title, "🧩 Собрать бота")   # стрелка — назад, без изменений
+        self.assertEqual(self.app.ctx(16).cfg.packages, before)
+
     def test_toggle_packages_and_price(self):
         self.owner(11)
         r = self.app.press(11, "sw:ed")[0]
@@ -75,14 +101,14 @@ class Builder(Base):
         t = self.tiles(r)
         self.assertIn("Подключение, один раз", t)
         self.assertIn("Дальше, в месяц", t)
-        r2 = self.app.press(11, "sw:pk:stock")[0]            # выключили склад
+        r2 = pick(self.app, 11, "t:stock")[0]                # выключили склад
         ctx = self.app.ctx(11)
         self.assertFalse(ctx.cfg.packages["stock"])
         self.assertFalse(ctx.cfg.has_module("warehouse"))
         self.assertEqual(ctx.cfg.edition, E.CUSTOM)
         self.assertLess(int(self.tiles(r2)["Дальше, в месяц"].replace(" ", "").rstrip("₽")),
                         int(t["Дальше, в месяц"].replace(" ", "").rstrip("₽")))
-        self.app.press(11, "sw:pk:sales:start")
+        pick(self.app, 11, "s:start")
         ctx = self.app.ctx(11)
         self.assertEqual(ctx.cfg.packages["sales"], "start")
         self.assertFalse(ctx.cfg.has_module("clients"))
@@ -98,7 +124,7 @@ class Builder(Base):
         self.assertIn("людей в фирме 17", r.view.subtitle)
         q = P.quote(self.app.ctx(12).cfg.packages, {"sales": 8, "stock": 3, "logistics": 4, "office": 2}, P.DEFAULT)
         self.assertEqual(self.tiles(r)["Дальше, в месяц"], f"{q['monthly']:,} ₽".replace(",", " "))
-        r = self.app.press(12, "sw:yr")[0]
+        r = pick(self.app, 12, "y")[0]
         self.assertIn("За год: в месяц", self.tiles(r))
         bad = self.app.text(12, "много")                     # не числа — переспросит
         self.app.press(12, "sw:pn")
@@ -130,9 +156,9 @@ class Builder(Base):
         self.app.press(15, "sw:pos:storekeeper")
         home = self.app.start(15)
         self.assertTrue(any("не подключён" in str(b) for r in home if r.view for b in r.view.blocks))
-        self.assertEqual([t for row in screens.bottom_rows(self.app.ctx(15)) for _, t in row if not t.startswith("sw:")],
+        self.assertEqual([t for row in screens.bottom_rows(self.app.ctx(15)) for _, t in row if not t.startswith("sw")],
                          ["home", "fb"])
-        self.app.press(15, "sw:pk:stock")                      # подключили склад — экраны вернулись
+        pick(self.app, 15, "t:stock")                          # подключили склад — экраны вернулись
         self.assertIn("wrc", [t for row in screens.bottom_rows(self.app.ctx(15)) for _, t in row])
 
 
@@ -149,12 +175,12 @@ class Prices(Base):
         self.assertTrue(self.app.text(1, "95")[0].ask)        # скидка 95% — не бывает
         self.owner(21)
         r = self.app.press(21, "lg")                          # цена в замке — уже новая
-        self.app.press(21, "sw:pk:logistics")
+        pick(self.app, 21, "t:logistics")
         r = self.app.press(21, "lg")[0]
         lines = next(b for k, b in r.view.blocks if k == "lines")[1]
         self.assertTrue(any("5 000" in x for x in lines))
         r = self.app.press(21, "sk")[0]
-        self.app.press(21, "sw:pk:stock")
+        pick(self.app, 21, "t:stock")
         lines = next(b for k, b in self.app.press(21, "sk")[0].view.blocks if k == "lines")[1]
         self.assertTrue(any("6 000 ₽ в месяц" in x for x in lines))
         self.app.press(1, "prx")

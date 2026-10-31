@@ -120,7 +120,7 @@ class Builder(Base):
                 for var in PB.variants(bid, pos):
                     self.screens(f"pbe:{bid}:t:{var[0]}")
                 self.screens(f"pbe:{bid}:ok")
-            emp, rows = PB.example(self.app.ctx(7), pos, self.items(pos))
+            emp, rows, _ = PB.example(self.app.ctx(7), pos, self.items(pos))
             self.assertTrue(emp, pos)
             self.assertFalse([r for r in rows if r[0].startswith("⚠️")], pos)
         self.assertEqual(sum(1 for x in self.items("rep") if x["b"] == "salary"), 1)       # оклад — один
@@ -251,7 +251,7 @@ class Builder(Base):
         self.assertEqual(PB.items_of(self.app.ctx(7), "rep"), [])
         self.assertIn("Схема пустая", str(v.blocks))
         self.add("akb")                                                         # только один показатель, без оклада
-        emp, rows = PB.example(self.app.ctx(7), "rep", PB.items_of(self.app.ctx(7), "rep"))
+        emp, rows, _ = PB.example(self.app.ctx(7), "rep", PB.items_of(self.app.ctx(7), "rep"))
         self.assertTrue(rows and not any(r[0].startswith("⚠️") for r in rows))
         c = O.ensure(self.app.ctx(7), "7")
         O.snapshot(self.app.ctx(7), c)

@@ -20,7 +20,7 @@ class DemoConfig(unittest.TestCase):
     def test_demo_loads(self):
         cfg = load_client("demo")
         self.assertEqual(cfg.id, "demo")
-        self.assertEqual(cfg.edition, "max")
+        self.assertEqual(cfg.edition, "company")              # демо по умолчанию — средняя фирма, все отделы (Адам 31.10)
         self.assertEqual(cfg.weekend, ["sun"])
         self.assertEqual(cfg.salary_days, 26)
         self.assertTrue(cfg.dept("sales"))
@@ -35,7 +35,7 @@ class DemoConfig(unittest.TestCase):
         self.assertTrue(cfg.has_module("route"))      # бизнес
         self.assertTrue(cfg.has_module("approval"))   # контроль
         self.assertTrue(cfg.has_module("stock"))      # компания
-        self.assertTrue(cfg.has_module("custom"))     # максимум
+        self.assertFalse(cfg.has_module("custom"))    # максимум — не по умолчанию, кнопкой в «Выбрать пакеты»
 
 
 class Errors(unittest.TestCase):

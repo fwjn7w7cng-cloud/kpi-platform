@@ -54,8 +54,8 @@ class ClientCard(Base):
         self.assertEqual((c["set"]["title"], c["set"]["counts"]["sales"], c["set"]["monthly"]), ("Бизнес", 6, 14200))
         self.app.press(CLIENT, "cdf:200:company")
         self.app.text(CLIENT, "Стройбаза")
-        self.app.press(CLIENT, "cdv:200:onec:4")                                   # «Не 1С»
-        self.app.press(CLIENT, "cdv:200:start:0")
+        self.app.press(CLIENT, "cdv:200:onec"); self.app.press(CLIENT, "cdv:200:onec:t:4"); self.app.press(CLIENT, "cdv:200:onec:ok")                                   # «Не 1С»
+        self.app.press(CLIENT, "cdv:200:start"); self.app.press(CLIENT, "cdv:200:start:t:0"); self.app.press(CLIENT, "cdv:200:start:ok")
         c = O.card(self.office(), CLIENT)
         self.assertEqual((c["f"]["company"], c["f"]["onec"], c["f"]["start"]), ("Стройбаза", "Не 1С", "Сразу"))
         self.assertTrue(any("не в 1С" in x for x in O.flags(c)))
@@ -117,8 +117,8 @@ class Visibility(Base):
         self.app.press(CLIENT, "cd")
         self.app.press(CLIENT, "cdf:200:company")
         self.app.text(CLIENT, "Стройбаза")
-        self.app.press(CLIENT, "cdv:200:branches:1")
-        self.app.press(CLIENT, "cdv:200:weekend:2")                                 # пятница
+        self.app.press(CLIENT, "cdv:200:branches"); self.app.press(CLIENT, "cdv:200:branches:t:1"); self.app.press(CLIENT, "cdv:200:branches:ok")
+        self.app.press(CLIENT, "cdv:200:weekend"); self.app.press(CLIENT, "cdv:200:weekend:t:2"); self.app.press(CLIENT, "cdv:200:weekend:ok")                                 # пятница
         r = self.app.press(ADMIN, "cds")[0]
         self.assertIn("всего 1", r.view.subtitle)
         self.assertIn(f"cd:{CLIENT}", [b.to for b in r.all_buttons()])

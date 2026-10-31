@@ -19,7 +19,8 @@ import secrets
 from datetime import date, timedelta
 
 from core.access import roles as R
-from core.ui.kit import Button, Reply, rows
+from core.ui import pick
+from core.ui.kit import Button, Reply, ok_row, rows
 from core.ui.registry import menu, screen, text_input
 from core.ui.views import Row, View
 from core.ui.web import BRAND
@@ -272,76 +273,92 @@ def fire_screen(ctx, emp_id, what=None):
 
 
 @screen("pap")
-def position_screen(ctx, emp_id, pos_id=None):
+def position_screen(ctx, emp_id, act=None, value=None):
     e = _emp(ctx, emp_id)
     if not e:
         return people_access(ctx)
-    poss = [p for p in ctx.cfg.positions if p["dept"] == e["dept"]]
-    if pos_id:
-        p = ctx.cfg.position(pos_id)
-        if not p or p["dept"] != e["dept"] or (p["role"] == "admin" and not full(ctx)):
-            return card(ctx, e["id"])
-        ctx.db.c.execute("UPDATE employees SET position = ?, role = ? WHERE id = ?", (p["id"], p["role"], e["id"]))
-        ctx.db.audit(_who(ctx), "position", f"{e['fio']}: {p['name']}")
-        return [Reply(text=f"✏️ {e['fio']} — {p['name']}."), card(ctx, e["id"])]
+    poss = [p for p in ctx.cfg.positions if p["dept"] == e["dept"] and (p["role"] != "admin" or full(ctx))]
     if not poss:
-        return Reply(text="В этом отделе должности не описаны — роль меняется кнопкой «🎚 Роль».",
-                     buttons=[[Button("‹ Карточка", f"pae:{e['id']}")]])
-    return Reply(text=f"Должность для {e['fio']}:", buttons=rows([Button(("● " if p["id"] == e["position"] else "") + p["name"],
-                                                                        f"pap:{e['id']}:{p['id']}") for p in poss], 2)
-                 + [[Button("‹ Карточка", f"pae:{e['id']}")]])
+        return Reply(text="В этом отделе должности не описаны — роль меняется кнопкой «🎚 Роль».")
+    res = pick.one(ctx, f"pap:{e['id']}", act, value, [(p["id"], p["name"]) for p in poss], e["position"],
+                   f"✏️ Должность · {e['fio']}", "отметьте и нажмите «ОК»")
+    if res.cancel:
+        return card(ctx, e["id"])
+    if res.done:
+        p = ctx.cfg.position(res.value)
+        if p and p["dept"] == e["dept"] and p["id"] != e["position"]:
+            ctx.db.c.execute("UPDATE employees SET position = ?, role = ? WHERE id = ?", (p["id"], p["role"], e["id"]))
+            ctx.db.audit(_who(ctx), "position", f"{e['fio']}: {p['name']}")
+            return [Reply(text=f"✏️ {e['fio']} — {p['name']}."), card(ctx, e["id"])]
+        return card(ctx, e["id"])
+    return res.reply
 
 
 @screen("pat")
-def team_screen(ctx, emp_id, team_id=None):
+def team_screen(ctx, emp_id, act=None, value=None):
     e = _emp(ctx, emp_id)
     if not e:
         return people_access(ctx)
     teams = ctx.cfg.teams_of(e["dept"])
-    if team_id:
-        t = next((t for t in teams if t.id == team_id), None)
-        if t:
+    res = pick.one(ctx, f"pat:{e['id']}", act, value, [(t.id, t.name) for t in teams], e["team"],
+                   f"👥 Команда · {e['fio']}", "отметьте и нажмите «ОК»")
+    if res.cancel:
+        return card(ctx, e["id"])
+    if res.done:
+        t = next((t for t in teams if t.id == res.value), None)
+        if t and t.id != e["team"]:
             ctx.db.c.execute("UPDATE employees SET team = ? WHERE id = ?", (t.id, e["id"]))
             ctx.db.audit(_who(ctx), "team", f"{e['fio']}: {t.name}")
         return card(ctx, e["id"])
-    return Reply(text=f"Команда для {e['fio']}:", buttons=rows([Button(("● " if t.id == e["team"] else "") + t.name,
-                                                                      f"pat:{e['id']}:{t.id}") for t in teams], 2)
-                 + [[Button("‹ Карточка", f"pae:{e['id']}")]])
+    return res.reply
 
 
 @screen("par")
-def role_screen(ctx, emp_id, role=None):
+def role_screen(ctx, emp_id, act=None, value=None):
     e = _emp(ctx, emp_id)
     if not e or not full(ctx):
         return people_access(ctx)
-    if role:
-        if role not in ROLE_CHOICES and role != "newbie":
-            return card(ctx, e["id"])
-        ctx.db.c.execute("UPDATE employees SET role = ? WHERE id = ?", (role, e["id"]))
-        ctx.db.audit(_who(ctx), "role", f"{e['fio']}: {ctx.cfg.role_title(role)}")
-        return [Reply(text=f"🎚 {e['fio']} — {ctx.cfg.role_title(role)}."), card(ctx, e["id"])]
-    kb = rows([Button(("● " if r == e["role"] else "") + ctx.cfg.role_title(r), f"par:{e['id']}:{r}") for r in ROLE_CHOICES], 2)
+    opts = [(r, ctx.cfg.role_title(r)) for r in ROLE_CHOICES]
     if e["role"] in ("rep", "newbie"):
-        kb.append([Button(("● " if e["role"] == "newbie" else "") + "🎓 Новичок (обучение)", f"par:{e['id']}:newbie")])
-    kb.append([Button("‹ Карточка", f"pae:{e['id']}")])
-    return Reply(text=f"Роль для {e['fio']} — что он видит и решает. «Администратор» — ведёт людей, доступ и данные, "
-                      "зарплату не утверждает.", buttons=kb)
+        opts.append(("newbie", "🎓 Новичок (обучение)"))
+    res = pick.one(ctx, f"par:{e['id']}", act, value, opts, e["role"], f"🎚 Роль · {e['fio']}",
+                   "что он видит и решает", note="«Администратор» — ведёт людей, доступ и данные, зарплату не утверждает.")
+    if res.cancel:
+        return card(ctx, e["id"])
+    if res.done:
+        role = res.value
+        if (role in ROLE_CHOICES or role == "newbie") and role != e["role"]:
+            ctx.db.c.execute("UPDATE employees SET role = ? WHERE id = ?", (role, e["id"]))
+            ctx.db.audit(_who(ctx), "role", f"{e['fio']}: {ctx.cfg.role_title(role)}")
+            return [Reply(text=f"🎚 {e['fio']} — {ctx.cfg.role_title(role)}."), card(ctx, e["id"])]
+        return card(ctx, e["id"])
+    return res.reply
 
 
 # ---------- добавить ----------
 
 @screen("pad")
-def add_start(ctx, dept_id=None):
+def add_start(ctx, dept_id=None, act=None, value=None):
+    """➕ Добавить: отдел (окно, если отделов несколько) → фамилия и имя → должность и команда (окно) → готово."""
     if not manages(ctx):
         return people_access(ctx)
     depts = _depts(ctx)
-    if dept_id and dept_id in {d.id for d in depts}:
+    ids = {d.id for d in depts}
+    if dept_id in ids and act is None:
         ctx.session["pa_new"] = {"dept": dept_id}
+        ctx.save()
         return ctx.ask("pa_name", "Фамилия и имя нового сотрудника — как в 1С, если он торговый:",
                        buttons=[[Button("✖️ Отмена", f"pa:{dept_id}")]])
     if len(depts) == 1:
         return add_start(ctx, depts[0].id)
-    return Reply(text="В какой отдел?", buttons=rows([Button(d.name, f"pad:{d.id}") for d in depts], 2) + [[Button("‹ Сотрудники", "pa")]])
+    act, value = (dept_id, act) if dept_id in ("t", "ok", "no") else (act, value)
+    res = pick.one(ctx, "pad", act, value, [(d.id, d.name) for d in depts], None, "➕ Новый сотрудник: в какой отдел?",
+                   "отметьте и нажмите «ОК»")
+    if res.cancel or (res.done and res.value not in ids):
+        return people_access(ctx)
+    if res.done:
+        return add_start(ctx, res.value)
+    return res.reply
 
 
 @text_input("pa_name")
@@ -353,38 +370,44 @@ def on_name(ctx, text, data):
     st["name"] = name
     ctx.session["pa_new"] = st
     ctx.save()
-    poss = [p for p in ctx.cfg.positions if p["dept"] == st["dept"] and (p["role"] != "admin" or full(ctx))]
-    if not poss:
+    if not [p for p in ctx.cfg.positions if p["dept"] == st["dept"] and (p["role"] != "admin" or full(ctx))]:
         return _add_finish(ctx, st, None)
-    return Reply(text=f"{name} — кто по должности?", buttons=rows([Button(p["name"], f"padp:{p['id']}") for p in poss], 2)
-                 + [[Button("✖️ Отмена", f"pa:{st['dept']}")]])
+    return add_details(ctx)
 
 
-@screen("padp")
-def add_position(ctx, pos_id):
+@screen("padw")
+def add_details(ctx, act=None, value=None):
+    """Должность и команда нового сотрудника — одно окно, «ОК» добавляет."""
     st = ctx.session.get("pa_new") or {}
-    p = ctx.cfg.position(pos_id)
-    if not st.get("name") or not p or p["dept"] != st.get("dept") or not manages(ctx):
-        return people_access(ctx)
-    st["pos"] = p["id"]
-    ctx.session["pa_new"] = st
-    ctx.save()
-    teams = ctx.cfg.teams_of(st["dept"])
-    if teams and p["role"] in ("rep", "sv", "newbie"):
-        return Reply(text=f"{st['name']} — в какую команду?", buttons=rows([Button(t.name, f"padt:{t.id}") for t in teams], 2)
-                     + [[Button("Без команды", "padt:-")]])
-    return _add_finish(ctx, st, p)
-
-
-@screen("padt")
-def add_team(ctx, team_id):
-    st = ctx.session.get("pa_new") or {}
-    p = ctx.cfg.position(st.get("pos", ""))
     if not st.get("name") or not manages(ctx):
         return people_access(ctx)
-    if team_id != "-" and any(t.id == team_id for t in ctx.cfg.teams_of(st["dept"])):
-        st["team"] = team_id
-    return _add_finish(ctx, st, p)
+    poss = [p for p in ctx.cfg.positions if p["dept"] == st["dept"] and (p["role"] != "admin" or full(ctx))]
+    teams = ctx.cfg.teams_of(st["dept"])
+    if act == "no":
+        ctx.session.pop("pa_new", None)
+        ctx.save()
+        return people_access(ctx, st["dept"])
+    if act == "t" and any(p["id"] == value for p in poss):
+        st["pos"] = value
+    elif act == "m" and (value == "-" or any(t.id == value for t in teams)):
+        st["team"] = "" if value == "-" else value
+    pos = ctx.cfg.position(st.get("pos", "")) if st.get("pos") else None
+    need_team = bool(teams) and pos is not None and pos["role"] in ("rep", "sv", "newbie")
+    if act == "ok" and pos:
+        if not need_team:
+            st.pop("team", None)
+        return _add_finish(ctx, st, pos)
+    ctx.session["pa_new"] = st
+    ctx.save()
+    v = View(f"➕ {st['name']}", "должность" + (" и команда" if teams else "") + " — отметьте и нажмите «ОК»")
+    if act == "ok":
+        v.note("Сначала отметьте должность.")
+    kb = [[Button(f"{'☑' if st.get('pos') == p['id'] else '☐'} {p['name']}", f"padw:t:{p['id']}")] for p in poss]
+    if need_team:
+        kb += rows([Button(("● " if st.get("team") == t.id else "") + t.name, f"padw:m:{t.id}") for t in teams]
+                   + [Button(("● " if not st.get("team") else "") + "Без команды", "padw:m:-")], 3)
+    kb.append(ok_row("padw"))
+    return Reply(view=v, buttons=kb)
 
 
 def _add_finish(ctx, st, p):
@@ -401,12 +424,27 @@ def _add_finish(ctx, st, p):
 # ---------- имена из 1С ----------
 
 @screen("pak")
-def unknown_screen(ctx, key=None, emp_id=None):
+def unknown_screen(ctx, key=None, act=None, value=None):
     if not manages(ctx):
         return people_access(ctx)
     keys = ctx.db.unknown_keys()
     if key and key not in keys:
         return unknown_screen(ctx)
+    emp_id = None
+    if key and act not in (None, "t", "ok", "no"):
+        emp_id = act                                     # старый адрес pak:<имя>:<сотрудник|new>
+    elif key:
+        es = [e for e in ctx.db.employees() if manages(ctx, e)]
+        words = key.split()
+        close = [e for e in es if any(w in e["fio"].lower() for w in words)]
+        opts = [(str(e["id"]), e["fio"]) for e in (close or es)[:30]] + [("new", "➕ Новый торговый с этим именем")]
+        res = pick.one(ctx, f"pak:{key}", act, value, opts, None, f"🧾 «{key.title()}» в отчётах 1С — кто это?",
+                       "отметьте и нажмите «ОК»")
+        if res.cancel or (res.done and not res.value):
+            return unknown_screen(ctx)
+        if not res.done:
+            return res.reply
+        emp_id = res.value
     if key and emp_id == "new":
         d = next((x for x in ctx.cfg.departments if x.kind == "sales"), None) or ctx.cfg.departments[0]
         if not manages(ctx) or d.id not in {x.id for x in _depts(ctx)}:
@@ -423,14 +461,6 @@ def unknown_screen(ctx, key=None, emp_id=None):
         ctx.db.bind_key(key, e["id"])
         ctx.db.audit(_who(ctx), "bind", f"{key} → {e['fio']}")
         return [Reply(text=f"🔑 «{key.title()}» — это {e['fio']}. Его цифры из отчётов теперь считаются ему."), unknown_screen(ctx)]
-    if key:
-        es = [e for e in ctx.db.employees() if manages(ctx, e)]
-        words = key.split()
-        close = [e for e in es if any(w in e["fio"].lower() for w in words)]
-        kb = rows([Button(e["fio"], f"pak:{key}:{e['id']}") for e in (close or es)[:30]], 2)
-        kb.append([Button("➕ Новый торговый с этим именем", f"pak:{key}:new")])
-        kb.append([Button("‹ Назад", "pak")])
-        return Reply(text=f"«{key.title()}» в отчётах 1С — кто это?", buttons=kb)
     if not keys:
         return Reply(text="Все имена из отчётов привязаны к людям.", buttons=[[Button("‹ Сотрудники", "pa")]])
     v = View("🧾 Нет в расчёте", f"имён из отчётов 1С без человека: {len(keys)}")

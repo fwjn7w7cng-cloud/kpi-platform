@@ -39,7 +39,6 @@ class Reply:
     to: int = 0                 # кому (для рассылок); 0 — тому, кто нажал
     edit: bool = True           # можно заменить предыдущее сообщение
     upload: bool = False        # под экраном — «Выбрать файлы» (приложение шлёт файлы в /api/upload)
-    noback: bool = False        # окно с «✅ ОК / ✖️ Отмена» — без «‹ Назад» (выход только этими кнопками)
 
     def all_buttons(self):
         return [b for row in self.buttons for b in row]
@@ -108,3 +107,8 @@ def metric_row(m, name=None):
 
 
 METRIC_HEAD = ["Показатель", "План", "Факт", "%"]
+
+
+def ok_row(prefix):
+    """Ряд «✅ ОК / ✖️ Отмена» для окна выбора: prefix:ok — применить, prefix:no — выйти без изменений."""
+    return [Button("✅ ОК", f"{prefix}:ok"), Button("✖️ Отмена", f"{prefix}:no")]
