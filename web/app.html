@@ -162,7 +162,11 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 .pill.off { color: var(--ink-2); }
 .li:focus-visible, .lt:focus-visible, .pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .seg { display: flex; gap: 8px; } .seg .pill { flex: 1; }
-.okbar { display: flex; gap: 10px; position: sticky; bottom: 8px; z-index: 2; }
+.okwrap { position: sticky; bottom: 8px; z-index: 2; display: flex; flex-direction: column; gap: 6px; }
+.oksum { align-self: center; background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 4px 14px rgba(0,0,0,.08);
+  border-radius: 999px; padding: 6px 14px; font-size: 13.5px; font-weight: 600; }
+.oksum b { color: var(--good, #1a7f37); }
+.okbar { display: flex; gap: 10px; }
 .okbar button { flex: 1; border: 0; border-radius: 14px; padding: 14px; font-size: 15.5px; font-weight: 600; cursor: pointer; }
 .okbar .ok { background: var(--accent); color: #fff; } .okbar .no { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
 .li .ck { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; flex: none; margin: 0 4px; font-size: 15px; font-weight: 700;
@@ -269,7 +273,7 @@ function block(b) {
   return "";
 }
 
-function buttons(rows, home) {
+function buttons(rows, home, sum) {
   if (!rows || !rows.length) return "";
   const flat = rows.flat().filter(([, to]) => !to.startsWith("bk:"));
   const mon = flat.filter(([, to]) => to.startsWith("mon:")), all = flat.filter(([, to]) => !to.startsWith("mon:"));
@@ -293,7 +297,7 @@ function buttons(rows, home) {
     let okbar = "";
     rows.forEach(r => { r = r.filter(([, to]) => !to.startsWith("mon:") && !to.startsWith("bk:")); if (!r.length) return;
       if (r.length === 2 && r[0][1].endsWith(":ok") && r[1][1].endsWith(":no")) {   // «ОК / Отмена» — две большие кнопки внизу
-        okbar = `<div class="okbar"><button class="ok" data-to="${esc(r[0][1])}">${esc(r[0][0])}</button><button class="no" data-to="${esc(r[1][1])}">${esc(r[1][0])}</button></div>`; return; }
+        okbar = `<div class="okwrap">${sum ? `<div class="oksum">${sum}</div>` : ""}<div class="okbar"><button class="ok" data-to="${esc(r[0][1])}">${esc(r[0][0])}</button><button class="no" data-to="${esc(r[1][1])}">${esc(r[1][0])}</button></div></div>`; return; }
       if (isPill(r)) { if (list.length) flush(); pills.push(...r); } else { if (pills.length) flush(); list.push(...r); } });
     flush();
     html += okbar;
@@ -318,8 +322,16 @@ function msgHtml(m, home, first) {
   if (m.ask) parts.push(`<div class="msg">${esc(m.ask)}</div><form class="askbar" id="askForm"><textarea id="askInput" rows="1" placeholder="Напишите ответ" required></textarea><button class="send" type="submit">Отправить</button></form>`);
   if (m.upload) parts.push(`<label class="upl">📎 Выбрать файлы из 1С<input type="file" id="upFile" multiple accept=".xls,.xlsx,.csv,.txt,.xml,.mxl,.html,.htm"></label>`);
   if (m.files && m.files.length) parts.push(`<div class="files">${m.files.map(([n, u]) => u ? `<button class="file" data-file="${esc(u)}" data-name="${esc(n)}">📎 ${esc(n)}</button>` : "").join("")}</div>`);
-  parts.push(buttons(m.buttons, home && first));
+  // окно выбора: итог (плитки экрана) всегда виден над «ОК / Отмена» — сумма меняется сразу при каждой галочке
+  const tl = m.view && (m.view.blocks || []).find(b => b.k === "tiles");
+  const short = l => String(l).replace("Дальше, в месяц", "в месяц").split(",")[0];
+  const sum = tl ? tl.items.slice(0, 3).map(t => `${esc(short(t[0]))} <b>${esc(t[1])}</b>`).join(" · ") : "";
+  parts.push(buttons(m.buttons, home && first, sum));
   return parts.join("");
+}
+function winOf(msgs) {
+  for (const m of msgs) for (const r of m.buttons || []) if (r.length === 2 && r[0][1].endsWith(":ok") && r[1][1].endsWith(":no")) return r[0][1].slice(0, -3);
+  return null;
 }
 function backOf(msgs) { for (const m of msgs) for (const r of m.buttons || []) for (const [, to] of r) if (to.startsWith("bk:")) return to; return null; }
 
@@ -329,8 +341,13 @@ function show(d) {
   if (d.inbox && d.inbox.length) parts.push(`<div class="inbox">${d.inbox.map(m => msgHtml(m, false, false)).join("")}</div>`);
   if (d.home && d.push === false) { const pb = pushBar(); if (pb) parts.push(pb); }
   msgs.forEach((m, i) => parts.push(msgHtml(m, d.home, i === 0)));
+  // то же окно выбора (отметили галочку) — страница остаётся на месте, не уезжает наверх
+  const win = winOf(msgs), same = win && win === S.win;
+  const keep = same ? $("main").scrollTop : 0, keepW = same ? window.scrollY : 0;
   $("main").innerHTML = `<div class="screen">${parts.join("")}</div>`;
-  $("main").scrollTop = 0;
+  $("main").scrollTop = keep;
+  if (same) window.scrollTo(0, keepW);
+  S.win = win;
   if (d.home) S.cur = "home";
   S.back = backOf(msgs);
   $("back").hidden = !S.back;
