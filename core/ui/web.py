@@ -80,7 +80,7 @@ def reply_json(r, files=None):
                 d["files"].append([name, f"/api/file/{fid}"])
     if r.upload:
         d["upload"] = 1
-    rows = [[[b.label, b.to] for b in row if b.to != "home"] for row in r.buttons]
+    rows = [[[b.label, b.to] + ([b.info] if getattr(b, "info", "") else []) for b in row if b.to != "home"] for row in r.buttons]
     d["buttons"] = [row for row in rows if row]
     return d
 

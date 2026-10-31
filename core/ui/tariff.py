@@ -132,6 +132,9 @@ def base_of(ctx):
     return next((c for c in E.ORDER if E.preset_functions(c) == have), "company")
 
 
+from core.ui.screens import LOCK_TEXT as LOCK  # noqa: E402 — описания функций
+
+
 @screen("swe")
 def packages_window(ctx, act=None, value=None):
     """Окно (Адам 31.10): 1) набор — один, задаёт людей, роли и функции по умолчанию; 2) что включено — галочки, можно
@@ -194,18 +197,19 @@ def packages_window(ctx, act=None, value=None):
     else:
         v.tiles([("Подключение, один раз", money(q["setup"]), None), ("Дальше, в месяц", money(q["monthly"]), "good")]
                 + ([("За год: в месяц", money(q["monthly_year"]), "good")] if d["year"] else []))
-    v.lines([f"«{E.PRESETS[c]['title']}» — {E.PRESETS[c]['size']}: {E.PRESETS[c]['what']}" for c in E.ORDER],
-            title="Наборы — по умолчанию под размер фирмы")
-    v.note("Сверху — набор (один): с ним по умолчанию ставятся люди, роли и функции. Ниже — отделы галочками; под включённым "
-           "отделом — его функции и люди. Платите только за отмеченные функции, настройки внутри — бесплатно.")
+    v.note("Набор — один, отделы и функции — галочками. Что значит каждая строка — нажмите ⓘ.")
     kb = []
     for c in E.ORDER:
         x = E.PRESETS[c]
         n = sum(x["people"].values())
-        kb.append([Button(f"{'☑' if d['base'] == c else '☐'} Набор «{x['title']}» · {n} чел.", f"swe:b:{c}")])
+        kb.append([Button(f"{'☑' if d['base'] == c else '☐'} Набор «{x['title']}» · {n} чел.", f"swe:b:{c}",
+                          info=f"{x['size'][:1].upper()}{x['size'][1:]}: {x['what']}.\nПо умолчанию — {n} человек и функции: "
+                               + ", ".join(E.FUNC_SHORT[q] for q in E.FUNCS if q in E.preset_functions(c)).lower()
+                               + ".\nНабор — только стартовая настройка: любую функцию можно добавить или снять.")])
     def func_rows(grp, pre=""):
         for fc in [x for x in E.FUNCS if E.FUNCS[x][0] == grp]:
-            kb.append([Button(f"{'☑' if fc in f else '☐'} {pre}{E.FUNC_SHORT[fc]} · {P.fmt(pr['f_' + fc])}", f"swe:t:{fc}")])
+            kb.append([Button(f"{'☑' if fc in f else '☐'} {pre}{E.FUNC_SHORT[fc]} · {P.fmt(pr['f_' + fc])}", f"swe:t:{fc}",
+                              info=f"{LOCK.get(fc, E.MODULES[fc][0])}\n{P.fmt(pr['f_' + fc])} ₽ в месяц; настройки внутри — бесплатно.")])
 
     func_rows("all", "💰 ")                                  # зарплата — для всех отделов
     for grp in DEPT_ORDER:                                    # отделы галочками, под включённым — его функции и люди
@@ -213,12 +217,18 @@ def packages_window(ctx, act=None, value=None):
         mine = [x for x in E.FUNCS if E.FUNCS[x][0] == grp]
         on = [x for x in mine if x in f]
         tail = f" · {counts.get(grp, 0)} чел. · {P.fmt(sum(pr['f_' + x] for x in on))}" if on else ""
-        kb.append([Button(f"{'☑' if on else '☐'} {icon} {gtitle}{tail}", f"swe:d:{grp}")])
+        kb.append([Button(f"{'☑' if on else '☐'} {icon} {gtitle}{tail}", f"swe:d:{grp}",
+                          info=f"{E.PACKAGES[grp]['what'][:1].upper()}{E.PACKAGES[grp]['what'][1:]}.\nОтдел сам по себе бесплатный — "
+                               "платите за отмеченные в нём функции и за людей. Включили — отметятся все функции, выключили — снимутся.")])
         if on:
             func_rows(grp, "   · ")
-            kb.append([Button(f"👥 Людей в отделе: {counts.get(grp, 0)} — изменить", f"swe:n:{grp}")])
+            kb.append([Button(f"👥 Людей в отделе: {counts.get(grp, 0)} — изменить", f"swe:n:{grp}",
+                              info=f"Сколько человек отдела будут в приложении: {P.fmt(pr['user'])} ₽ за каждого в месяц. "
+                                   "Директор и администратор — бесплатно.")])
     func_rows("max", "⭐ ")
-    kb.append([Button(f"{'☑' if d['year'] else '☐'} 📅 Оплата за год — минус {P.fmt(pr['disc_year'])}%", "swe:y")])
+    kb.append([Button(f"{'☑' if d['year'] else '☐'} 📅 Оплата за год — минус {P.fmt(pr['disc_year'])}%", "swe:y",
+                      info=f"Платите сразу за 12 месяцев — скидка {P.fmt(pr['disc_year'])} %. Все четыре отдела — ещё "
+                           f"{P.fmt(pr['disc_all'])} % на функции и людей.")])
     kb.append(ok_row("swe"))
     return Reply(view=v, buttons=kb)
 
