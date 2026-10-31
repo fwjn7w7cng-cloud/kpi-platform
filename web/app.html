@@ -172,9 +172,15 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 .okbar .ok { background: var(--accent); color: #fff; } .okbar .no { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
 .li .ck { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; flex: none; margin: 0 4px; font-size: 15px; font-weight: 700;
   box-shadow: inset 0 0 0 2px var(--line); color: transparent; }
-.li .inf { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: italic 700 13px/1 Georgia, serif;
-  color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); margin-left: auto; opacity: .85; }
-.li .inf + .ch { margin-left: 6px; }
+/* строка с пояснением: слева сама кнопка, справа — отдельная кнопка ⓘ (Адам 31.10: «чтобы не нажималась основная») */
+.lirow { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); }
+.lirow:last-child { border-bottom: 0; }
+.lirow .li { flex: 1; border-bottom: 0; min-width: 0; }
+.lirow .inf { flex: none; width: 52px; border: 0; border-left: 1px solid var(--line); background: none; cursor: pointer;
+  display: grid; place-items: center; padding: 0; }
+.lirow .inf span { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: italic 700 14px/1 Georgia, serif;
+  color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.lirow .inf:active { background: var(--sunk); }
 .li.sub { padding-left: 40px; background: var(--bg-soft, rgba(127,127,127,.04)); }
 .li .ck.on { background: var(--accent); box-shadow: none; color: #fff; }
 @media (prefers-reduced-motion: no-preference) { .screen { animation: in .18s ease-out; } @keyframes in { from { opacity: .4; transform: translateY(4px); } } }
@@ -295,10 +301,10 @@ function buttons(rows, home, sum) {
         const ck = /^[☑☐]\s/.test(l) ? l[0] : "";                 // галочка: отметить / снять (конструктор и т. п.)
         const sub = /^\s+·\s/.test(l.slice(2));          // функция под отделом — с отступом
         const ttl = ck ? l.slice(2).replace(/^\s+·\s/, "") : splitLabel(l)[1];
-        const inf = info ? `<span class="inf" data-info="${esc(info)}" data-title="${esc(ttl)}">i</span>` : "";
-        if (ck) return `<button class="li${sub ? " sub" : ""}" data-to="${esc(to)}"><span class="ck ${ck === "☑" ? "on" : ""}">✓</span><span class="tx">${esc(l.slice(2).replace(/^\s+·\s/, ""))}</span>${inf}</button>`;
+        const wrap = btn => info ? `<div class="lirow">${btn}<button class="inf" aria-label="Что это" data-info="${esc(info)}" data-title="${esc(ttl)}"><span>i</span></button></div>` : btn;
+        if (ck) return wrap(`<button class="li${sub ? " sub" : ""}" data-to="${esc(to)}"><span class="ck ${ck === "☑" ? "on" : ""}">✓</span><span class="tx">${esc(l.slice(2).replace(/^\s+·\s/, ""))}</span></button>`);
         const [i, t] = splitLabel(l);
-        return `<button class="li" data-to="${esc(to)}"><span class="ic" style="--ic:${icOf(t)}">${esc(i || "›")}</span><span class="tx">${esc(t)}</span>${inf}<span class="ch">›</span></button>`; }).join("")}</div>`;
+        return wrap(`<button class="li" data-to="${esc(to)}"><span class="ic" style="--ic:${icOf(t)}">${esc(i || "›")}</span><span class="tx">${esc(t)}</span><span class="ch">›</span></button>`); }).join("")}</div>`;
       if (pills.length) html += `<div class="pills">${pills.map(([l, to]) => `<button class="pill" data-to="${esc(to)}">${esc(l)}</button>`).join("")}</div>`;
       list = []; pills = [];
     };
