@@ -160,6 +160,26 @@ def packages_window(ctx, act=None, value=None):
         d["counts"] = dict(E.PRESETS[value]["people"])
     elif act == "t" and value in E.FUNCS:
         f = E.toggle_function(f, value)
+    elif act == "d" and value in DEPT_ORDER:              # отдел целиком: включить — все его функции, выключить — снять
+        d["counts"] = dict(d.get("counts") or counts_of(ctx))
+        mine = [x for x in E.FUNCS if E.FUNCS[x][0] == value]
+        if any(x in f for x in mine):
+            for x in mine:
+                if x in f:
+                    f = E.toggle_function(f, x)
+            d["counts"][value] = 0
+        else:
+            for x in mine:
+                if x not in f:
+                    f = E.toggle_function(f, x)
+            if not d["counts"].get(value):
+                d["counts"][value] = E.PRESETS["company"]["people"][value]
+    elif act == "n" and value in DEPT_ORDER:              # люди отдела — числом
+        d["funcs"] = sorted(f)
+        ctx.session["pk_draft"] = d
+        ctx.save()
+        return ctx.ask("pk_people", f"Сколько человек в отделе «{E.FUNC_GROUPS[value][1]}»? Числом, например 15.",
+                       {"dept": value}, buttons=[[Button("✖️ Отмена", "swe:back")]])
     elif act == "y":
         d["year"] = not d["year"]
     d["funcs"] = sorted(f)
@@ -176,16 +196,28 @@ def packages_window(ctx, act=None, value=None):
                 + ([("За год: в месяц", money(q["monthly_year"]), "good")] if d["year"] else []))
     v.lines([f"«{E.PRESETS[c]['title']}» — {E.PRESETS[c]['size']}: {E.PRESETS[c]['what']}" for c in E.ORDER],
             title="Наборы — по умолчанию под размер фирмы")
-    v.note("Сверху — набор (один): с ним по умолчанию ставятся люди, роли и функции. Ниже — функции по отделам: платите только "
-           "за отмеченные, любую можно снять или добавить. Настройки внутри функции — бесплатно.")
+    v.note("Сверху — набор (один): с ним по умолчанию ставятся люди, роли и функции. Ниже — отделы галочками; под включённым "
+           "отделом — его функции и люди. Платите только за отмеченные функции, настройки внутри — бесплатно.")
     kb = []
     for c in E.ORDER:
         x = E.PRESETS[c]
         n = sum(x["people"].values())
         kb.append([Button(f"{'☑' if d['base'] == c else '☐'} Набор «{x['title']}» · {n} чел.", f"swe:b:{c}")])
-    for fc, (grp, _) in E.FUNCS.items():
-        icon = E.FUNC_GROUPS[grp][0]
-        kb.append([Button(f"{'☑' if fc in f else '☐'} {icon} {E.FUNC_SHORT[fc]} · {P.fmt(pr['f_' + fc])}", f"swe:t:{fc}")])
+    def func_rows(grp, pre=""):
+        for fc in [x for x in E.FUNCS if E.FUNCS[x][0] == grp]:
+            kb.append([Button(f"{'☑' if fc in f else '☐'} {pre}{E.FUNC_SHORT[fc]} · {P.fmt(pr['f_' + fc])}", f"swe:t:{fc}")])
+
+    func_rows("all", "💰 ")                                  # зарплата — для всех отделов
+    for grp in DEPT_ORDER:                                    # отделы галочками, под включённым — его функции и люди
+        icon, gtitle = E.FUNC_GROUPS[grp]
+        mine = [x for x in E.FUNCS if E.FUNCS[x][0] == grp]
+        on = [x for x in mine if x in f]
+        tail = f" · {counts.get(grp, 0)} чел. · {P.fmt(sum(pr['f_' + x] for x in on))}" if on else ""
+        kb.append([Button(f"{'☑' if on else '☐'} {icon} {gtitle}{tail}", f"swe:d:{grp}")])
+        if on:
+            func_rows(grp, "   · ")
+            kb.append([Button(f"👥 Людей в отделе: {counts.get(grp, 0)} — изменить", f"swe:n:{grp}")])
+    func_rows("max", "⭐ ")
     kb.append([Button(f"{'☑' if d['year'] else '☐'} 📅 Оплата за год — минус {P.fmt(pr['disc_year'])}%", "swe:y")])
     kb.append(ok_row("swe"))
     return Reply(view=v, buttons=kb)
@@ -254,6 +286,19 @@ def ask_counts(ctx):
                              f"Сейчас: {c['sales']} {c['stock']} {c['logistics']} {c['office']}\n\n"
                              "Напишите «как было», чтобы вернуть числа показанной фирмы.",
                    buttons=[[Button("Как в показанной фирме", "sw:pn:reset")], [Button("✖️ Отмена", "sw:ed")]])
+
+
+@text_input("pk_people")
+def on_pk_people(ctx, text, data):
+    t = (text or "").strip().replace(" ", "")
+    if not t.isdigit() or int(t) > 5000:
+        return ctx.ask("pk_people", "Нужно число людей, например 15.", data, buttons=[[Button("✖️ Отмена", "swe:back")]])
+    d = ctx.session.get("pk_draft") or {}
+    d["counts"] = dict(d.get("counts") or counts_of(ctx))
+    d["counts"][data["dept"]] = int(t)
+    ctx.session["pk_draft"] = d
+    ctx.save()
+    return packages_window(ctx, "back")
 
 
 @text_input("counts")
