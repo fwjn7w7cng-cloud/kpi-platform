@@ -76,16 +76,25 @@ PRESETS = {
 }
 # Готовый набор — под размер фирмы (Адам 31.10: «редакции — для размеров фирмы, а внутренние настройки — каждому
 # индивидуально»): при выборе набора в демо люди по отделам ставятся типовые для такого размера, дальше правятся вручную.
+# Набор задаёт, что стоит по умолчанию: людей, роли и функции; дальше в любом наборе можно включить что угодно.
+_ALL_ROLES = {"owner", "admin", "rep", "sv", "head", "accountant", "staff"}
 SIZES = {
-    "start":    ("маленькая фирма · до 10 человек", {"sales": 6}),
-    "business": ("небольшая · 10–25 человек", {"sales": 15}),
-    "control":  ("растущий отдел продаж · 25–50 человек", {"sales": 30}),
-    "company":  ("средняя фирма · 50–100 человек, все отделы", {"sales": 30, "stock": 12, "logistics": 15, "office": 6}),
-    "max":      ("крупная · 100+ человек, филиалы", {"sales": 60, "stock": 25, "logistics": 30, "office": 12}),
+    "start":    ("маленькая фирма · до 10 человек", {"sales": 6}, {"owner", "admin", "rep"},
+                 "директор и торговые"),
+    "business": ("небольшая · 10–25 человек", {"sales": 15}, {"owner", "admin", "rep", "sv"},
+                 "плюс супервайзер; клиенты, маршруты, задачи, тесты"),
+    "control":  ("растущий отдел продаж · 25–50 человек", {"sales": 30}, {"owner", "admin", "rep", "sv", "head", "accountant"},
+                 "плюс руководитель продаж и бухгалтер; утверждение зарплаты, прогноз"),
+    "company":  ("средняя фирма · 50–100 человек, все отделы", {"sales": 30, "stock": 12, "logistics": 15, "office": 6}, _ALL_ROLES,
+                 "плюс склад, логистика, кадры и офис"),
+    "max":      ("крупная · 100+ человек, филиалы", {"sales": 60, "stock": 25, "logistics": 30, "office": 12}, _ALL_ROLES,
+                 "всё плюс свой бренд, филиалы, функции на заказ"),
 }
-for _k, (_size, _people) in SIZES.items():
+for _k, (_size, _people, _roles, _what) in SIZES.items():
     PRESETS[_k]["size"] = _size
     PRESETS[_k]["people"] = {d: _people.get(d, 0) for d in ("sales", "stock", "logistics", "office")}
+    PRESETS[_k]["roles"] = _roles
+    PRESETS[_k]["what"] = _what
 ORDER = list(PRESETS)
 EDITIONS = PRESETS          # старое имя
 CUSTOM = "custom"           # «свой набор» — не совпадает ни с одним готовым
@@ -151,6 +160,22 @@ def preset_of(packages):
     """Код готового набора, которому равен этот набор, или CUSTOM."""
     p = normalize(packages)
     return next((code for code, d in PRESETS.items() if normalize(d["packages"]) == p), CUSTOM)
+
+
+def base_title(base, packages):
+    """«Старт + Склад и закупки» — набор, с которого начали, и что поменяли галочками."""
+    if base not in PRESETS:
+        return title_of(packages)
+    have, was = normalize(packages), normalize(PRESETS[base]["packages"])
+    if have == was:
+        return PRESETS[base]["title"]
+    parts = []
+    if have["sales"] != was["sales"]:
+        parts.append(("+ Продажи " + LEVELS[have["sales"]]) if have["sales"] else "− Продажи")
+    for code in ("stock", "logistics", "office", "max"):
+        if have[code] != was[code]:
+            parts.append(("+ " if have[code] else "− ") + PACKAGES[code]["title"])
+    return PRESETS[base]["title"] + " " + " ".join(parts)
 
 
 def title_of(packages):

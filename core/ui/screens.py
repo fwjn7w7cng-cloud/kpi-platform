@@ -847,7 +847,7 @@ def demo(ctx, what=None, value=None, *more):
         return industry_window(ctx)
     from core.ui import tariff as T
     if what == "ed" and value in E.PRESETS:
-        return T.set_packages(ctx, E.PRESETS[value]["packages"])
+        return T.set_packages(ctx, E.PRESETS[value]["packages"], base=value)
     if what == "ed":
         return T.build(ctx)
     if what == "pk":
@@ -889,9 +889,11 @@ def industry_window(ctx, act=None, value=None):
 
 def _role_picker(ctx):
     """Кнопки выбора роли в демо: продажи и руководство — ролями; другие отделы — каждой должностью, где есть люди."""
-    kb = [[Button("🧑‍💼 Торговый", "sw:role:rep"), Button("👥 Супервайзер", "sw:role:sv")],
-          [Button("🏢 Руководитель продаж", "sw:role:head"), Button("👔 Директор", "sw:role:owner")],
-          [Button("🧾 Бухгалтер", "sw:role:accountant"), Button("🛠 Администратор", "sw:role:admin")]]
+    from core.ui.tariff import base_of
+    allowed = E.PRESETS[base_of(ctx)]["roles"]          # роли по умолчанию — от набора (размера фирмы)
+    roles = [("🧑‍💼 Торговый", "rep"), ("👥 Супервайзер", "sv"), ("🏢 Руководитель продаж", "head"), ("👔 Директор", "owner"),
+             ("🧾 Бухгалтер", "accountant"), ("🛠 Администратор", "admin")]
+    kb = rows([Button(t, f"sw:role:{r}") for t, r in roles if r in allowed], 2)
     have = {e["position"] for e in ctx.db.employees()}
     for d in ctx.cfg.departments:
         if d.kind == "sales":

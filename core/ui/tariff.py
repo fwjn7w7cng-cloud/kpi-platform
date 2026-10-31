@@ -111,16 +111,15 @@ def build(ctx):
     q = quote_of(ctx)
     counts = counts_of(ctx)
     people = sum(counts.values())
-    preset = E.preset_of(ctx.cfg.packages)
-    title = f"набор «{ctx.cfg.set_title}»" if preset != E.CUSTOM else "свой набор: " + ctx.cfg.set_title
+    title = f"набор «{E.base_title(base_of(ctx), ctx.cfg.packages)}»"
     v = quote_view(ctx, q, "🧩 Собрать бота", f"{title} · людей в фирме {people}")
     p = ctx.cfg.packages
-    kb = [[Button("☑️ Выбрать пакеты", "swe")],
+    kb = [[Button("☑️ Выбрать набор", "swe")],
           [Button(f"👥 Люди: {' / '.join(str(counts[c]) for c in DEPT_ORDER)} — изменить", "sw:pn")],
           [Button("📄 Коммерческое предложение", "sw:pdf")],
           [Button("🧱 Конструктор зарплаты", "pb"), Button("📋 Анкета для подключения", "cd")],
           [Button("📨 Хочу так — отправить заявку", "sw:req")]]
-    v.note("Пакеты, уровень продаж, готовые наборы и оплата за год — «☑️ Выбрать пакеты». "
+    v.note("Набор под размер фирмы и что в него включено, оплата за год — «☑️ Выбрать набор». "
            "Как платите людям — «🧱 Конструктор зарплаты».")
     if not p["sales"] and any(p[c] for c in ("stock", "logistics", "office")):
         v.note("Без пакета «Продажи» торговые в приложение не входят — так можно: только склад или только водители.")
@@ -131,13 +130,27 @@ def build(ctx):
 # swe — открыть; swe:p:<набор> — готовый набор; swe:s:<уровень|off> — уровень продаж; swe:t:<пакет> — пакет; swe:y — за год;
 # swe:ok — применить; swe:no — выйти без изменений. Черновик — в сессии (pk_draft), суммы считаются по нему.
 
+MAX_LABEL = "⭐ Бренд, филиалы, функции на заказ"
+
+
+def base_of(ctx):
+    """Набор, с которого зритель начал (размер фирмы); по умолчанию — тот, которому равны пакеты, иначе «Компания»."""
+    b = ctx.session.get("base")
+    if b in E.PRESETS:
+        return b
+    code = E.preset_of(ctx.cfg.packages)
+    return code if code in E.PRESETS else "company"
+
+
 @screen("swe")
 def packages_window(ctx, act=None, value=None):
+    """Окно (Адам 31.10): 1) набор — один, задаёт людей, роли и функции по умолчанию; 2) что включено — галочки, можно
+    добавить или убрать что угодно, набор при этом остаётся («Старт + Склад и закупки»). «ОК» / «Отмена»."""
     if not ctx.demo:
         return Reply(text="Пакеты подключённой фирмы меняются через «💳 Тариф».")
     d = ctx.session.get("pk_draft")
     if act is None or not isinstance(d, dict):
-        d = {"packages": dict(ctx.cfg.packages), "year": bool(ctx.session.get("year"))}
+        d = {"base": base_of(ctx), "packages": dict(ctx.cfg.packages), "year": bool(ctx.session.get("year"))}
     p = E.normalize(d["packages"])
     if act == "no":
         ctx.session.pop("pk_draft", None)
@@ -146,15 +159,17 @@ def packages_window(ctx, act=None, value=None):
     if act == "ok":
         ctx.session.pop("pk_draft", None)
         ctx.session["year"] = d["year"]
+        ctx.session["base"] = d["base"]
         if d.get("counts"):
             ctx.session["counts"] = d["counts"]
         ctx.save()
         return set_packages(ctx, p)
-    if act == "p" and value in E.PRESETS:
+    if act == "b" and value in E.PRESETS:
+        d["base"] = value
         p = E.normalize(E.PRESETS[value]["packages"])
-        d["counts"] = dict(E.PRESETS[value]["people"])            # набор — под размер фирмы: типовые люди по отделам
+        d["counts"] = dict(E.PRESETS[value]["people"])
     elif act == "s":
-        p["sales"] = None if value == "off" or p.get("sales") == value else value if value in E.LEVELS else p["sales"]
+        p["sales"] = None if p.get("sales") == value else value if value in E.LEVELS else p["sales"]
     elif act == "t" and value in E.PACKAGES and value != "sales":
         p[value] = not p[value]
     elif act == "y":
@@ -165,19 +180,19 @@ def packages_window(ctx, act=None, value=None):
     counts = d.get("counts") or counts_of(ctx)
     q = quote_of(ctx, p, d["year"], counts)
     pr = P.prices(ctx.office)
-    preset = E.preset_of(p)
-    v = View("☑️ Выбрать пакеты", "людей: " + " / ".join(str(counts.get(c, 0)) for c in DEPT_ORDER)
-             + " (продажи / склад / логистика / офис)")
+    v = View("☑️ Выбрать набор", E.base_title(d["base"], p) + " · людей " + str(sum(counts.values())))
     if q["empty"]:
         v.tiles([("Подключение, один раз", "—", None), ("Дальше, в месяц", "—", None)])
     else:
         v.tiles([("Подключение, один раз", money(q["setup"]), None), ("Дальше, в месяц", money(q["monthly"]), "good")]
                 + ([("За год: в месяц", money(q["monthly_year"]), "good")] if d["year"] else []))
-    v.lines([f"{'●' if preset == c else '○'} {E.PRESETS[c]['title']} — {E.PRESETS[c]['size']}" for c in E.ORDER],
-            title="Готовые наборы — обычно для такого размера")
-    v.note("Размер — только подсказка: любой фирме можно любой набор. При выборе набора люди по отделам встают типовые — "
-           "дальше поправьте галочками и «👥 Люди».")
-    kb = [[Button(("● " if preset == c else "") + E.PRESETS[c]["title"], f"swe:p:{c}") for c in E.ORDER]]
+    v.note("Сверху — набор (один): с ним по умолчанию ставятся люди, роли и функции. Ниже — что включено: любую галочку "
+           "можно снять или добавить, набор останется.")
+    kb = []
+    for c in E.ORDER:
+        x = E.PRESETS[c]
+        n = sum(x["people"].values())
+        kb.append([Button(f"{'☑' if d['base'] == c else '☐'} Набор «{x['title']}» — {n} чел.: {x['what']}", f"swe:b:{c}")])
     for lv in E.LEVEL_ORDER:
         kb.append([Button(f"{'☑' if p['sales'] == lv else '☐'} 📈 Продажи · {E.LEVELS[lv]} — {P.fmt(pr['sales_' + lv])} "
                           f"+ {P.fmt(pr['sales_' + lv + '_user'])}/чел.", f"swe:s:{lv}")])
@@ -185,7 +200,7 @@ def packages_window(ctx, act=None, value=None):
         dd = E.PACKAGES[code]
         kb.append([Button(f"{'☑' if p[code] else '☐'} {dd['icon']} {dd['title']} — {P.fmt(pr[code])} + {P.fmt(pr[code + '_user'])}/чел.",
                           f"swe:t:{code}")])
-    kb.append([Button(f"{'☑' if p['max'] else '☐'} ⭐ Максимум — {P.fmt(pr['max'])} в месяц", "swe:t:max")])
+    kb.append([Button(f"{'☑' if p['max'] else '☐'} {MAX_LABEL} — {P.fmt(pr['max'])} в месяц", "swe:t:max")])
     kb.append([Button(f"{'☑' if d['year'] else '☐'} 📅 Оплата за год — минус {P.fmt(pr['disc_year'])}%", "swe:y")])
     kb.append(ok_row("swe"))
     return Reply(view=v, buttons=kb)
@@ -224,8 +239,10 @@ def on_pay_other(ctx, text, data):
     return pay_screen(ctx)
 
 
-def set_packages(ctx, packages):
+def set_packages(ctx, packages, base=None):
     ctx.session["packages"] = E.normalize(packages)
+    if base in E.PRESETS:
+        ctx.session["base"] = base
     ctx.session.pop("edition", None)
     ctx.save()
     return build(ctx.app.ctx(ctx.user_id))
