@@ -89,7 +89,7 @@ def reply_json(r, files=None):
 
 BRAND = "Алапа"                                     # имя продукта и фирмы (Адам 30.10): «зарплата» по-чеченски, ударение на первое «а»
 BRAND_COLOR = "#15284F"                             # тёмно-синий логотипа
-DOMAIN = "kpibotsmith.ru"                            # домен приложений: demo. / <код клиента>. / admin. (Адам сменит — поменять здесь)
+DOMAIN = "alapa.pro"                            # домен приложений: demo. / <код клиента>. / admin. (Адам 01.11: alapa.pro)
 LOGO = ROOT / "assets" / "brand" / "alapa-logo.png"  # буква А со стрелкой роста, фон прозрачный
 
 

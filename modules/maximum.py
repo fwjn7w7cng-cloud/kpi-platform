@@ -138,12 +138,12 @@ def branches(ctx):
 
 @screen("branding", module="branding")
 def branding(ctx):
-    url = ctx.app.web_url or "https://<компания>.kpibotsmith.ru"
+    url = ctx.app.web_url or "https://<компания>.alapa.pro"
     v = View("🎨 Свой бренд", "приложение выглядит как ваше собственное")
     v.tiles([("Название", ctx.cfg.name, None), ("Адрес", url.replace("https://", ""), None)])
     v.lines(["Значок на телефоне — ваш логотип и ваше название под ним.",
              "Цвета приложения — фирменные: шапка, кнопки, графики.",
-             "Свой адрес: <компания>.kpibotsmith.ru или ваш домен.",
+             "Свой адрес: <компания>.alapa.pro или ваш домен.",
              "Файлы — ведомость, приказы, заказы поставщикам — с вашей шапкой."])
     v.note("Пришлите логотип (PNG или SVG) и цвет — настроим за день.")
     return Reply(view=v)

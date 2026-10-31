@@ -29,7 +29,7 @@ KEY = "push_subs"
 VAPID = "vapid"
 TTL = 24 * 3600
 MAX_PER_USER = 5
-CONTACT = os.environ.get("PUSH_CONTACT", "mailto:admin@kpibotsmith.ru")
+CONTACT = os.environ.get("PUSH_CONTACT", "mailto:botsmith.pro@gmail.com")
 
 
 def b64u(b):
