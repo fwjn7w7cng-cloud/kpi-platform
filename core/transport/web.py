@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, urlparse
 
 from core import push
 from core.ui import screens
-from core.ui.web import BRAND, app_name, reply_json, static_files
+from core.ui.web import BRAND, app_name, icon_png, reply_json, static_files
 
 log = logging.getLogger("kpi")
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -41,10 +41,11 @@ class WebApi:
         for uid in self._office().get("web_admins") or []:
             app.admins.add(int(uid))
         self.name = name or app_name(app.cfg.name, app.demo)      # «Алапа · демо» / «Алапа · <фирма>»
-        self.static = static_files(self.name, short, live=True)
         raw = (ROOT / "web" / "app.html").read_text(encoding="utf-8")
         import hashlib
-        self.ver = hashlib.sha1(raw.encode()).hexdigest()[:10]      # версия страницы: телефон со старой — перезагрузится сам
+        # версия страницы и значка: телефон со старой страницей перезагрузится сам, значок и название не возьмёт из старой памяти
+        self.ver = hashlib.sha1((raw + self.name + short).encode() + icon_png(180)).hexdigest()[:10]
+        self.static = static_files(self.name, short, live=True, ver=self.ver)
         self.page = raw.replace("__NAME__", self.name).replace("__SHORT__", short).replace("__VER__", self.ver)
 
     def _office(self):
@@ -152,7 +153,7 @@ class WebApi:
             name = u.lstrip("/")
             if name in self.static:
                 data, ctype = self.static[name]
-                return 200, {"Content-Type": ctype, "Cache-Control": "no-cache" if name == "sw.js" else "max-age=86400"}, data
+                return 200, {"Content-Type": ctype, "Cache-Control": "no-cache" if name in ("sw.js", "manifest.webmanifest") else "max-age=3600"}, data
             if u.startswith("/api/file/") and u.count("/") == 4:   # /api/file/<id>/pages и /api/file/<id>/p<N> — страницы PDF картинками
                 from core.ui.views import pdf_pages
                 fid, part = u.split("/")[3], u.split("/")[4]

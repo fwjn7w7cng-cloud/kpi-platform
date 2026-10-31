@@ -98,11 +98,12 @@ def app_name(cfg_name, demo=False):
     return f"{BRAND} · {'демо' if demo else cfg_name}"
 
 
-def manifest(name, short=BRAND, color=BRAND_COLOR):
+def manifest(name, short=BRAND, color=BRAND_COLOR, ver=""):
+    q = f"?v={ver}" if ver else ""            # версия в адресе значка — телефон не возьмёт старую картинку из своей памяти
     return {"name": name, "short_name": short, "start_url": "./", "scope": "./", "display": "standalone",
             "background_color": "#FFFFFF", "theme_color": color, "lang": "ru",
-            "icons": [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
-                      {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}]}
+            "icons": [{"src": f"icon-192.png{q}", "sizes": "192x192", "type": "image/png"},
+                      {"src": f"icon-512.png{q}", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}]}
 
 
 def icon_png(size, pad=None):
@@ -167,9 +168,9 @@ self.addEventListener("fetch", e => {
 """
 
 
-def static_files(name, short=BRAND, live=False):
+def static_files(name, short=BRAND, live=False, ver=""):
     """{путь: (байты, тип)} — всё, кроме самой страницы. short — подпись значка на экране телефона."""
-    return {"manifest.webmanifest": (json.dumps(manifest(name, short), ensure_ascii=False, indent=1).encode(),
+    return {"manifest.webmanifest": (json.dumps(manifest(name, short, ver=ver), ensure_ascii=False, indent=1).encode(),
                                      "application/manifest+json"),
             "sw.js": ((SW_LIVE if live else SW_STATIC).encode(), "text/javascript"),
             "icon-180.png": (icon_png(180), "image/png"),
