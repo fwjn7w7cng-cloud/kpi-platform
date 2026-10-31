@@ -3,6 +3,17 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-01 02:11 (Альфред) — выкачен ae17489 (домен alapa.pro), WEB_URL → demo.alapa.pro, kpibotsmith → 301 на alapa.pro
+Новый сервер: git pull → fdbb87b + ae17489 (7 файлов; requirements, миграции, deploy не менялись). py_compile ок. clients/demo/.env:
+копия .env.bak-2026-11-01-alapa (600), WEB_URL=https://demo.alapa.pro. web/site → /var/www/kpi/site (index.html, logo.png, icon.png; старая
+index.html.bak-2026-11-01-alapa), ссылка теперь на demo.alapa.pro. Копия data/demo.db.bak-2026-11-01-0208. restart kpi@demo + kpi-web@demo
+02:08:42 — active, NRestarts 0, ошибок/Conflict 0, 8101 → 200. DNS (1.1.1.1): alapa.pro, www, demo.alapa.pro, kpibotsmith.ru,
+demo.kpibotsmith.ru — все 103.214.71.188. Сертификаты Let's Encrypt (до 29.01.2027): alapa.pro, www.alapa.pro, demo.alapa.pro (02:09:06,
+после NXDOMAIN-попыток). Caddyfile: копия Caddyfile.bak-2026-11-01-0209-redir; kpibotsmith.ru → redir https://alapa.pro{uri} permanent,
+demo.kpibotsmith.ru → redir https://demo.alapa.pro{uri} permanent; validate, reload. Проверка: kpibotsmith.ru → 301 alapa.pro/,
+demo.kpibotsmith.ru → 301 demo.alapa.pro/ (путь сохраняется), www → 301, alapa.pro 200, demo.alapa.pro GET 200 «Алапа · демо»
+(HEAD → 405 — приложение не отвечает на HEAD, не ошибка). quizbot, fitness-bot не трогались.
+
 ## 2026-11-01 02:06 (Джарвис) — домен alapa.pro (ждёт выкатки, fdbb87b)
 Адам 01.11: сайт и демо — на alapa.pro. В коде: `core/ui/web.DOMAIN` = alapa.pro, тексты demo.py / maximum.py, визитка web/site → demo.alapa.pro,
 `core/push.CONTACT` = mailto:botsmith.pro@gmail.com. DNS в REG.RU (Адам): alapa.pro и kpibotsmith.ru — `@`, `*` (у alapa ещё `www`) → 103.214.71.188.
