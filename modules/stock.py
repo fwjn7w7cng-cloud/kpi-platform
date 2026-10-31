@@ -604,3 +604,36 @@ def morning(ctx):
     lines = [f"🔴 Закончилось: {len(out_)}", f"🟠 Скоро закончится: {len(low)}"]
     lines += [f"• {s.items[c]['name']}" for c in sorted(out_, key=lambda c: -s.speed(c))[:5]]
     return Reply(text="📦 Склад сегодня\n" + "\n".join(lines), buttons=[[Button("📦 Склад", "sk")]])
+
+
+# ---------- единицы для зарплаты закупщика: «закончилось» и «залежалось» у своих поставщиков ----------
+
+def _cats(pay):
+    cache = pay.__dict__.get("_stock_cats")
+    if cache is None:
+        from types import SimpleNamespace
+        today = min(pay.cal.today, pay.cal.end)
+        st = Stock(SimpleNamespace(db=pay.db, cfg=pay.cfg, today=today))
+        cache = {}
+        for code, it in st.items.items():
+            c = st.cat(code)
+            if c:
+                cache.setdefault(c, []).append(it["supplier"] or "Без поставщика")
+        pay._stock_cats = cache
+    return cache
+
+
+def _count(cat):
+    def fn(pay, emp):
+        own = owners(pay.db)
+        sups = _cats(pay).get(cat, [])
+        if emp.get("role") == "head" or not own:
+            return len(sups)
+        return sum(1 for s in sups if own.get(s) == emp["id"])
+    return fn
+
+
+from core.pay import components as _C  # noqa: E402
+
+_C.unit("stockout", _count("out"))
+_C.unit("stale", _count("stale"))

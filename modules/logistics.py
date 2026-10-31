@@ -106,6 +106,17 @@ for _code in ("km", "kg", "m3", "points", "trips"):
     C.unit(_code, _unit(_code))
 
 
+def _all_points(pay, emp):
+    """Отгрузки всего отдела за месяц (точки всех рейсов) — сдельная часть склада и сборщиков."""
+    cache = pay.__dict__.setdefault("_trips", None)
+    if cache is None:
+        pay._trips = cache = Trips(pay.db, pay.kpi.month, pay.kpi.who)
+    return sum(cache.totals(e)["points"] for e in cache.trips)
+
+
+C.unit("all_points", _all_points)
+
+
 # ---------- «Мой день»: отметки водителя ----------
 # База: ключ dm:<месяц> = {id водителя: {день: {out, back, night, cash, pick: [[м³, кг, что]]}}}
 

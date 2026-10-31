@@ -115,3 +115,22 @@ def today_tasks(ctx):
     if not rs:
         return None
     return Reply(text="📌 Задачи на сегодня:\n" + "\n".join(f"• {t['text']}" for t in rs), buttons=[[Button("📌 Задачи", "tasks")]])
+
+
+# ---------- единицы для зарплаты: задачи месяца ----------
+
+def _tasks(pay, emp, good):
+    s, e = str(pay.kpi.start), str(pay.kpi.end)
+    n = 0
+    for t in pay.db.q("SELECT * FROM tasks WHERE emp_id = ? AND due BETWEEN ? AND ?", emp["id"], s, e):
+        on_time = t["status"] == "done" and (t["done_ts"] or "")[:10] <= t["due"]
+        late = t["status"] == "fail" or (t["status"] == "done" and not on_time) or \
+            (t["status"] == "open" and t["due"] < min(pay.cal.today, pay.cal.end).isoformat())
+        n += on_time if good else late
+    return n
+
+
+from core.pay import components as _C  # noqa: E402
+
+_C.unit("tasks_done", lambda pay, emp: _tasks(pay, emp, True))
+_C.unit("tasks_late", lambda pay, emp: _tasks(pay, emp, False))

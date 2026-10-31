@@ -335,13 +335,13 @@ def parse(client_id, raw, hooks=None):
         for i, comp in enumerate(comps or []):
             t = (comp or {}).get("type")
             where = f"pay_schemes.{sname}[{i + 1}]"
-            if t in C.BUILTIN:
+            if t in C.BUILTIN or t in C.POST:
                 p += [f"{where}: {x}" for x in C.check(comp)]
             elif t in custom:
                 chk = hooks.components[t][1]
                 p += [f"{where}: {x}" for x in (chk(comp) if chk else [])]
             else:
-                p.append(f"{where}: нет кубика «{t}» — есть: {', '.join(sorted(set(C.BUILTIN) | custom))}")
+                p.append(f"{where}: нет кубика «{t}» — есть: {', '.join(sorted(set(C.BUILTIN) | set(C.POST) | custom))}")
 
     positions = []
     for pos in raw.get("positions") or []:

@@ -125,20 +125,33 @@ class Payroll:
             return self._cache[emp["id"]]
         name = self.scheme_of(emp)
         slip = Payslip(emp, days=self.worked_days(emp), days_total=self.cal.total, scheme=name)
-        for comp in self.schemes.get(name, []):
-            t = comp["type"]
-            fn = C.BUILTIN.get(t)
-            if fn is None and self.hooks and t in self.hooks.components:
-                fn = self.hooks.components[t][0]
-            if fn is None:
-                slip.rows.append((f"⚠️ нет кубика «{t}»", 0, "проверьте анкету"))
-                continue
-            slip.rows.extend(_norm(fn(self, emp, comp)))
+        self.slip_rows(emp, self.schemes.get(name, []), slip)
         if self.hooks:
             slip.rows.extend(_norm(self.hooks.run("pay_rows", self, emp, slip) or []))
         for e in self.edits.get(emp["id"], []):
             slip.rows.append(("Премия" if e["amount"] > 0 else "Удержание", e["amount"], e["reason"]))
         self._cache[emp["id"]] = slip
+        return slip
+
+    def slip_rows(self, emp, scheme, slip):
+        """Кубики схемы → строки расчёта. Множитель и пределы (C.POST) — после остальных, в том порядке, как в схеме."""
+        tagged = []
+        post = []
+        for comp in scheme:
+            t = comp["type"]
+            if t in C.POST:
+                post.append(comp)
+                continue
+            fn = C.BUILTIN.get(t)
+            if fn is None and self.hooks and t in self.hooks.components:
+                fn = self.hooks.components[t][0]
+            if fn is None:
+                tagged.append((f"⚠️ нет кубика «{t}»", 0, "проверьте анкету", t))
+                continue
+            tagged.extend(r + (t,) for r in _norm(fn(self, emp, comp)))
+        for comp in sorted(post, key=lambda c: c["type"] == "limits"):      # пределы — самыми последними
+            tagged.extend(r + (comp["type"],) for r in _norm(C.POST[comp["type"]](self, emp, comp, tagged)))
+        slip.rows.extend(r[:3] for r in tagged)
         return slip
 
     def fund(self, emps):

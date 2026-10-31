@@ -119,51 +119,20 @@ def build(ctx):
           [Button(f"👥 Люди: {' / '.join(str(counts[c]) for c in DEPT_ORDER)} — изменить", "sw:pn")],
           [Button(("• " if ctx.session.get("year") else "") + "📅 Оплата за год", "sw:yr"),
            Button("📄 Коммерческое предложение", "sw:pdf")],
-          [Button(("• " if preset == c else "") + E.PRESETS[c]["title"], f"sw:ed:{c}") for c in E.ORDER[:3]],
-          [Button(("• " if preset == c else "") + E.PRESETS[c]["title"], f"sw:ed:{c}") for c in E.ORDER[3:]],
-          [Button("💵 Как платите торговым", "sw:pay"), Button("📋 Анкета для подключения", "cd")],
+          [Button(("● " if preset == c else "") + E.PRESETS[c]["title"], f"sw:ed:{c}") for c in E.ORDER],
+          [Button("🧱 Конструктор зарплаты", "pb"), Button("📋 Анкета для подключения", "cd")],
           [Button("📨 Хочу так — отправить заявку", "sw:req")]]
     from core import onboard as O
-    v.note(f"Торговым платят: {O.pay_text(O.pay_of(ctx))} — поправьте в «💵 Как платите».")
+    v.note("Как платите людям — «🧱 Конструктор зарплаты»: схема по каждой должности кирпичиками, сразу видно сумму.")
     if not p["sales"] and any(p[c] for c in ("stock", "logistics", "office")):
         v.note("Без пакета «Продажи» торговые в приложение не входят — так можно: только склад или только водители.")
     return Reply(view=v, buttons=kb)
 
 
 def pay_screen(ctx):
-    """«💵 Как платите торговым» — вариации схемы простыми словами; цену не меняют, идут в анкету клиента."""
-    from core import onboard as O
-    pay = O.pay_of(ctx)
-    v = View("💵 Как платите торговым", "отметьте, из чего состоит зарплата торгового у вас")
-    v.lines([f"{'✅' if pay['salary'] else '⬜'} Оклад — {O.PAY['salary'][1]}",
-             f"{'✅' if pay['percent'] else '⬜'} % от продаж — {O.PAY['percent'][1]}",
-             f"▸ Бонус за план: {O.PLAN_T[pay['plan']]}",
-             f"{'✅' if pay['akb'] else '⬜'} Бонус за клиентов (АКБ) — {O.PAY['akb'][1]}",
-             f"{'✅' if pay['debt'] else '⬜'} Удержание за просрочку — {O.PAY['debt'][1]}"], title="Торговым")
-    extra = []
-    if ctx.cfg.packages.get("logistics"):
-        extra.append(f"{'✅' if pay['drivers'] else '⬜'} Водителям сдельно — {O.PAY['drivers'][1]}")
-    if ctx.cfg.packages.get("stock"):
-        extra.append(f"{'✅' if pay['wh'] else '⬜'} Складу бонус «без ошибок» — {O.PAY['wh'][1]}")
-    if extra:
-        v.lines(extra, title="Склад и водители")
-    if pay.get("other"):
-        v.lines([f"⚠️ {pay['other']}", "Этого нет среди готовых правил — посмотрим и настроим или доработаем под вас."],
-                title="По-своему")
-    v.note("Суммы и проценты зададим при подключении. Здесь — только что есть, а чего нет. На цену это не влияет.")
-    kb = [[Button(("✅ " if pay["salary"] else "⬜ ") + "Оклад", "sw:py:salary"), Button(("✅ " if pay["percent"] else "⬜ ") + "% от продаж", "sw:py:percent")],
-          [Button(f"Бонус за план: {O.PLAN_T[pay['plan']]} ▸", "sw:py:plan")],
-          [Button(("✅ " if pay["akb"] else "⬜ ") + "Бонус за АКБ", "sw:py:akb"), Button(("✅ " if pay["debt"] else "⬜ ") + "За просрочку", "sw:py:debt")]]
-    row = []
-    if ctx.cfg.packages.get("logistics"):
-        row.append(Button(("✅ " if pay["drivers"] else "⬜ ") + "Водителям сдельно", "sw:py:drivers"))
-    if ctx.cfg.packages.get("stock"):
-        row.append(Button(("✅ " if pay["wh"] else "⬜ ") + "Складу без ошибок", "sw:py:wh"))
-    if row:
-        kb.append(row)
-    kb.append([Button("✍️ У нас по-другому / добавить", "sw:py:other")])
-    kb.append([Button("‹ Собрать", "sw:ed"), Button("📋 Анкета", "cd")])
-    return Reply(view=v, buttons=kb)
+    """«💵 Как платите» — теперь это «🧱 Конструктор зарплаты» (core/paybuilder.py): кирпичики по должностям."""
+    from core import paybuilder as PB
+    return PB.page(ctx)
 
 
 def pay_toggle(ctx, code):

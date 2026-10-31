@@ -4,4 +4,4 @@ openpyxl==3.1.5
 xlrd==2.0.1
 Pillow==10.4.0
 python-dotenv==1.0.1
-cryptography>=42          # уведомления на телефон (core/push.py)
+cryptography==50.0.2       # уведомления на телефон (core/push.py); версия как на сервере

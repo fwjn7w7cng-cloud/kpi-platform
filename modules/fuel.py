@@ -143,3 +143,25 @@ def on_norm(ctx, text, data):
     ctx.db.put("fuel_norms", ns)
     ctx.db.audit(ctx.author(), "fuel_norm", f"{ctx.db.employee(data['emp'])['fio']}: {num(x)} л/100 км")
     return fuel(ctx)
+
+
+# ---------- единицы для зарплаты: экономия / перерасход топлива, ₽ ----------
+
+def _fuel_diff(pay, emp):
+    """Карта − положено по норме, ₽ (плюс — перерасход). Нет суммы по карте — None."""
+    from modules.logistics import Trips
+    c = pay.cfg.raw.get("fuel") or {}
+    norm0, price = float(str(c.get("norm", 12)).replace(",", ".")), float(c.get("price", 60))
+    card = cards(pay.db, pay.kpi.month).get(emp["id"])
+    if card is None:
+        return None
+    t = pay.__dict__.get("_trips") or Trips(pay.db, pay.kpi.month, pay.kpi.who)
+    pay._trips = t
+    km = t.totals(emp["id"])["km"]
+    return card - km * norms(pay.db).get(emp["id"], norm0) / 100 * price
+
+
+from core.pay import components as _C  # noqa: E402
+
+_C.unit("fuel_save", lambda pay, emp: max(-(_fuel_diff(pay, emp) or 0), 0))
+_C.unit("fuel_over", lambda pay, emp: max(_fuel_diff(pay, emp) or 0, 0))

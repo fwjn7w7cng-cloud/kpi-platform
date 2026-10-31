@@ -76,7 +76,7 @@ class ClientCard(Base):
         c = O.card(self.office(), CLIENT)
         self.assertIn("фикс при 100 %", O.pay_text(c["set"]["pay"]))
         self.assertTrue(any("по-своему" in x for x in O.flags(c)))
-        r = self.app.press(CLIENT, "sw:pay")[0]
+        r = next(x for x in self.app.press(CLIENT, "sw:pay") if x.view)              # теперь это конструктор зарплаты
         self.assertTrue(any("премия 10 000" in str(b) for b in r.view.blocks))
 
     def test_request_creates_card_and_notifies_with_button(self):

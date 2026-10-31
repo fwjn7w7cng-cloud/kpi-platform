@@ -128,8 +128,13 @@ def snapshot(ctx, c):
     from core.ui.tariff import counts_of, quote_of
     q = quote_of(ctx)
     counts = counts_of(ctx)
+    from core import paybuilder as PB
     c["set"] = {"packages": ctx.cfg.packages, "title": ctx.cfg.set_title, "counts": counts, "people": sum(counts.values()),
                 "monthly": q["monthly"], "setup": q["setup"], "pay": pay_of(ctx), "industry": ctx.industry}
+    if ctx.session.get("pb"):                                    # 🧱 конструктор зарплаты: схемы по должностям
+        c["set"]["schemes"] = PB.schemes(ctx.session)
+        c["set"]["pay_lines"] = PB.lines(ctx.session)
+        c["set"]["needs"] = PB.needs_data(ctx.session)
     if not c["f"].get("industry"):
         c["f"]["industry"] = INDUSTRIES.get(ctx.industry, "")
     return c
@@ -177,11 +182,21 @@ def flags(c):
     if (f.get("special") or "").strip():
         out.append(f"По-своему: «{f['special'].strip()}» — проверить, есть ли такое в ядре; иначе правило клиента или доработка.")
     pay = s.get("pay") or {}
+    out += [f"{x} — подключим вместе с клиентом" for x in s.get("needs") or []]
     if (pay.get("other") or "").strip():
         out.append(f"Зарплата по-своему: «{pay['other'].strip()}» — нет среди готовых кубиков, нужна настройка или доработка.")
     if not pay.get("salary") and not pay.get("percent") and pay.get("plan", "steps") == "none":
         out.append("Торговым не платят ни оклад, ни процент, ни бонус за план — уточнить, из чего состоит зарплата.")
     return out
+
+
+def pay_lines(s):
+    """Как платят — строками: из «🧱 Конструктора зарплаты», если собирали, иначе по старым галочкам."""
+    if s.get("pay_lines"):
+        out = list(s["pay_lines"])
+        other = ((s.get("pay") or {}).get("other") or "").strip()
+        return out + ([f"По-своему: {other}"] if other else [])
+    return [f"Торговым платят: {pay_text(s.get('pay') or {})}"]
 
 
 def pay_text(pay):
@@ -226,7 +241,7 @@ def show(ctx, uid=None):
                  ("В месяц", money(s.get("monthly", 0)), "good"), ("Подключение", money(s.get("setup", 0)), None)])
         cnt = s.get("counts") or {}
         v.lines([f"Люди: продажи {cnt.get('sales', 0)} · склад и закупки {cnt.get('stock', 0)} · логистика {cnt.get('logistics', 0)} · "
-                 f"офис {cnt.get('office', 0)}", f"Торговым платят: {pay_text(s.get('pay') or {})}"], title="Из конструктора")
+                 f"офис {cnt.get('office', 0)}", *pay_lines(s)], title="Из конструктора")
     for g, title, fs in GROUPS:
         lines = []
         for f, label, kind, req, _ in fs:
@@ -248,7 +263,7 @@ def show(ctx, uid=None):
         v.note("Обязательное заполнено ✓. Остальное — по желанию, всё поможет подключить быстрее.")
     kb = rows([Button(f"✏️ {title.split(' ', 1)[1]}", f"cdg:{uid}:{g}") for g, title, _ in GROUPS], 2)
     if own(ctx, uid) and ctx.demo:
-        kb.append([Button("🧩 Пакеты и люди", "sw:ed"), Button("💵 Как платите торговым", "sw:pay")])
+        kb.append([Button("🧩 Пакеты и люди", "sw:ed"), Button("🧱 Конструктор зарплаты", "pb")])
     else:
         kb.append([Button("📝 Заметка", f"cdn:{uid}")])
     tail = [Button("📄 PDF", f"cdp:{uid}")]
@@ -379,7 +394,7 @@ def card_view(c):
         v.lines([f"Набор: {s.get('title', '—')} · людей {s.get('people', 0)}", f"В месяц {money(s.get('monthly', 0))} · "
                  f"подключение {money(s.get('setup', 0))}",
                  f"Люди: продажи {cnt.get('sales', 0)}, склад и закупки {cnt.get('stock', 0)}, логистика {cnt.get('logistics', 0)}, "
-                 f"офис {cnt.get('office', 0)}", f"Торговым платят: {pay_text(s.get('pay') or {})}"], title="Из конструктора")
+                 f"офис {cnt.get('office', 0)}", *pay_lines(s)], title="Из конструктора")
     for g, title, fs in GROUPS:
         v.lines([f"{label}: {c['f'].get(f) or '—'}" for f, label, _, _, _ in fs], title=title)
     if flags(c):
@@ -460,6 +475,12 @@ def build_raw(c):
         wh += [{"type": "fixed_bonus", "name": "Без ошибок", "amount": "5 000", "cut_per_miss": "1 000"},
                {"type": "per_unit", "unit": "ret_err", "price": "500", "cut": True, "name": "Ошибки склада в возвратах"}]
     raw["pay_schemes"]["warehouse"] = wh + [{"type": "timesheet"}]
+    for name, comps in (s.get("schemes") or {}).items():      # 🧱 конструктор зарплаты — как собрали, кирпичик в кирпичик
+        raw["pay_schemes"][name] = comps
+    if "buyer" in raw["pay_schemes"]:
+        for p in raw["positions"]:
+            if p["id"] in ("buyer", "buy_head"):
+                p["pay"] = "buyer"
     return raw
 
 
@@ -479,7 +500,7 @@ def excel(c):
     qa += [["Из конструктора", ""], ["Набор", s.get("title", "")], ["В месяц, ₽", s.get("monthly", "")], ["Подключение, ₽", s.get("setup", "")],
            ["Людей: продажи / склад и закупки / логистика / офис",
             f"{cnt.get('sales', 0)} / {cnt.get('stock', 0)} / {cnt.get('logistics', 0)} / {cnt.get('office', 0)}"],
-           ["Торговым платят", pay_text(pay)]]
+           *[["Зарплата", x] for x in pay_lines(s)]]
     if pay.get("other"):
         qa.append(["Зарплата по-своему", pay["other"]])
     for x in flags(c):
@@ -570,7 +591,7 @@ def preview_lines(c):
         "Отделы: " + ", ".join(d["name"] for d in raw["departments"]),
         f"Должностей: {len(raw['positions'])} · команд: {len(raw['teams'])}",
         "Выходные: " + ", ".join(A._inv(A.DAYS_RU).get(d, d).lower() for d in raw["work_week"]["weekend"]),
-        "Торговым платят: " + pay_text(pay) + " — цифры стандартные, уточнить",
+        *[x + (" — цифры стандартные, уточнить" if not s.get("schemes") else " — как собрали в конструкторе") for x in pay_lines(s)],
     ]
 
 
