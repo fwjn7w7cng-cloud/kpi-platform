@@ -88,8 +88,12 @@ def check(c):
     elif t == "sales_percent":
         if not _num(c.get("rate", 0)) or not 0 <= c.get("rate", 0) < 1:
             p.append("sales_percent.rate — доля от 0 до 1 (0,4% = 0.004)")
-        if c.get("base", "sales") not in ("sales", "collect", "margin"):
-            p.append("sales_percent.base — sales, collect или margin")
+        if c.get("base", "sales") not in ("sales", "focus", "collect", "margin"):
+            p.append("sales_percent.base — sales, focus, collect или margin")
+        if c.get("rate_steps") is not None:
+            st = c["rate_steps"]
+            if not st or not all(isinstance(x, (list, tuple)) and len(x) == 2 and _num(x[0]) and _num(x[1]) for x in st):
+                p.append("sales_percent.rate_steps — пары [доля плана, ставка]: «80% → 0,3%; 100% → 0,5%»")
         if "rate_above" in c and (not _num(c["rate_above"]) or not 0 <= c["rate_above"] < 1):
             p.append("sales_percent.rate_above — доля от 0 до 1")
     elif t == "plan_bonus":
@@ -202,31 +206,41 @@ def salary(ctx, emp, c):
     return [("Оклад", amount, f"{_n(base)} ÷ {ctx.salary_days} × {_d(days)} дн.")]
 
 
+PCT_TITLE = {"sales": "продаж", "focus": "фокусных", "collect": "собранных денег"}
+
+
 def sales_percent(ctx, emp, c):
+    """Процент с показателя base (sales | focus | collect | margin). Связь с планом этого же показателя:
+    min_plan — платить только с порога; rate_steps [[доля плана, ставка]] — ставка по ступеням; rate_above — сверх плана."""
     base = c.get("base", "sales")
     if base == "margin":
         return [("% от наценки", 0, "нужна себестоимость в отчёте 1С — подключим вместе с клиентом")]
-    if base == "collect":
-        m = _scope_metric(ctx, emp, c, "collect")
-        if m is None:
-            return []
-        rate = c.get("rate", 0)
-        return [("% от собранных денег", m.fact * rate, f"{_n(m.fact)} × {_p(rate, 2)}")]
     if c.get("groups") or c.get("focus_rate") is not None:
         return _group_percent(ctx, emp, c)
-    m = _scope_metric(ctx, emp, c, "sales")
+    m = _scope_metric(ctx, emp, c, base)
     if m is None:
         return []
-    rate = emp.get("rate") if emp.get("rate") is not None and c.get("scope", "self") == "self" else c["rate"]
-    where = {"team": "команды", "dept": "отдела"}.get(c.get("scope", "self"), "")
-    title = f"% от продаж {where}".strip()
-    if c.get("min_plan") and (m.pct or 0) < c["min_plan"]:
-        return [(title, 0, f"план {_p(m.pct)} — нужно от {_p(c['min_plan'])}")]
+    rate = c.get("rate", 0)
+    if base == "sales" and emp.get("rate") is not None and c.get("scope", "self") == "self":
+        rate = emp["rate"]
+    where = {"team": " команды", "dept": " отдела", "all": " компании"}.get(c.get("scope", "self"), "")
+    title = f"% от {PCT_TITLE.get(base, base)}{where}"
+    pct = m.pct or 0
+    if c.get("min_plan") and pct < c["min_plan"] - 1e-9:
+        return [(title, 0, f"план {_p(pct)} — платится от {_p(c['min_plan'])}")]
+    if c.get("rate_steps"):
+        got = None
+        for share, r in sorted(c["rate_steps"]):
+            if pct >= share - 1e-9:
+                got = r
+        if got is None:
+            return [(title, 0, f"план {_p(pct)} — ставка от {_p(sorted(c['rate_steps'])[0][0])}")]
+        return [(title, m.fact * got, f"{_n(m.fact)} × {_p(got, 2)} (план {_p(pct)})")]
     if c.get("rate_above") and m.plan:
-        base = min(m.fact, m.plan)
+        b = min(m.fact, m.plan)
         over = max(m.fact - m.plan, 0)
-        return [(title, base * rate + over * c["rate_above"],
-                 f"{_n(base)} × {_p(rate, 2)} + сверх плана {_n(over)} × {_p(c['rate_above'], 2)}")]
+        return [(title, b * rate + over * c["rate_above"],
+                 f"{_n(b)} × {_p(rate, 2)} + сверх плана {_n(over)} × {_p(c['rate_above'], 2)}")]
     return [(title, m.fact * rate, f"{_n(m.fact)} × {_p(rate, 2)}")]
 
 

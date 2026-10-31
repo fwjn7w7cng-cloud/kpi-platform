@@ -7,6 +7,7 @@
 
 Где лежит: сессия зрителя — `pb` = {должность: [{b: кирпичик, v: вариант, p: {поле: значение}}]}, `pb_pos` — открытая.
 Снимок уходит в анкету клиента (onboard.snapshot → set.schemes) и при «🚀 Создать клиента» — в его config.yaml (schemes()).
+Ни один кирпичик не обязателен (Адам 31.10: «некоторых блоков у клиента вообще не будет»): «🧹 С нуля» — пустая схема.
 Экраны: pb[:должность] — схема · pbe:i — кирпичик · pbv:i:вариант · pbf:i:поле (ввод) · pbc:i:поле:значение (выбор) ·
 pba[:раздел] — каталог · pbn:кирпичик — добавить · pbu:i — выше · pbd:i — убрать · pbr — как было.
 """
@@ -39,7 +40,7 @@ SCOPES = {"self": "свои", "team": "команды", "dept": "отдела", 
 F = {
     "amount": ("Сумма", "money"), "rate": ("Ставка", "pct"), "rate_above": ("Ставка сверх плана", "pct"),
     "min_plan": ("Порог плана", "pct"), "focus_rate": ("Ставка по фокусным", "pct"), "min": ("Порог", "pct"),
-    "cap": ("Потолок", "pct"), "steps": ("Ступени", "steps_money"), "coefs": ("Множители", "steps_coef"),
+    "cap": ("Потолок", "pct"), "steps": ("Ступени", "steps_money"), "rate_steps": ("Ставки по плану", "steps_rate"), "coefs": ("Множители", "steps_coef"),
     "share": ("Допустимая доля", "pct"), "days": ("Просрочка от, дней", "int"), "max": ("Не больше", "money"),
     "debt_steps": ("Ступени просрочки", "steps_money"), "months": ("Не брал, месяцев", "int"), "norm": ("Норма скидки", "pct"),
     "amounts": ("За места", "amounts"), "name": ("Название", "text"), "cut_per_miss": ("Минус за пропуск", "money"),
@@ -70,21 +71,6 @@ BRICKS = {
         ("fixed", "фикс за месяц", {"amount": 30000}, {"type": "salary", "mode": "fixed"}),
         ("calendar", "по календарным дням", {"amount": 30000}, {"type": "salary", "mode": "calendar"}),
     ], "постоянная часть"),
-    "percent": ("От продаж", "📈", "% от продаж", SALES, [
-        ("flat", "единая ставка", {"rate": 0.004}, {"type": "sales_percent"}),
-        ("two", "до плана и сверх плана", {"rate": 0.004, "rate_above": 0.008}, {"type": "sales_percent"}),
-        ("gate", "только при пороге плана", {"rate": 0.005, "min_plan": 0.8}, {"type": "sales_percent"}),
-        ("focus", "своя ставка по фокусным", {"rate": 0.003, "focus_rate": 0.008}, {"type": "sales_percent"}),
-        ("collect", "от собранных денег", {"rate": 0.005}, {"type": "sales_percent", "base": "collect"}),
-        ("margin", "от наценки (нужна себестоимость в 1С)", {"rate": 0.05}, {"type": "sales_percent", "base": "margin"}),
-    ], "процент с продаж, денег или наценки"),
-    "plan": ("За план", "🎯", "Бонус за план", ALL, [
-        ("steps", "ступени", {"metric": "sales", "steps": [[0.8, 5000], [1.0, 15000], [1.2, 20000]]},
-         {"type": "plan_bonus", "mode": "steps"}),
-        ("fixed", "фикс при выполнении", {"metric": "sales", "amount": 15000, "min": 1.0}, {"type": "plan_bonus", "mode": "fixed"}),
-        ("linear", "пропорционально выполнению", {"metric": "sales", "amount": 15000, "min": 0.8, "cap": 1.2},
-         {"type": "plan_bonus", "mode": "linear"}),
-    ], "по продажам, фокусу, АКБ, SKU, сбору, визитам"),
     "company": ("За план", "🏆", "Доля от плана компании", ALL, [
         ("steps", "ступени", {"steps": [[0.9, 3000], [1.0, 7000]]}, {"type": "plan_bonus", "metric": "sales", "scope": "all", "mode": "steps"}),
         ("linear", "пропорционально", {"amount": 7000, "min": 0.8, "cap": 1.2},
@@ -147,9 +133,44 @@ BRICKS = {
         ("both", "гарантия и потолок", {"min_total": 40000, "max_variable": 150000}, {"type": "limits"}),
     ], "не меньше и не больше"),
 }
-SECTIONS = ["Основа", "От продаж", "За план", "Деньги и долги", "Клиенты", "Удержания", "Сдельно", "Множители и пределы", "Прочее"]
-SECTION_ICON = {"Основа": "💼", "От продаж": "📈", "За план": "🎯", "Деньги и долги": "💵", "Клиенты": "🆕", "Удержания": "➖",
+SECTIONS = ["Основа", "Показатели", "За план", "Деньги и долги", "Клиенты", "Удержания", "Сдельно", "Множители и пределы", "Прочее"]
+SECTION_ICON = {"Основа": "💼", "Показатели": "📊", "За план": "🎯", "Деньги и долги": "💵", "Клиенты": "🆕", "Удержания": "➖",
                 "Сдельно": "🚚", "Множители и пределы": "✖️", "Прочее": "🎁"}
+
+
+# Каждый показатель — свой блок со своими вариантами (Адам 31.10: «каждый показатель — свой личный блок»).
+# код: (значок, название, процент можно?, ставка по умолчанию, бонус по умолчанию, описание)
+METRIC_BLOCKS = {
+    "sales":   ("📈", "Продажи", True, 0.004, 15000, "процент с продаж и бонусы за план продаж"),
+    "focus":   ("🎯", "Фокусные", True, 0.008, 5000, "процент с фокусных групп и бонусы за их план"),
+    "collect": ("💵", "Сбор денег", True, 0.005, 5000, "процент с собранных денег и бонусы за план сбора"),
+    "akb":     ("👥", "АКБ — клиенты", False, 0, 5000, "бонус за число покупавших клиентов"),
+    "sku":     ("🧩", "SKU — ассортимент", False, 0, 3000, "бонус за ассортимент в точках"),
+    "visits":  ("🚗", "Визиты по маршруту", False, 0, 3000, "бонус за визиты с заказом"),
+}
+
+
+def _metric_variants(code, pct_ok, rate, amount):
+    v = []
+    if pct_ok:
+        t = {"type": "sales_percent", "base": code}
+        v += [("pct", "% — план не учитывается", {"rate": rate}, dict(t)),
+              ("pct_gate", "% — только с порога плана", {"rate": rate, "min_plan": 0.8}, dict(t)),
+              ("pct_steps", "% — ставка растёт с планом", {"rate_steps": [[0.8, rate * 0.75], [1.0, rate], [1.2, rate * 1.5]]}, dict(t)),
+              ("pct_split", "% — до плана и сверх плана", {"rate": rate, "rate_above": rate * 2}, dict(t))]
+    b = {"type": "plan_bonus", "metric": code}
+    v += [("fix", "фикс за выполнение плана", {"amount": amount}, {**b, "mode": "fixed", "min": 1.0}),
+          ("gate", "фикс с порога плана", {"amount": amount, "min": 0.8}, {**b, "mode": "fixed"}),
+          ("steps", "пороги (ступени)", {"steps": [[0.8, amount / 3], [1.0, amount], [1.2, amount * 4 / 3]]}, {**b, "mode": "steps"}),
+          ("linear", "пропорционально выполнению", {"amount": amount, "min": 0.8, "cap": 1.2}, {**b, "mode": "linear"})]
+    return v
+
+
+for _code, (_ic, _t, _pct, _r, _a, _d) in METRIC_BLOCKS.items():
+    BRICKS[_code] = ("Показатели", _ic, _t, SALES, _metric_variants(_code, _pct, _r, _a), _d)
+BRICKS["margin"] = ("Показатели", "📊", "Наценка", SALES, [
+    ("pct", "% от наценки (нужна себестоимость в 1С)", {"rate": 0.05}, {"type": "sales_percent", "base": "margin"})],
+    "процент с наценки — если в отчёте 1С есть себестоимость")
 
 
 def brick(b, v=None, **p):
@@ -160,11 +181,11 @@ def brick(b, v=None, **p):
 
 
 DEFAULTS = {
-    "rep": [brick("salary", amount=25000), brick("percent"), brick("plan"), brick("plan", "linear", metric="akb", amount=5000, min=0.7),
-            brick("debt_pen"), brick("timesheet")],
-    "sv": [brick("salary", amount=40000), brick("percent", rate=0.0015), brick("plan", steps=[[0.9, 10000], [1.0, 20000]]),
+    "rep": [brick("salary", amount=25000), brick("sales", "pct"), brick("sales", "steps", steps=[[0.8, 5000], [1.0, 15000], [1.2, 20000]]),
+            brick("akb", "linear", min=0.7), brick("debt_pen"), brick("timesheet")],
+    "sv": [brick("salary", amount=40000), brick("sales", "pct", rate=0.0015), brick("sales", "steps", steps=[[0.9, 10000], [1.0, 20000]]),
            brick("timesheet")],
-    "head": [brick("salary", amount=60000), brick("percent", rate=0.0005), brick("plan", "fixed", amount=30000), brick("timesheet")],
+    "head": [brick("salary", amount=60000), brick("sales", "pct", rate=0.0005), brick("sales", "fix", amount=30000), brick("timesheet")],
     "wh": [brick("salary", amount=35000), brick("discipline"), brick("cut"), brick("timesheet")],
     "driver": [brick("salary", amount=30000), brick("piece", unit="km", price=4), brick("piece", unit="points", price=25),
                brick("discipline"), brick("timesheet")],
@@ -183,6 +204,8 @@ def to_comp(pos, item):
     for k, v in p.items():
         if k == "coefs":
             c["steps"] = v
+        elif k == "rate_steps":
+            c["rate_steps"] = v
         elif k == "debt_steps":
             c["steps"] = v
         else:
@@ -224,7 +247,7 @@ def needs_data(session):
     out = []
     for pos, items in ((session or {}).get("pb") or {}).items():
         for i in items:
-            if i["b"] == "percent" and i["v"] == "margin":
+            if i["b"] == "margin":
                 out.append(f"{POSITIONS[pos][0]}: % от наценки — нужна себестоимость в отчёте 1С")
     return out
 
@@ -257,6 +280,8 @@ def fmt(field, v):
         return "; ".join(f"{_pct(a)} → {money(b)}" for a, b in v)
     if kind == "steps_coef":
         return "; ".join(f"{_pct(a)} → ×{_num(b)}" for a, b in v)
+    if kind == "steps_rate":
+        return "; ".join(f"{_pct(a)} → {_pct(b)}" for a, b in v)
     if kind == "amounts":
         return " / ".join(money(x) for x in v)
     if kind == "metric":
@@ -272,7 +297,11 @@ def bname(item):
     """Название кирпичика с уточнением: «Бонус за план: АКБ», «Сдельно: км пробега»."""
     b = BRICKS[item["b"]]
     p = item["p"]
-    if item["b"] in ("plan", "mult", "rank") and p.get("metric", "sales") != "sales":
+    if item["b"] in METRIC_BLOCKS:
+        short = {"pct": "%", "pct_gate": "% с порога", "pct_steps": "% по ступеням плана", "pct_split": "% до/сверх плана",
+                 "fix": "фикс за план", "gate": "фикс с порога", "steps": "пороги", "linear": "пропорционально"}
+        return f"{b[2]}: {short.get(item['v'], item['v'])}"
+    if item["b"] in ("mult", "rank") and p.get("metric", "sales") != "sales":
         return f"{b[2]}: {METRICS[p['metric']].split(' (')[0]}"
     if item["b"] in ("piece", "cut") and p.get("unit"):
         return f"{b[2]}: " + UNITS.get(p["unit"], (p["unit"],))[0].replace("за ", "", 1)
@@ -292,7 +321,7 @@ def summary(pos, item):
         price = p.get("price", 0)
         parts = [UNITS.get(u, (u,))[0] + " — " + (_pct(price) if u in RATE_UNITS else money(price))]
         return " · ".join(parts)
-    for k in ("metric", "amount", "rate", "rate_above", "focus_rate", "min_plan", "min", "cap", "steps", "coefs", "share",
+    for k in ("metric", "amount", "rate", "rate_steps", "rate_above", "focus_rate", "min_plan", "min", "cap", "steps", "coefs", "share",
               "debt_steps", "days", "max", "months", "norm", "amounts", "cut_per_miss", "min_total", "max_variable"):
         if k in p:
             if k == "days":
@@ -337,10 +366,34 @@ def state(ctx):
     return pb
 
 
+def _upgrade(items):
+    """Схемы, собранные до 31.10 (кирпичики «% от продаж» и «Бонус за план»), — в блоки показателей."""
+    out = []
+    for it in items:
+        if it.get("b") == "percent":
+            base = {"collect": "collect"}.get(it.get("v"), "sales")
+            v = {"two": "pct_split", "gate": "pct_gate"}.get(it.get("v"), "pct")
+            p = {k: x for k, x in it.get("p", {}).items() if k in ("rate", "rate_above", "min_plan")}
+            out.append({"b": base, "v": v, "p": {**brick(base, v)["p"], **p}})
+        elif it.get("b") == "plan":
+            m = it.get("p", {}).get("metric", "sales")
+            m = m if m in METRIC_BLOCKS else "sales"
+            v = it.get("v") if it.get("v") in ("fixed", "steps", "linear") else "steps"
+            v = "fix" if v == "fixed" else v
+            p = {k: x for k, x in it.get("p", {}).items() if k != "metric"}
+            out.append({"b": m, "v": v, "p": {**brick(m, v)["p"], **p}})
+        elif it.get("b") in BRICKS:
+            out.append(it)
+    return out
+
+
 def items_of(ctx, pos):
     pb = state(ctx)
     if pos not in pb:
         pb[pos] = copy.deepcopy(DEFAULTS[pos])
+        ctx.session["pb"] = pb
+    elif any(it.get("b") not in BRICKS for it in pb[pos]):
+        pb[pos] = _upgrade(pb[pos])
         ctx.session["pb"] = pb
     return pb[pos]
 
@@ -421,13 +474,14 @@ def page(ctx, pos=None):
     if cards:
         v.cards(cards, title="Схема — сверху вниз")
     else:
-        v.note("Пусто. Нажмите «➕ Добавить кирпичик».")
+        v.note("Пусто — собирайте с нуля: «➕ Добавить кирпичик». Берите только то, что есть у вас: каких-то показателей "
+               "(визиты, SKU, дебиторка) у фирмы может не быть — их просто не добавляйте.")
     kb = rows([Button(f"✏️ {n}. {bname(it)}"[:40], f"pbe:{n - 1}") for n, it in enumerate(items, 1)], 2)
     other = ((ctx.session.get("pay") or {}).get("other") or "").strip()
     if other:
         v.note(f"✍️ По-своему: {other} — посмотрим при подключении.")
     kb.append([Button("➕ Добавить кирпичик", "pba")])
-    tail = [Button("↺ Как было", "pbr")]
+    tail = [Button("↺ Как было", "pbr"), Button("🧹 С нуля", "pbx")]
     if ctx.demo:
         tail.append(Button("✍️ У нас по-другому", "sw:py:other"))
     if ctx.demo:
@@ -443,7 +497,7 @@ def _belongs(item, row):
     """Какие строки расчёта дал этот кирпичик (по названию строки)."""
     t = item["b"]
     name = row[0]
-    keys = {"salary": ("Оклад",), "percent": ("% от",), "plan": ("Бонус:",), "company": ("(компания)",),
+    keys = {"salary": ("Оклад",), "company": ("(компания)",),
             "debt_pen": ("Просрочка",), "debt_bonus": ("низкая просрочка",), "new_clients": ("Новые клиенты",),
             "rank": ("рейтинге",), "discount": ("Лишние скидки",), "timesheet": ("Штрафы по табелю",),
             "mult": ("Множитель",), "mult_debt": ("Множитель",), "limits": ("Потолок премии", "гарантированного"),
@@ -453,10 +507,16 @@ def _belongs(item, row):
     if t in ("piece", "cut"):
         u = item["p"].get("unit")
         return name == (("Удержание: " if UNITS.get(u, ("", (), 0, False))[3] else "") + UNITS.get(u, (u,))[0])
-    if t == "plan":
+    if t in METRIC_BLOCKS:
+        pct_t = {"sales": "% от продаж", "focus": "% от фокусных", "collect": "% от собранных денег"}.get(t)
+        bonus_t = {"sales": "Бонус: продажи", "focus": "Бонус: фокусные", "collect": "Бонус: сбор", "akb": "Бонус: АКБ",
+                   "sku": "Бонус: sku", "visits": "Бонус: визиты"}[t]
         if "(компания)" in name:
             return False
-        return name.startswith("Бонус:") and METRICS.get(item["p"].get("metric", "sales"), "").split(" ")[0][:4].lower() in name.lower()
+        return (item["v"].startswith("pct") and pct_t and name.startswith(pct_t)) or \
+            (not item["v"].startswith("pct") and name.startswith(bonus_t))
+    if t == "margin":
+        return name.startswith("% от наценки")
     if t == "mult":
         return name.startswith("Множитель") and item["v"] in ("bonus", "percent", "variable") and \
             {"bonus": "к бонусам", "percent": "к процентам", "variable": "к премии"}[item["v"]] in name
@@ -534,6 +594,7 @@ HINT = {"money": "Сумма, например 25 000", "pct": "Процент, 
         "int": "Число, например 60", "text": "Название, например «Компенсация связи»",
         "steps_money": "Ступени через точку с запятой: «80 5000; 100 15000; 120 20000» — процент и сумма",
         "steps_coef": "Ступени: «90 0,8; 100 1; 110 1,2» — процент и множитель",
+        "steps_rate": "Ступени: «80 0,3; 100 0,4; 120 0,6» — выполнение плана в % и ставка в %",
         "amounts": "Суммы через пробел за 1-е, 2-е, 3-е место: «5000 3000 1000»"}
 
 
@@ -603,6 +664,8 @@ def on_field(ctx, text, data):
                 raise ValueError
         elif kind in ("steps_money", "steps_coef"):
             val = _pairs(text, second_pct=kind == "steps_coef")
+        elif kind == "steps_rate":
+            val = [[a, b / 100] for a, b in _pairs(text, second_pct=True)]
         elif kind == "amounts":
             val = [_parse_num(x) for x in re.split(r"[\s;/]+", text.strip()) if x]
             if not val:
@@ -684,4 +747,12 @@ def drop(ctx, i):
 def reset(ctx):
     pos = cur_pos(ctx)
     _save(ctx, pos, copy.deepcopy(DEFAULTS[pos]))
+    return page(ctx)
+
+
+@screen("pbx")
+def clear(ctx):
+    """Собрать с нуля: у фирмы может не быть многих показателей — схема из того, что есть."""
+    pos = cur_pos(ctx)
+    _save(ctx, pos, [])
     return page(ctx)

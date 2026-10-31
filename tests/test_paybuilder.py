@@ -125,10 +125,14 @@ class Builder(Base):
         self.assertAlmostEqual(PB.items_of(self.app.ctx(7), "rep")[1]["p"]["rate"], 0.005)
         self.screens("pbf:1:rate")
         self.assertTrue(self.app.text(7, "много")[0].ask)                         # не число — переспросит
-        self.screens("pbc:2:metric:akb")
-        self.assertIn("АКБ", PB.bname(PB.items_of(self.app.ctx(7), "rep")[2]))
-        self.screens("pbu:2")
-        self.assertEqual(PB.items_of(self.app.ctx(7), "rep")[1]["b"], "plan")
+        self.screens("pbv:2:gate")                                              # продажи: фикс с порога плана
+        self.assertEqual(PB.bname(PB.items_of(self.app.ctx(7), "rep")[2]), "Продажи: фикс с порога")
+        self.screens("pbv:1:pct_steps")                                         # % — ставка растёт с планом
+        self.screens("pbf:1:rate_steps")
+        self.app.text(7, "80 0,3; 100 0,5")
+        self.assertEqual(PB.items_of(self.app.ctx(7), "rep")[1]["p"]["rate_steps"], [[0.8, 0.003], [1.0, 0.005]])
+        self.screens("pbu:3")
+        self.assertEqual(PB.items_of(self.app.ctx(7), "rep")[2]["b"], "akb")
         self.screens("pbd:1")
         self.screens("pbr")
         self.assertEqual(len(PB.items_of(self.app.ctx(7), "rep")), len(PB.DEFAULTS["rep"]))
@@ -136,10 +140,8 @@ class Builder(Base):
     def test_goes_to_card_and_client_config(self):
         self.screens("pb:rep")
         self.screens("pbn:mult")
-        self.screens("pbn:percent")
-        items = PB.items_of(self.app.ctx(7), "rep")
-        i = max(n for n, x in enumerate(items) if x["b"] == "percent")
-        self.screens(f"pbv:{i}:margin")
+        self.screens("pbn:margin")
+        self.screens("pbn:focus")                                               # фокусные — своим блоком
         self.screens("pb:driver")
         self.screens("pbn:cut")
         c = O.ensure(self.app.ctx(7), "7")
@@ -149,8 +151,37 @@ class Builder(Base):
         c["f"]["company"] = "Проверка"
         raw = O.build_raw(c)
         self.assertTrue(any(x["type"] == "multiplier" for x in raw["pay_schemes"]["rep"]))
+        self.assertTrue(any(x.get("base") == "focus" for x in raw["pay_schemes"]["rep"]))
         cfg = parse(raw["id"], raw)                                             # настройка клиента разбирается
         self.assertIn("driver", cfg.raw["pay_schemes"])
+
+    def test_each_indicator_is_own_block(self):
+        for m in ("sales", "focus", "collect", "akb", "sku", "visits"):
+            self.assertEqual(PB.BRICKS[m][0], "Показатели")
+            kinds = [v[0] for v in PB.BRICKS[m][4]]
+            self.assertTrue({"fix", "gate", "steps", "linear"} <= set(kinds), m)
+        self.assertIn("pct_steps", [v[0] for v in PB.BRICKS["focus"][4]])
+        self.assertNotIn("pct", [v[0] for v in PB.BRICKS["akb"][4]])                # у АКБ процента нет
+        ctx = self.app.ctx(7)                                                    # старая схема — переводится сама
+        ctx.session["pb"] = {"rep": [{"b": "percent", "v": "gate", "p": {"rate": 0.01, "min_plan": 1.0}},
+                                     {"b": "plan", "v": "fixed", "p": {"metric": "akb", "amount": 7000}}]}
+        items = PB.items_of(ctx, "rep")
+        self.assertEqual([(i["b"], i["v"]) for i in items], [("sales", "pct_gate"), ("akb", "fix")])
+        self.assertEqual(items[0]["p"]["rate"], 0.01)
+
+    def test_empty_and_partial_schemes(self):
+        self.screens("pb:rep")
+        out = self.screens("pbx")
+        v = next(r for r in out if r.view).view
+        self.assertEqual(PB.items_of(self.app.ctx(7), "rep"), [])
+        self.assertIn("с нуля", str(v.blocks))
+        self.screens("pbn:akb")                                                 # только один показатель, без оклада
+        emp, rows = PB.example(self.app.ctx(7), "rep", PB.items_of(self.app.ctx(7), "rep"))
+        self.assertTrue(rows and not any(r[0].startswith("⚠️") for r in rows))
+        c = O.ensure(self.app.ctx(7), "7")
+        O.snapshot(self.app.ctx(7), c)
+        c["f"]["company"] = "Пустая"
+        parse(*(lambda r: (r["id"], r))(O.build_raw(c)))                        # и такая схема — рабочая настройка клиента
 
     def test_rep_cannot_open(self):
         app = App("_template", today=TODAY, admins=[1], data_dir=self.tmp)
