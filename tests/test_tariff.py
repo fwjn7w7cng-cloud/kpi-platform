@@ -26,14 +26,14 @@ class Quote(unittest.TestCase):
         self.assertEqual(q["people"], 8)
 
     def test_presets_and_max(self):
-        want = {"start": 9800, "business": 19500, "control": 31000, "company": 45000, "max": 101300}
+        want = {"start": 9800, "business": 19500, "control": 31000, "company": 45000, "max": 106300}
         for code, monthly in want.items():
             q = P.quote(E.preset_functions(code), E.PRESETS[code]["people"], P.DEFAULT)
             self.assertEqual(q["monthly"], monthly, code)
         q = P.quote(E.preset_functions("max"), E.PRESETS["max"]["people"], P.DEFAULT, year=True)
         self.assertTrue(q["all_depts"])
-        self.assertEqual(q["monthly"], P.rnd((34000 + 127 * 300) * 0.85 + 40000))   # дополнительное — без скидки
-        self.assertEqual(q["setup"], 152000)
+        self.assertEqual(q["monthly"], P.rnd((34000 + 127 * 300) * 0.85 + 45000))   # дополнительное — без скидки
+        self.assertEqual(q["setup"], 159000)
         self.assertEqual(q["monthly_year"], P.rnd(q["monthly"] * 0.9))
 
     def test_empty_old_packages_and_only_extra(self):

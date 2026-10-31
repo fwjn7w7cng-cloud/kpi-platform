@@ -59,6 +59,7 @@ MODULES = {
     "branding":     ("Свой бренд: логотип и название на значке, свой адрес", "max", None),
     "branches":     ("Несколько филиалов и юрлиц в одном приложении", "max", None),
     "custom":       ("Функции на заказ: до 3 в месяц", "max", None),
+    "processes":    ("Процессы отдела: шаги, ответственные, сроки, задания отделу", "max", None),
 }
 
 # Готовые наборы. Каждый следующий включает предыдущий.
@@ -260,7 +261,7 @@ FUNCS = {
     "stock": ("stock", 3000), "warehouse": ("stock", 2000), "returns": ("stock", 1000),
     "logistics": ("logistics", 3000), "fuel": ("logistics", 1000),
     "hr": ("office", 2000),
-    "branding": ("max", 10000), "branches": ("max", 10000), "custom": ("max", 20000),
+    "branding": ("max", 10000), "branches": ("max", 10000), "custom": ("max", 20000), "processes": ("max", 5000),
 }
 FUNC_SHORT = {
     "payroll": "Зарплата: табель, оклад, ГСМ", "approval": "Утверждение зарплаты",
@@ -269,7 +270,7 @@ FUNC_SHORT = {
     "forecast": "Прогноз", "call_today": "Кому позвонить", "watchdog": "Ночной сторож", "formulas": "Свои формулы",
     "stock": "Закупки и заказы", "warehouse": "Склад: приёмка", "returns": "Возвраты", "logistics": "Рейсы водителей",
     "fuel": "Контроль топлива", "hr": "Кадры и приказы", "branding": "Свой бренд", "branches": "Филиалы",
-    "custom": "Функции на заказ",
+    "custom": "Функции на заказ", "processes": "Процессы отдела",
 }
 FREE = {"reminders", "audit", "staff"}          # бесплатно у всех (кабинеты — когда подключён отдел вне продаж)
 

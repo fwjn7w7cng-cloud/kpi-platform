@@ -26,7 +26,7 @@ log = logging.getLogger("kpi")
 
 MODULES = ["debts", "reminders", "achievements", "staff", "payroll", "tasks", "approval",
            "audit", "watchdog", "forecast", "call_today", "formulas", "feedback", "clients", "route", "plans",
-           "quiz", "stock", "logistics", "returns", "warehouse", "fuel", "hr", "ramadan", "maximum"]
+           "quiz", "stock", "logistics", "returns", "warehouse", "fuel", "hr", "ramadan", "maximum", "processes"]
 
 
 RESET = {"home", "mon"}          # главная и смена месяца: путь «Назад» начинается заново
