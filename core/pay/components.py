@@ -240,19 +240,25 @@ def _scope_metric(ctx, emp, c, code):
     return ctx.kpi.emp(emp["id"]).get(code)
 
 
+def own_salary(ctx, emp, c):
+    """(оклад, пояснение): own — у каждого свой (из карточки; не вписан — сумма должности), иначе — одна сумма на всех."""
+    amount = c.get("amount", ctx.default_salary)
+    if c.get("own", True) and emp.get("salary") is not None:
+        return emp["salary"], " (свой)" if "own" in c else ""
+    return amount, " (своего нет — как у должности)" if c.get("own") else ""
+
+
 def salary(ctx, emp, c):
-    base = emp.get("salary")
-    if base is None:
-        base = c.get("amount", ctx.default_salary)
+    base, mark = own_salary(ctx, emp, c)
     mode = c.get("mode", "days")
     if mode == "fixed":
-        return [("Оклад", base, "фиксированный, за месяц")]
+        return [("Оклад", base, "фиксированный, за месяц" + mark)]
     if mode == "shift":                              # за смену: выходы по табелю × ставка смены
         days = ctx.worked_days(emp)
         rate = c.get("amount", 0)
         return [("За смены", rate * days, f"{_d(days)} смен × {_n(rate)}")]
     if mode == "advance":                            # оклад как аванс: уже выплачен в месяце — вычитается из начисленного
-        return [("Аванс (выплачен в месяце)", -base, "вычитается из сдельной части")]
+        return [("Аванс (выплачен в месяце)", -base, "вычитается из сдельной части" + mark)]
     if mode == "calendar":
         import calendar as _cal
         cal = ctx.cal
@@ -263,10 +269,10 @@ def salary(ctx, emp, c):
         n = sum(1 for d in range(1, last.day + 1) if hired <= f"{cal.start:%Y-%m}-{d:02d}" <= fired)
         n -= ctx.missed_days(emp)
         n = max(n, 0)
-        return [("Оклад", base / total * n, f"{_n(base)} ÷ {total} календ. дн. × {n} дн.")]
+        return [("Оклад", base / total * n, f"{_n(base)} ÷ {total} календ. дн. × {n} дн." + mark)]
     days = ctx.worked_days(emp)
     amount = base / ctx.salary_days * days
-    return [("Оклад", amount, f"{_n(base)} ÷ {ctx.salary_days} × {_d(days)} дн.")]
+    return [("Оклад", amount, f"{_n(base)} ÷ {ctx.salary_days} × {_d(days)} дн." + mark)]
 
 
 PCT_TITLE = {"sales": "продаж", "focus": "фокусных", "collect": "собранных денег"}
@@ -930,6 +936,8 @@ def limits(ctx, emp, c, rows):
         out.append(("Потолок премии", cap - var, f"сверх {_n(cap)} не платится"))
     total = sum(r[1] for r in rows) + sum(r[1] for r in out)
     mn = c.get("min_total")
+    if mn and c.get("own") and emp.get("salary") is not None:      # «не меньше оклада» — своего оклада человека
+        mn = emp["salary"]
     if mn and total < mn:
         out.append((c.get("name") or "Доплата до гарантированного минимума", mn - total, f"минимум {_n(mn)}"))
     return out

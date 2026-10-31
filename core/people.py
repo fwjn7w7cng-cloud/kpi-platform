@@ -20,7 +20,7 @@ from datetime import date, timedelta
 
 from core.access import roles as R
 from core.ui import pick
-from core.ui.kit import Button, Reply, ok_row, rows
+from core.ui.kit import Button, Reply, money, ok_row, rows
 from core.ui.registry import menu, screen, text_input
 from core.ui.views import Row, View
 from core.ui.web import BRAND
@@ -209,6 +209,9 @@ def card(ctx, emp_id):
     kb = []
     if e["active"] and not ctx.demo:
         kb.append([Button("🔗 Пригласить" if not e["tg_id"] else "🔗 Новая ссылка (другой телефон)", f"pai:{e['id']}")])
+    kb.append([Button(f"💰 Оклад: {money(e['salary']) if e.get('salary') is not None else 'как у должности'} — изменить",
+                      f"pas:{e['id']}", info="Свой оклад человека. Работает, если в конструкторе зарплаты у оклада стоит "
+                                             "«у каждого свой». 0 — вернуть «как у должности».")])
     row = [Button("✏️ Должность", f"pap:{e['id']}")]
     if d and d.kind == "sales" and ctx.cfg.teams_of(d.id):
         row.append(Button("👥 Команда", f"pat:{e['id']}"))
@@ -270,6 +273,31 @@ def fire_screen(ctx, emp_id, what=None):
     ctx.db.audit(_who(ctx), "fire", e["fio"])
     return [Reply(text=f"🗑 {e['fio']} уволен {ctx.today:%d.%m.%Y}. Вернуть можно в карточке («👀 С уволенными»)."),
             people_access(ctx, e["dept"])]
+
+
+@screen("pas")
+def salary_screen(ctx, emp_id):
+    e = _emp(ctx, emp_id)
+    if not e or not manages(ctx, e):
+        return people_access(ctx)
+    cur = money(e["salary"]) if e.get("salary") is not None else "как у должности"
+    return ctx.ask("pa_salary", f"Оклад {e['fio']} — сейчас {cur}. Напишите сумму, например 35 000. 0 — как у должности.",
+                   {"id": e["id"]}, buttons=[[Button("✖️ Отмена", f"pae:{e['id']}")]])
+
+
+@text_input("pa_salary")
+def on_salary(ctx, text, data):
+    e = _emp(ctx, str(data["id"]))
+    if not e or not manages(ctx, e):
+        return people_access(ctx)
+    t = (text or "").replace(" ", "").replace("\xa0", "").replace("₽", "")
+    if not t.isdigit() or int(t) > 10_000_000:
+        return ctx.ask("pa_salary", "Нужно число, например 35 000. 0 — как у должности.", data,
+                       buttons=[[Button("✖️ Отмена", f"pae:{e['id']}")]])
+    v = int(t) or None
+    ctx.db.c.execute("UPDATE employees SET salary = ? WHERE id = ?", (v, e["id"]))
+    ctx.db.audit(_who(ctx), "salary", f"{e['fio']}: {money(v) if v else 'как у должности'}")
+    return card(ctx, e["id"])
 
 
 @screen("pap")
