@@ -69,6 +69,7 @@ class App:
         importlib.import_module("core.ui.screens")
         importlib.import_module("core.ui.tariff")
         importlib.import_module("core.billing")
+        importlib.import_module("core.control")
         importlib.import_module("core.onboard")
         importlib.import_module("core.people")
         importlib.import_module("core.reports")
@@ -214,6 +215,11 @@ class App:
         if g is not None:
             return g
         hello = []
+        from core import billing
+        if not arg:
+            g = billing.gate(ctx, "press", "home")
+            if g is not None:
+                return [g]
         if arg and not self.demo:                    # настоящий клиент: ссылка-приглашение сотруднику (core/people.py)
             from core import people
             emp = people.redeem(ctx, arg)
@@ -234,6 +240,10 @@ class App:
         g = demo.gate(ctx, press="up")
         if g is not None:
             return g
+        from core import billing
+        g = billing.gate(ctx, "upload", "up")
+        if g is not None:
+            return [g]
         self.last_sid = "up"
         return self._with_keyboard(user_id, self._finish(ctx, reports.receive(ctx, name, data), "up"))
 
@@ -252,6 +262,10 @@ class App:
             trail = trail[:n]
             data = trail[-1] if trail else "home"
             sid, *args = data.split(":")
+        from core import billing
+        g = billing.gate(ctx, "press", sid)
+        if g is not None:
+            return [g]
         if sid in RESET:
             trail = []
         rev = ctx.db.rev()
@@ -309,6 +323,10 @@ class App:
         to = bottom_target(ctx, text) if not photo else None
         if to:                                       # кнопка нижнего меню — даже если бот ждал ответ текстом
             return self.press(user_id, to, top=True)
+        from core import billing
+        g = billing.gate(ctx, "text")
+        if g is not None:
+            return [g]
         wait = ctx.session.pop("await", None)
         ctx.save()
         if not wait:

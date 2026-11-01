@@ -79,6 +79,8 @@ class BillingClient(unittest.TestCase):
         self.app.press(1, "blm:d")
         self.app.text(1, "01.10.2026 05.10.2026")
         app = self.at(date(2026, 11, 16))
+        app.press(1, "blm:p")                                        # октябрь и ноябрь оплачены
+        app.press(1, "blm:p")
         app.press(700, "blc")
         r = app.press(700, "blc:t:stock")[0]
         t = texts(r)
@@ -107,6 +109,8 @@ class BillingClient(unittest.TestCase):
     def test_people_limit(self):
         self.app.press(1, "blm:d")
         self.app.text(1, "01.10.2026 05.10.2026")
+        self.app.press(1, "blm:p")
+        self.app.press(1, "blm:p")
         r = self.app.press(700, "pad")[0]
         self.assertIn("По тарифу 2 чел.", r.text)
 
@@ -116,6 +120,23 @@ class BillingClient(unittest.TestCase):
         self.assertTrue(self.app.press(700, "bld")[0].files)
         self.assertTrue(self.app.press(700, "blo")[0].files)
         self.assertEqual(self.app.press(700, "bly:1")[0].text, "Заявку одобряем мы — она уже у нас.")
+
+
+    def test_unpaid_steps_and_hold(self):
+        self.app.press(1, "blm:d")
+        self.app.text(1, "01.10.2026 05.10.2026")                    # первый счёт 19 октября, оплатить до 24 октября
+        app = self.at(date(2026, 10, 26))
+        self.assertIsNone(app.press(701, "home")[0].text or None)       # напоминание — всё работает
+        app = self.at(date(2026, 10, 30))
+        self.assertIn("только просмотр", app.text(701, "что-то")[0].text)
+        self.assertTrue(app.press(701, "home")[0].view)                 # смотреть можно
+        app = self.at(date(2026, 11, 4))
+        self.assertIn("недоступно", app.press(701, "home")[0].text)
+        self.assertTrue(app.press(700, "bl")[0].view)                   # директор видит «Правила и оплата»
+        self.assertTrue(app.press(1, "home")[0].view)                   # администратор платформы — всегда
+        app.press(1, "blm:h")                                           # ⏳ отсрочка на 7 дней
+        self.assertTrue(app.press(701, "home")[0].view)
+        self.assertIn("отсрочка до 11 ноября", texts(app.press(700, "bl")[0]))
 
 
 class BillingDemo(unittest.TestCase):

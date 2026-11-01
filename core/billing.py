@@ -27,7 +27,8 @@ from core.ui.views import Cell, Row, View, to_pdf
 KEY = "billing"
 SHORT_TAIL = 3               # до конца месяца осталось столько дней или меньше — кусок идёт в счёт 1-го числа
 PAY_DAYS = 5                 # на оплату первого счёта
-STEPS = (("remind", 1), ("view", 5), ("off", 10))     # после срока оплаты: напоминание, только смотреть, отключение
+STEPS = (("remind", 1), ("view", 5), ("off", 10))
+HOLD_DAYS = 7                # «⏳ Отсрочка» — на столько дней от сегодня     # после срока оплаты: напоминание, только смотреть, отключение
 
 menu("bl", "📄 Правила и оплата", {"owner", "admin"}, order=85)
 
@@ -226,6 +227,71 @@ def next_bill(ctx, st):
     return None
 
 
+def hold_till(st):
+    h = _d(st.get("hold"))
+    return h
+
+
+def level(ctx, st=None):
+    """Что сейчас с доступом (вариант А, Адам 01.11 — ограничения включаются сами, отсрочку даёт Адам):
+    ok — всё работает; remind — счёт просрочен, напоминание; view — только просмотр; off — доступ закрыт.
+    Пока действует отсрочка («⏳», st.hold) — ничего не ограничиваем."""
+    st = state(ctx) if st is None else st
+    due = due_bills(ctx, st)
+    if not due:
+        return "ok"
+    pay_by = due[0][1][1]
+    t = today_(ctx)
+    h = hold_till(st)
+    if t <= (max(pay_by, h) if h else pay_by):
+        return "ok"
+    view_from, off_from = limit_dates(ctx, st)
+    if t < view_from:
+        return "remind"
+    if t < off_from:
+        return "view"
+    return "off"
+
+
+def limit_dates(ctx, st):
+    """(с какого дня только просмотр, с какого — закрыто) по первому неоплаченному счёту, с учётом отсрочки; или None."""
+    due = due_bills(ctx, st)
+    if not due:
+        return None
+    pay_by = due[0][1][1]
+    h = hold_till(st)
+    if h and h > pay_by:                       # отсрочка: после неё — день на напоминание, потом просмотр, через 5 дней — закрыто
+        return h + timedelta(days=2), h + timedelta(days=2 + STEPS[2][1] - STEPS[1][1])
+    return pay_by + timedelta(days=STEPS[1][1]), pay_by + timedelta(days=STEPS[2][1])
+
+
+ALLOWED_WHEN_OFF = {"bl", "bld", "blo", "blt", "home"}
+
+
+def gate(ctx, what="press", sid=""):
+    """Ограничения у настоящего клиента (core/app зовёт перед каждым нажатием, текстом и файлом).
+    None — пустить; иначе — что ответить. Администратор платформы ходит всегда; в демо ограничений нет."""
+    if ctx.demo or is_admin(ctx):
+        return None
+    st = state(ctx)
+    if not st.get("launch"):
+        return None
+    lv = level(ctx, st)
+    boss = ctx.role in ("owner", "admin")
+    if lv == "off":
+        if boss and sid in ALLOWED_WHEN_OFF - {"home"}:
+            return None
+        txt = ("⛔ Доступ закрыт: счёт не оплачен. Все данные сохранены и хранятся 3 месяца — как только оплата придёт, "
+               "всё включится в тот же день.")
+        return Reply(text=txt if boss else "⛔ Приложение временно недоступно. Обратитесь к руководителю.",
+                     buttons=[[Button("📄 Правила и оплата", "bl")]] if boss else [])
+    if lv == "view" and what in ("text", "upload"):
+        return Reply(text="👀 Сейчас только просмотр: счёт не оплачен, поэтому изменения и новые отчёты 1С не принимаются. "
+                          "Оплата придёт — всё включится в тот же день.",
+                     buttons=[[Button("📄 Правила и оплата", "bl")]] if boss else [[Button("🏠 Главная", "home")]])
+    return None
+
+
 def status(ctx, st):
     """Главная строка: (текст, цвет)."""
     if not st.get("contract") and not st.get("launch"):
@@ -240,13 +306,17 @@ def status(ctx, st):
     if due:
         mo, (day, pay_by, amount, _) = due[0]
         late = (today_(ctx) - pay_by).days
+        h = hold_till(st)
+        if h and today_(ctx) <= h and late > 0:
+            g0 = got(st, mo)
+            left = f"осталось {money(amount - g0)}" if g0 else money(amount)
+            return f"⏳ Счёт за {mname(mo)} ({left}) — отсрочка до {dm(h)} включительно.", "warn"
         g = got(st, mo)
         what = (f"Счёт за {mname(mo)}: оплачено {money(g)} из {money(amount)}, осталось {money(amount - g)}" if g
                 else f"Счёт за {mname(mo)} · {money(amount)}")
         if late <= 0:
             return f"💳 {what} — оплатить до {dm(pay_by)}.", "warn"
-        view_from = pay_by + timedelta(days=STEPS[1][1])
-        off_from = pay_by + timedelta(days=STEPS[2][1])
+        view_from, off_from = limit_dates(ctx, st)
         if today_(ctx) < view_from:
             return f"⚠️ {what} не оплачен. С {dm(view_from)} — только просмотр.", "bad"
         if today_(ctx) < off_from:
@@ -606,22 +676,31 @@ def reject(ctx, rid):
                    {"id": rid}, buttons=[[Button("✖️ Отмена", "bl")]])
 
 
-@text_input("bl_no")
-def on_reject(ctx, text, data):
+def do_reject(ctx, rid, why):
+    """Отказ по заявке. → сообщения (клиенту) или None, если заявка уже решена."""
     st = state(ctx)
-    r = _find(st, data.get("id"))
-    if not r or r.get("status") != "wait" or not is_admin(ctx):
-        return billing_screen(ctx)
-    why = (text or "").strip()
-    r.update(status="no", why="" if why in ("-", "—") else why[:300], decided=f"{today_(ctx):%d.%m} {datetime.now():%H:%M}")
+    r = _find(st, rid)
+    if not r or r.get("status") != "wait":
+        return None
+    why = (why or "").strip()
+    r.update(status="no", why="" if why in ("-", "—") else why[:300], decided=f"{ctx.today:%d.%m} {datetime.now():%H:%M}")
     save(ctx, st)
     ctx.db.audit(ctx.author(), "billing_no", req_title(r))
     out = []
     if r.get("uid") and r["uid"] != ctx.user_id:
         out.append(Reply(text=f"❌ Заявка не одобрена: {req_title(r)}." + (f"\n{r['why']}" if r["why"] else ""),
                          to=r["uid"], buttons=[[Button("📄 Правила и оплата", "bl")]]))
-    out.append(billing_screen(ctx, "Отказ отправлен клиенту."))
     return out
+
+
+@text_input("bl_no")
+def on_reject(ctx, text, data):
+    if not is_admin(ctx):
+        return billing_screen(ctx)
+    out = do_reject(ctx, data.get("id"), text)
+    if out is None:
+        return billing_screen(ctx)
+    return out + [billing_screen(ctx, "Отказ отправлен клиенту.")]
 
 
 # ---------- для администратора платформы: даты и оплата ----------
@@ -669,6 +748,12 @@ def manage(ctx, act=None):
             mo = sorted(st["paid"])[-1]
             st["paid"] = sorted(st["paid"])[:-1]
         note = f"↩️ Последняя отметка за {mname(mo)} снята."
+    elif act == "h":
+        st["hold"] = (today_(ctx) + timedelta(days=HOLD_DAYS)).isoformat()
+        note = f"⏳ Отсрочка до {dm(_d(st['hold']))} включительно — до этого дня ничего не ограничиваем."
+    elif act == "x" and st.get("hold"):
+        st.pop("hold", None)
+        note = "Отсрочка снята."
     elif act == "d":
         return ctx.ask("bl_dates", "Даты через пробел: когда договорились и запуск, например «16.11.2026 20.11.2026». "
                                    "Запуска ещё не было — только первую дату.", buttons=[[Button("✖️ Отмена", "blm")]])
@@ -691,6 +776,7 @@ def manage(ctx, act=None):
     kb = [[Button("🤝 Договорились сегодня", "blm:c"), Button("🚀 Запуск сегодня", "blm:l")],
           [Button(f"✅ Оплачено всё за {mname(pay_mo)}", "blm:p"), Button("✏️ Оплачено частично", "blm:s")] if pay_mo else [],
           [Button("↩️ Снять последнюю отметку", "blm:u")] if st.get("marks") or st.get("paid") else [],
+          [Button(f"⏳ Отсрочка на {HOLD_DAYS} дней", "blm:h")] + ([Button("✖️ Снять отсрочку", "blm:x")] if st.get("hold") else []),
           [Button("✏️ Вписать даты", "blm:d")]]
     return Reply(view=v, buttons=[r for r in kb if r])
 
@@ -702,19 +788,17 @@ def pay_month(ctx, st):
     return due[0][0] if due else (nb[0] if nb else None)
 
 
-@text_input("bl_sum")
-def on_sum(ctx, text, data):
-    if not is_admin(ctx):
-        return billing_screen(ctx)
+def parse_sum(text):
     t = (text or "").replace(" ", "").replace("\u00a0", "").replace("₽", "").replace(",", ".")
     try:
-        x = int(round(float(t)))
+        return int(round(float(t)))
     except ValueError:
-        x = 0
-    if x <= 0:
-        return ctx.ask("bl_sum", "Нужна сумма числом, например 22 500.", data, buttons=[[Button("✖️ Отмена", "blm")]])
+        return 0
+
+
+def apply_sum(ctx, mo, x):
+    """Отметить, что за месяц пришло x (частичная оплата; набралась вся сумма — месяц оплачен)."""
     st = state(ctx)
-    mo = data["mo"]
     st.setdefault("got", {})[mo] = got(st, mo) + x
     st.setdefault("marks", []).append({"mo": mo, "sum": x})
     b = bill(ctx, st, mo)
@@ -722,13 +806,21 @@ def on_sum(ctx, text, data):
         st["paid"] = sorted(set(st.get("paid") or []) | {mo})
     save(ctx, st)
     ctx.db.audit(ctx.author(), "billing", f"оплата за {mname(mo)}: {x}")
+
+
+@text_input("bl_sum")
+def on_sum(ctx, text, data):
+    if not is_admin(ctx):
+        return billing_screen(ctx)
+    x = parse_sum(text)
+    if x <= 0:
+        return ctx.ask("bl_sum", "Нужна сумма числом, например 22 500.", data, buttons=[[Button("✖️ Отмена", "blm")]])
+    apply_sum(ctx, data["mo"], x)
     return manage(ctx)
 
 
-@text_input("bl_dates")
-def on_dates(ctx, text, data):
-    if not is_admin(ctx):
-        return billing_screen(ctx)
+def apply_dates(ctx, text):
+    """«16.11.2026 20.11.2026» → когда договорились и запуск. → True, если понял."""
     ds = []
     for w in (text or "").replace(",", " ").split():
         try:
@@ -736,8 +828,7 @@ def on_dates(ctx, text, data):
         except ValueError:
             continue
     if not ds or len(ds) > 2 or (len(ds) == 2 and ds[1] < ds[0]):
-        return ctx.ask("bl_dates", "Не понял. Пример: «16.11.2026 20.11.2026» — когда договорились, потом запуск.",
-                       buttons=[[Button("✖️ Отмена", "blm")]])
+        return False
     st = state(ctx)
     st["contract"] = ds[0].isoformat()
     st["setup"] = setup_sum(ctx, st)
@@ -749,6 +840,16 @@ def on_dates(ctx, text, data):
         st.pop("launch", None)
     save(ctx, st)
     ctx.db.audit(ctx.author(), "billing", "даты: " + text.strip()[:40])
+    return True
+
+
+@text_input("bl_dates")
+def on_dates(ctx, text, data):
+    if not is_admin(ctx):
+        return billing_screen(ctx)
+    if not apply_dates(ctx, text):
+        return ctx.ask("bl_dates", "Не понял. Пример: «16.11.2026 20.11.2026» — когда договорились, потом запуск.",
+                       buttons=[[Button("✖️ Отмена", "blm")]])
     return manage(ctx)
 
 

@@ -59,12 +59,22 @@ class Worker:
                 out += schedule.run(self.app, j)
             except Exception:                         # noqa: BLE001
                 log.exception("рассылка %s", j.name)
-        if self.srcs and (self.last_pull is None or (now - self.last_pull).total_seconds() >= PULL_EVERY * 60 - 5):
+        if self.srcs and self._paid() and (self.last_pull is None or (now - self.last_pull).total_seconds() >= PULL_EVERY * 60 - 5):
             self.last_pull = now
             out += self.pull()
         if out:
             self.deliver(out)
         return out
+
+    def _paid(self):
+        """Счёт не оплачен и включился «только просмотр» или закрыто — отчёты 1С не забираем (core/billing.level)."""
+        try:
+            from core import billing
+            ctx = self.app.ctx(0)
+            return billing.level(ctx) not in ("view", "off")
+        except Exception:                             # noqa: BLE001 — оплата не должна ломать забор отчётов
+            log.exception("уровень доступа")
+            return True
 
     # ---------- отчёты ----------
 

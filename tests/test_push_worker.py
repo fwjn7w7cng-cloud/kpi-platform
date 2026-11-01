@@ -184,7 +184,7 @@ class Folder(unittest.TestCase):
     def test_demo_has_no_background(self):
         demo = App("demo", today=TODAY, admins=[ADMIN], data_dir=self.tmp)
         from core.transport.web import WebApi
-        self.assertIsNone(WebApi(demo).background())
+        self.assertEqual(type(WebApi(demo).background()).__name__, "Morning")   # в демо — только утренняя сводка пульта
         self.assertEqual(Worker(demo, self.out.extend, srcs=[]).tick(datetime(2026, 11, 2, 8, 0)), [])
 
     def test_sources_from_config(self):

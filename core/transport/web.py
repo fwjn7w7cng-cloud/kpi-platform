@@ -201,9 +201,10 @@ class WebApi:
     # ---------- фоновая работа: рассылки и отчёты (core/jobs/worker.py) ----------
 
     def background(self):
-        """Работник: рассылки по расписанию и забор отчётов. В демо — None."""
+        """Работник: рассылки по расписанию и забор отчётов. В демо — только утренняя сводка «💰 Деньги и клиенты» админу."""
         if self.app.demo:
-            return None
+            from core.control import Morning
+            return Morning(self.app, lambda out: self._deliver(0, out))
         from core.jobs.worker import Worker
         return Worker(self.app, lambda out: self._deliver(0, out))
 
