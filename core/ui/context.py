@@ -33,6 +33,10 @@ class Ctx:
                 cfg = cfg.with_packages(self.session["packages"])
             elif self.session.get("edition") in E.PRESETS:
                 cfg = cfg.with_edition(self.session["edition"])
+        else:                                         # одобренные Адамом добавления / удаления функций (core/billing)
+            b = self.office.get("billing") or {}
+            if isinstance(b.get("functions"), list):
+                cfg = cfg.with_functions(b["functions"])
         self.cfg = cfg
         self.month = self.session.get("month") or month_of(self.today)
         if self.month > month_of(self.today):

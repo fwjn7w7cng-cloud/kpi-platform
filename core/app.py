@@ -68,6 +68,7 @@ class App:
         self.pending = []
         importlib.import_module("core.ui.screens")
         importlib.import_module("core.ui.tariff")
+        importlib.import_module("core.billing")
         importlib.import_module("core.onboard")
         importlib.import_module("core.people")
         importlib.import_module("core.reports")

@@ -2,7 +2,8 @@
 
 Конструктор (демо): зритель включает пакеты по отделам, задаёт, сколько у него людей, и сразу видит две суммы —
 подключение (один раз) и дальше в месяц; «📄 Коммерческое предложение» — PDF с расчётом; «📨 Хочу так» — заявка админу.
-Тариф (клиент): что подключено, сколько людей, сколько в месяц; «➕ Подключить…» — заявка администратору.
+Тариф (клиент): что подключено, сколько людей, сколько в месяц; «➕ Добавить или ➖ убрать» — окно с ценой и заявка
+на одобрение (core/billing.py).
 Цены правит только администратор платформы (ctx.user_id в app.admins) — в базе офиса, поверх стандартных.
 """
 from datetime import datetime
@@ -86,13 +87,8 @@ def tariff(ctx):
         return Reply(text="Тариф видит директор.")
     q = quote_of(ctx)
     v = quote_view(ctx, q, "💳 Тариф", f"{ctx.cfg.name} · набор «{ctx.cfg.set_title}» · {q['people']} чел. в приложении")
-    kb = []
-    pr = P.prices(ctx.office)
-    have = funcs_of(ctx.cfg)
-    for f in [f for f in E.FUNCS if f not in have][:12]:
-        icon = E.FUNC_GROUPS[E.FUNCS[f][0]][0]
-        kb.append([Button(f"➕ {icon} {E.FUNC_SHORT[f]} · {P.fmt(pr['f_' + f])}", f"tfr:{f}")])
-    kb.append([Button("📄 Расчёт PDF", "tfp")])
+    kb = [[Button("➕ Добавить или ➖ убрать функции и людей", "blc")],
+          [Button("📄 Договор и оплата", "bl"), Button("📄 Расчёт PDF", "tfp")]]
     if is_admin(ctx):
         kb.append([Button("💰 Цены", "pr")])
     return Reply(view=v, buttons=kb)
@@ -414,23 +410,12 @@ def request(ctx, client=None):
 
 @screen("tfr")
 def tariff_request(ctx, code, level=None):
+    """Старый адрес «➕ Подключить…»: теперь — окно «Добавить или убрать» с уже отмеченной функцией (core/billing)."""
     if ctx.role not in ("owner", "admin") or code not in E.FUNCS:
         return tariff(ctx)
-    have = funcs_of(ctx.cfg)
-    q = quote_of(ctx, have | {code})
-    q0 = quote_of(ctx, have)
-    what = E.MODULES[code][0]
-    text = (f"💳 {ctx.cfg.name}: {ctx.name()} просит подключить «{what}».\n"
-            f"Было {money(q0['monthly'])} в месяц → станет {money(q['monthly'])}.")
-    reqs = ctx.office.get(REQ_KEY) or []
-    reqs.append({"uid": ctx.user_id, "who": ctx.name(), "set": what, "monthly": q["monthly"], "setup": 0,
-                 "ts": datetime.now().strftime("%d.%m %H:%M"), "show": False})
-    ctx.office.put(REQ_KEY, reqs[-100:])
-    ctx.db.audit(ctx.author(), "tariff_req", what)
-    out = [Reply(text=text, to=a) for a in ctx.app.admins if a != ctx.user_id]
-    out.append(Reply(text=f"📨 Заявка отправлена: «{what}». Станет {money(q['monthly'])} в месяц. Администратор включит функцию "
-                          "и подтвердит.", buttons=[[Button("💳 Тариф", "tf")]]))
-    return out
+    from core import billing
+    billing.change_window(ctx)
+    return billing.change_window(ctx, "t", code)
 
 
 @screen("tfp")

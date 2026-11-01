@@ -370,6 +370,10 @@ def add_start(ctx, dept_id=None, act=None, value=None):
     """➕ Добавить: отдел (окно, если отделов несколько) → фамилия и имя → должность и команда (окно) → готово."""
     if not manages(ctx):
         return people_access(ctx)
+    from core.billing import people_limit
+    full = people_limit(ctx)
+    if full:
+        return full
     depts = _depts(ctx)
     ids = {d.id for d in depts}
     if dept_id in ids and act is None:

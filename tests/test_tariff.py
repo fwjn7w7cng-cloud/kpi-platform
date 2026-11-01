@@ -206,11 +206,12 @@ class ClientTariff(unittest.TestCase):
         self.assertEqual(r.view.title, "💳 Тариф")
         tiles = dict((a, b) for a, b, _ in next(b for k, b in r.view.blocks if k == "tiles"))
         self.assertEqual(tiles["Дальше, в месяц"], "15 600 ₽")          # функции «Бизнеса» 15 000 + 2 торговых × 300
-        self.assertIn("tfr:stock", [b.to for b in r.all_buttons()])
-        out = self.app.press(700, "tfr:stock")
+        self.assertIn("blc", [b.to for b in r.all_buttons()])
+        w = self.app.press(700, "tfr:stock")[0]                         # старый адрес — окно с отмеченными «Закупками»
+        self.assertIn("blc:ok", [b.to for b in w.all_buttons()])
+        out = self.app.press(700, "blc:ok")
         self.assertTrue(any(x.to == 1 and "Закупки" in x.text for x in out))
-        self.assertIn("Станет", out[-1].text)
-        self.assertTrue(self.app.office().get("tariff_req"))
+        self.assertTrue(self.app.office().get("billing")["req"])
 
     def test_staff_of_unbought_department_is_outside(self):
         home = self.app.start(702)[0]
