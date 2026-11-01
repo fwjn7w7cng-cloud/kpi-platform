@@ -1,0 +1,6 @@
+# /etc/systemd/system/alapa-backup.service — копия сервера (запускает alapa-backup.timer каждую ночь в 03:30).
+[Unit]
+Description=Копия баз и настроек сервера
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/alapa-backup.sh

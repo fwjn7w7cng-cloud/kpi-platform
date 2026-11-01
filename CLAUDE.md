@@ -35,6 +35,19 @@
 7. **Шаги на сервере — по одному**, команды — в отдельном блоке, каждый раз целиком.
 8. **Сервер (с 01.11):** новый VPS ExtraVM Даллас `103.214.71.188` (hostname Alapa.pro, 16 ГБ, 6 ядер, часы Europe/Moscow); DNS alapa.pro и
    kpibotsmith.ru в REG.RU: `@`, `*` (и `www`) → 103.214.71.188 — любой поддомен клиента сразу ведёт на сервер. Старый 216.73.157.121 — до 13.11.
+   **Защита (Адам 01.11, «обезопась максимально»):** код на сервере лежит в **`/srv/alapa`** (символическая ссылка
+   `/root/kpi-platform → /srv/alapa` оставлена для привычки), службы `kpi@` / `kpi-web@` работают **от пользователя `alapa`** в
+   песочнице systemd (`deploy/*.service`: ProtectSystem=strict, пишет только в `data/` и `clients/`) — после каждого `git` на
+   сервере **`chown -R alapa:alapa /srv/alapa`**. Обновление: `cd /srv/alapa && git fetch origin && git reset --hard origin/main &&
+   chown -R alapa:alapa /srv/alapa && systemctl restart kpi@demo kpi-web@demo && cp -r web/site/. /var/www/kpi/site/`.
+   В приложении (`core/transport/web.py`): перебор ключей/приглашений/пароля папки 1С — 10 отказов с адреса за 10 минут → 429 и
+   строка `auth fail … from <ip>` в журнале → fail2ban (`deploy/fail2ban/`, jail `alapa-web`; **новый клиент — добавить его
+   `kpi-web@<код>.service` в journalmatch**) банит на файрволе; 300 запросов в минуту с адреса на `/api`; вложения экрана
+   отдаются только тому, кому показаны; заголовки CSP / X-Frame-Options / nosniff / Referrer-Policy; адрес уведомлений — только
+   внешний https (`push.public_endpoint`). Caddy — заголовки `import secure` (`deploy/caddy-secure.txt`). Копии: каждую ночь 03:30
+   `alapa-backup.timer` → `/var/backups/alapa/<дата>.tar.gz` (14 дней; базы всех ботов, секреты, настройки) — `deploy/backup/`;
+   копия вне сервера — отдельно (Google Диск, когда Адам даст папку). Обновления безопасности ставятся сами, перезагрузка при
+   необходимости — 04:40. Тест: `tests/test_security.py`.
    **Было:** 29.10 Адам решил поставить демо-бота до расширения сервера, с потолком памяти (`deploy/kpi@.service`,
    MemoryMax 200M). Соседей (quizbot, chogbot, fitness-bot) не трогать. Код на сервере — только из `main`.
 9. **Режим Альфреда (Адам 01.11): авто — без подтверждения на каждый шаг.** Причина: Адам не программист и не может оценить
@@ -142,8 +155,8 @@ tests/                  тесты (unittest)
    занят — не создаёт. Экран «🚀 Что дальше» (`cdw`) — шаги и фраза Альфреду; «🔑 Ссылка администратора» (`cdk`) — вход `…/?admin=<ключ>`
    (ключ хранится и в карточке `client_cards[..].client`). Запасной путь — таблица: `python3 tools/anketa.py blank шаблон.xlsx` /
    `check` / `apply <файл|ссылка>` (`core/anketa.py`), «📥 Анкета Excel» в карточке.
-2. **Альфред** (одна просьба Адама): `systemctl enable --now kpi-web@<код>`, адрес в Caddy (`<код>.alapa.pro → reverse_proxy
-   127.0.0.1:<WEB_PORT из .env>`), проверить, что открывается, **закоммитить `clients/<код>/` в `main`** (`.env` в git не попадает —
+2. **Альфред** (одна просьба Адама): `chown -R alapa:alapa /srv/alapa`, `systemctl enable --now kpi-web@<код>`, адрес в Caddy (`<код>.alapa.pro → reverse_proxy
+   127.0.0.1:<WEB_PORT из .env>` + `import secure` + `request_body { max_size 24MB }`), службу в journalmatch jail `alapa-web`, проверить, что открывается, **закоммитить `clients/<код>/` в `main`** (`.env` в git не попадает —
    `*.env` в .gitignore) и записать в журнал.
 3. Переводчик `parser.py` — по 2–3 файлам его 1С; проверка: `python3 tools/check_client.py <код> файлы…`.
 4. Своё, чего нет в ядре, — только в `rules.py` через крючки (`core/hooks.py`), ядро не трогаем.

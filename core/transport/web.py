@@ -12,6 +12,7 @@ import json
 import logging
 import secrets
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -27,13 +28,65 @@ INBOX_MAX = 50
 FILES_MAX = 50
 HOME_SIDS = ("home", "mon")
 TOOLS = ("adm", "ptn", "ptm")     # «для нас» — отдельная кнопка в шапке: пульт админа, кабинет партнёра (не путать с показом)
+# Защита приложения, которое смотрит в интернет (Адам 01.11, «обезопась максимально»):
+#   заголовки браузеру — не встраивать в чужие сайты, не угадывать тип файла, не отдавать адрес с ключом другим сайтам,
+#   скрипты и стили только свои (и шрифты Google);
+#   перебор ключей и паролей — счётчик отказов по адресу: AUTH_FAILS отказов за AUTH_WINDOW секунд → 429 на входе (а fail2ban
+#   по строке «auth fail … from <ip>» в журнале банит адрес на файрволе); на всё /api — REQ_LIMIT запросов в минуту с адреса.
+SEC_HEADERS = {"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "same-origin",
+               "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()"}
+CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+       "font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-src blob:; worker-src 'self'; "
+       "manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
+AUTH_FAILS, AUTH_WINDOW = 10, 600
+REQ_LIMIT, REQ_WINDOW = 300, 60
+TOO_MANY = "Слишком много попыток с этого адреса. Подождите 10 минут."
 FILE_TYPES = {"xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
               "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
               "pdf": "application/pdf", "png": "image/png", "csv": "text/csv; charset=utf-8"}
 
 
+class Throttle:
+    """Счётчик событий по ключу (адресу) за окно времени: hit() → True, если лимит уже исчерпан."""
+
+    def __init__(self, limit, window):
+        self.limit, self.window, self.seen = limit, window, {}
+
+    def _prune(self, now):
+        if len(self.seen) > 10000:                      # память не растёт от случайных адресов
+            self.seen = {k: v for k, v in self.seen.items() if v and v[-1] > now - self.window}
+
+    def count(self, key, now=None):
+        now = now or time.time()
+        hits = [t for t in self.seen.get(key, ()) if t > now - self.window]
+        self.seen[key] = hits
+        return len(hits)
+
+    def hit(self, key, now=None):
+        now = now or time.time()
+        self._prune(now)
+        hits = [t for t in self.seen.get(key, ()) if t > now - self.window] + [now]
+        self.seen[key] = hits
+        return len(hits) > self.limit
+
+    def blocked(self, key, now=None):
+        return self.count(key, now) >= self.limit
+
+
+class _FileBox:
+    """Вложения экрана: кладём с номером владельца — чужой файл по ссылке не отдадим (web.reply_json пишет files[id] = (имя, байты))."""
+
+    def __init__(self, store, uid):
+        self.store, self.uid = store, uid
+
+    def __setitem__(self, fid, value):
+        self.store[fid] = (value[0], value[1], self.uid)
+
+
 class WebApi:
     def __init__(self, app, admin_key="", base_url="", name=None, short=BRAND):
+        self.auth_guard = Throttle(AUTH_FAILS, AUTH_WINDOW)      # отказы на входе: ключ админа, приглашение, папка 1С, ключ 1С
+        self.req_guard = Throttle(REQ_LIMIT, REQ_WINDOW)         # всего запросов к /api с адреса
         self.app, self.admin_key = app, admin_key
         self.lock = threading.Lock()
         self.files = {}
@@ -72,6 +125,14 @@ class WebApi:
         self._office().put("web_admins", sorted(admins))
         self.app.admins.add(uid)
 
+    def _accepted(self, uid):
+        """Пустили ли этого человека: в демо — по приглашению, у настоящего клиента — он в списке сотрудников."""
+        from core.demo import has_access
+        if uid in self.app.admins:
+            return True
+        ctx = self.app.ctx(uid)
+        return bool(has_access(self.app, self._office(), uid, ctx.today) and (self.app.demo or ctx.me))
+
     # ---------- лента сообщений для тех, кого сейчас нет ----------
 
     def _deliver(self, uid, out):
@@ -83,7 +144,7 @@ class WebApi:
                 others.setdefault(int(r.to), []).append(r)
         for to, rs in others.items():
             key = f"inbox:{to}"
-            items = [reply_json(r, self._files()) for r in rs]
+            items = [reply_json(r, self._files(to)) for r in rs]
             box = (self._office().get(key) or []) + items
             self._office().put(key, box[-INBOX_MAX:])
             if push.has(self._office(), to):          # 🔔 на телефон: первое сообщение, остальные — «и ещё N»
@@ -93,10 +154,20 @@ class WebApi:
                 push.send_async(self._office, to, title, body)
         return mine
 
-    def _files(self):
+    def _files(self, uid):
         while len(self.files) > FILES_MAX:
             self.files.pop(next(iter(self.files)))
-        return self.files
+        return _FileBox(self.files, uid)
+
+    def _file_of(self, fid, uid):
+        """Вложение по ссылке — только его владельцу."""
+        f = self.files.get(fid)
+        return f if f and uid and f[2] == uid else None
+
+    def _fail(self, what, ip):
+        """Отказ на входе: в журнал (fail2ban читает «auth fail … from <ip>») и в счётчик адреса."""
+        log.warning("auth fail %s from %s", what, ip or "-")
+        self.auth_guard.hit(ip or "-")
 
     def _inbox(self, uid):
         key = f"inbox:{uid}"
@@ -116,7 +187,7 @@ class WebApi:
         for row in (screens.bottom_rows(ctx) if allowed else []):   # без доступа к демо — ни вкладок, ни меню
             for label, to in row:
                 (tools if to in TOOLS else extra if to.startswith("sw:") else tabs).append([label, to])
-        msgs = [reply_json(r, self._files()) for r in mine]
+        msgs = [reply_json(r, self._files(uid)) for r in mine]
         first = msgs[0].get("view") if msgs else None
         home = sid in HOME_SIDS or (sid == "sw" and first and first.get("title") == ctx.cfg.name)
         who = ctx.me["fio"] if ctx.me and allowed else ""
@@ -144,12 +215,15 @@ class WebApi:
         with self.lock:
             return worker.tick(now)
 
-    def handle(self, method, path, query, body, token):
-        """→ (код, {заголовки}, байты). Без сети — так провод и проверяется в тестах."""
+    def handle(self, method, path, query, body, token, ip=""):
+        """→ (код, {заголовки}, байты). Без сети — так провод и проверяется в тестах. ip — адрес телефона (для защиты от перебора)."""
         u = path.split("?")[0]
+        if u.startswith("/api/") and self.req_guard.hit(ip or "-"):
+            return 429, {"Content-Type": "text/plain; charset=utf-8", "Retry-After": "60"}, TOO_MANY.encode()
         if method == "GET":
             if u in ("/", "/index.html"):
-                return 200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache"}, self.page.encode()
+                return 200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache",
+                             "Content-Security-Policy": CSP}, self.page.encode()
             name = u.lstrip("/")
             if name in self.static:
                 data, ctype = self.static[name]
@@ -157,7 +231,8 @@ class WebApi:
             if u.startswith("/api/file/") and u.count("/") == 4:   # /api/file/<id>/pages и /api/file/<id>/p<N> — страницы PDF картинками
                 from core.ui.views import pdf_pages
                 fid, part = u.split("/")[3], u.split("/")[4]
-                f = self.files.get(fid)
+                with self.lock:
+                    f = self._file_of(fid, self._device(token, create=False)[1])
                 pages = pdf_pages(f[1]) if f and f[0].lower().endswith(".pdf") else []
                 if part == "pages":
                     return self._json({"n": len(pages)})
@@ -165,7 +240,8 @@ class WebApi:
                     return 200, {"Content-Type": "image/jpeg", "Cache-Control": "max-age=3600"}, pages[int(part[1:])]
                 return 404, {"Content-Type": "text/plain; charset=utf-8"}, "Файл устарел — откройте экран заново".encode()
             if u.startswith("/api/file/"):
-                f = self.files.get(u.rsplit("/", 1)[-1])
+                with self.lock:
+                    f = self._file_of(u.rsplit("/", 1)[-1], self._device(token, create=False)[1])
                 if not f:
                     return 404, {"Content-Type": "text/plain; charset=utf-8"}, "Файл устарел — откройте экран заново".encode()
                 from urllib.parse import quote
@@ -186,12 +262,22 @@ class WebApi:
             return 405, {"Content-Type": "text/plain; charset=utf-8"}, b"method"
         act = u[len("/api/"):]
         with self.lock:
+            login = act == "start" and bool(body.get("arg") or body.get("admin"))    # вход по ссылке: приглашение или ключ админа
+            if login and self.auth_guard.blocked(ip or "-"):
+                return 429, {"Content-Type": "text/plain; charset=utf-8", "Retry-After": "600"}, TOO_MANY.encode()
             tok, uid, new = self._device(token, create=True)
             try:
                 if act == "start":
-                    if self.admin_key and body.get("admin") and secrets.compare_digest(str(body["admin"]).encode(), self.admin_key.encode()):
-                        self._make_admin(uid)
-                    out, sid = self.app.start(uid, "", str(body.get("arg") or "")[:40]), "home"
+                    arg = str(body.get("arg") or "")[:40]
+                    if body.get("admin"):
+                        if self.admin_key and secrets.compare_digest(str(body["admin"]).encode(), self.admin_key.encode()):
+                            self._make_admin(uid)
+                            log.warning("веб: телефон %s стал администратором (ip %s)", uid, ip or "-")
+                        else:
+                            self._fail("admin", ip)
+                    out, sid = self.app.start(uid, "", arg), "home"
+                    if arg and not self._accepted(uid):
+                        self._fail("invite", ip)
                 elif act == "press":
                     to = str(body.get("to") or "home")[:64]
                     out = self.app.press(uid, to, top=bool(body.get("top")))
@@ -200,7 +286,7 @@ class WebApi:
                     if body.get("off"):
                         push.unsubscribe(self._office(), uid, body.get("endpoint"))
                         return self._json({"ok": True, "on": False})
-                    ok = push.subscribe(self._office(), uid, body.get("sub") or {})
+                    ok = self._accepted(uid) and push.subscribe(self._office(), uid, body.get("sub") or {})
                     return self._json({"ok": ok, "on": ok})
                 elif act == "upload":                      # файл отчёта: {name, data: base64}
                     import base64
@@ -227,21 +313,27 @@ class WebApi:
 
     # ---------- 1С: сетевая папка и прямая отправка (core/onec_link.py) ----------
 
-    def handle_raw(self, method, path, headers, body):
+    def handle_raw(self, method, path, headers, body, ip=""):
         """Запросы без cookie и JSON: /dav/… (сетевая папка) и /api/1c (файл от 1С). → (код, заголовки, байты)."""
         from core import onec_link as L
         if self.app.demo:
             return 404, {"Content-Type": "text/plain; charset=utf-8"}, "В демо отчёты не принимаются".encode()
         u = path.split("?")[0]
+        if (u == "/dav" or u.startswith("/dav/") or u == "/api/1c") and self.auth_guard.blocked(ip or "-"):
+            return 429, {"Content-Type": "text/plain; charset=utf-8", "Retry-After": "600"}, TOO_MANY.encode()
         if u == "/dav" or u.startswith("/dav/"):
             with self.lock:
-                return L.dav(self.app, method, path, headers, body)
+                res = L.dav(self.app, method, path, headers, body)
+            if res[0] == 401 and headers.get("Authorization"):
+                self._fail("dav", ip)
+            return res
         if u == "/api/1c":
             if method != "POST":
                 return 405, {"Content-Type": "text/plain; charset=utf-8"}, "POST с файлом в теле".encode()
             q = parse_qs(urlparse(path).query)
             with self.lock:
                 if not L.check_key(self.app.db(), headers.get("X-Key") or (q.get("key") or [""])[0]):
+                    self._fail("1c", ip)
                     return 403, {"Content-Type": "text/plain; charset=utf-8"}, "неверный ключ".encode()
                 code, text = L.receive_direct(self.app, (q.get("name") or [""])[0], body, lambda out: self._deliver(0, out))
             return code, {"Content-Type": "text/plain; charset=utf-8"}, text.encode()
@@ -257,11 +349,18 @@ def serve(api, port=8101, host="127.0.0.1"):
     class Handler(BaseHTTPRequestHandler):
         server_version = "kpi"
 
+        def _ip(self):
+            """Адрес телефона: приложение слушает только 127.0.0.1, снаружи в него ходит Caddy и передаёт адрес в X-Forwarded-For."""
+            fwd = (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+            return (fwd or self.client_address[0])[:64]
+
         def _raw(self, method):
             n = min(int(self.headers.get("Content-Length") or 0), 16 * 1024 * 1024)
             body = self.rfile.read(n) if n else b""
-            code, headers, raw = api.handle_raw(method, self.path, self.headers, body)
+            code, headers, raw = api.handle_raw(method, self.path, self.headers, body, ip=self._ip())
             self.send_response(code)
+            for k, v in SEC_HEADERS.items():
+                headers.setdefault(k, v)
             for k, v in headers.items():
                 if k != "Content-Length":
                     self.send_header(k, v)
@@ -290,8 +389,10 @@ def serve(api, port=8101, host="127.0.0.1"):
                 k, _, v = part.strip().partition("=")
                 if k == "kid":
                     token = v
-            code, headers, raw = api.handle(method, self.path, parse_qs(urlparse(self.path).query), body, token)
+            code, headers, raw = api.handle(method, self.path, parse_qs(urlparse(self.path).query), body, token, ip=self._ip())
             self.send_response(code)
+            for k, v in SEC_HEADERS.items():
+                headers.setdefault(k, v)
             for k, v in headers.items():
                 self.send_header(k, v)
             self.send_header("Content-Length", str(len(raw)))

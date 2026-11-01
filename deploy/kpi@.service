@@ -1,15 +1,18 @@
-# Служба одного клиента. Установка на сервере:
+# Служба одного клиента (мессенджер). Установка на сервере:
 #   cp deploy/kpi@.service /etc/systemd/system/ && systemctl daemon-reload
 #   systemctl enable --now kpi@demo        # клиент demo; для другого — kpi@<код>
 # Каждый клиент — свой процесс: упал один — остальные работают.
+# Защита (Адам 01.11): от пользователя alapa, видит только /srv/alapa, пишет только в data/ и clients/ (см. kpi-web@.service).
 [Unit]
 Description=KPI-бот клиента %i
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-WorkingDirectory=/root/kpi-platform
-ExecStart=/root/kpi-platform/venv/bin/python run.py %i
+User=alapa
+Group=alapa
+WorkingDirectory=/srv/alapa
+ExecStart=/srv/alapa/venv/bin/python run.py %i
 Restart=always
 RestartSec=5
 # Потолок: бот клиента не может забрать память у соседей — при превышении падает и перезапускается только он.
@@ -18,6 +21,31 @@ MemoryMax=200M
 MemorySwapMax=100M
 CPUQuota=25%
 Environment=MALLOC_ARENA_MAX=2
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/srv/alapa/data /srv/alapa/clients
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RemoveIPC=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+CapabilityBoundingSet=
+AmbientCapabilities=
 
 [Install]
 WantedBy=multi-user.target

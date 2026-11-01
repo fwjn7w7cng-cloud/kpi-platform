@@ -1,0 +1,8 @@
+# /etc/systemd/system/alapa-backup.timer — systemctl enable --now alapa-backup.timer
+[Unit]
+Description=Копия сервера каждую ночь
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+[Install]
+WantedBy=timers.target

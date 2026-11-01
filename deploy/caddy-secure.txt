@@ -1,0 +1,13 @@
+# Кусок для /etc/caddy/Caddyfile (Адам 01.11): заголовки защиты и предел размера файла.
+# Вверху файла:
+#   (secure) {
+#       header {
+#           Strict-Transport-Security "max-age=31536000"
+#           X-Content-Type-Options nosniff
+#           X-Frame-Options DENY
+#           Referrer-Policy same-origin
+#           -Server
+#       }
+#   }
+# В каждом блоке сайта и приложения — строка:  import secure
+# В блоках приложений (demo.alapa.pro, <клиент>.alapa.pro) ещё:  request_body { max_size 24MB }

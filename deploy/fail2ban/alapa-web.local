@@ -1,0 +1,10 @@
+# /etc/fail2ban/jail.d/alapa-web.local — бан адреса на файрволе после 10 отказов за 10 минут.
+# Новый клиент → добавить его службу в journalmatch: … + _SYSTEMD_UNIT=kpi-web@<код>.service
+[alapa-web]
+enabled = true
+backend = systemd
+journalmatch = _SYSTEMD_UNIT=kpi-web@demo.service
+filter = alapa-web
+maxretry = 10
+findtime = 10m
+bantime = 2h

@@ -113,8 +113,37 @@ def subs(office):
     return office.get(KEY) or {}
 
 
+def public_endpoint(url):
+    """Адрес сервиса уведомлений: только https и только внешний хост — чтобы через подписку нельзя было заставить сервер
+    стучаться к себе или в локальную сеть (защита 01.11)."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlsplit
+    try:
+        u = urlsplit(str(url))
+    except ValueError:
+        return False
+    host = u.hostname or ""
+    if u.scheme != "https" or not host or len(url) > 2000 or (u.port not in (None, 443)):
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return False                                    # адрес цифрами — нет, только имя
+    except ValueError:
+        pass
+    try:
+        infos = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+    except (socket.gaierror, OSError):
+        return True                                     # имя не находится — отправить туда всё равно нельзя, опасности нет
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+            return False
+    return bool(infos)
+
+
 def subscribe(office, uid, sub):
-    if not isinstance(sub, dict) or not str(sub.get("endpoint", "")).startswith("https://") or \
+    if not isinstance(sub, dict) or not public_endpoint(sub.get("endpoint", "")) or \
             not (sub.get("keys") or {}).get("p256dh") or not (sub.get("keys") or {}).get("auth"):
         return False
     sub = {"endpoint": sub["endpoint"], "keys": {"p256dh": sub["keys"]["p256dh"], "auth": sub["keys"]["auth"]}}
