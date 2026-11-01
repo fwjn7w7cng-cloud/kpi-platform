@@ -3,6 +3,14 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-02 00:46 (Альфред) — выкачено «Управление» (b2c8124): admin.alapa.pro
+Caddy: копия /etc/caddy/Caddyfile.bak-2026-11-02, добавлен блок admin.alapa.pro (import secure, request_body max_size 24MB, reverse_proxy
+127.0.0.1:8101 — как в deploy/caddy-secure.txt); DNS admin → 103.214.71.188; caddy validate → Valid, reload → active, сертификат получен.
+Демо: копия data/demo/demo.db.bak-2026-11-02-admin, git reset → b2c8124 (12 файлов, requirements без изменений), chown alapa, restart
+kpi@demo kpi-web@demo → active, NRestarts 0, Traceback/ERROR 0; web/site → /var/www/kpi/site. Проверка: admin.alapa.pro/manifest.webmanifest
+→ «Управление»; demo, admin, alapa.pro, teplocom.alapa.pro → 200. Тесты (unittest от alapa): control, billing, tariff, modules2, partner,
+push_worker — 74 ок. Ошибки Caddy «connection refused :8101» только в секунды перезапуска 00:44:13, после — 0.
+
 ## 2026-11-02 01:00 (Джарвис) — «Управление» отдельным приложением: admin.alapa.pro
 Тот же процесс демо отвечает на Host admin.* своим приложением (значок «Управление», только админ, главная — «💰 Деньги и клиенты»,
 сводка 09:00 туда). Из демо «🛠 Пульт» убран. Альфреду: в Caddy блок admin.alapa.pro → 127.0.0.1:8101 (+ import secure), рестарт демо.
