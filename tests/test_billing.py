@@ -57,8 +57,23 @@ class BillingClient(unittest.TestCase):
         self.assertIn("не оплачен", texts(app.press(700, "bl")[0]))                        # срок был 9 декабря
         app.press(1, "blm:p")
         r = app.press(700, "bl")[0]
-        self.assertIn("Оплачено по декабрь", texts(r).replace("декабря", "декабрь"))
+        self.assertIn("Декабрь оплачен", texts(r))
         self.assertIn("Счёт 1 января", tiles(r))
+
+    def test_partial_payment_shows_rest(self):
+        self.app.press(1, "blm:d")
+        self.app.text(1, "01.10.2026 05.10.2026")
+        app = self.at(date(2026, 11, 3))
+        app.press(1, "blm:p")                                        # октябрь (19–31) — оплачен весь
+        app.press(1, "blm:s")
+        app.text(1, "10 000")                                         # ноябрь — только часть
+        r = app.press(700, "bl")[0]
+        self.assertIn("оплачено 10 000 ₽ из 15 600 ₽, осталось 5 600 ₽", texts(r))
+        app.press(1, "blm:s")
+        app.text(1, "5 600")
+        self.assertIn("Ноябрь оплачен", texts(app.press(700, "bl")[0]))
+        app.press(1, "blm:u")                                         # сняли последнюю отметку — снова остаток
+        self.assertIn("осталось 5 600", texts(app.press(700, "bl")[0]))
 
     def test_add_function_needs_approval_and_bills_rest_of_month(self):
         self.app.press(1, "blm:d")
