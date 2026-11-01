@@ -18,3 +18,10 @@
 #       request_body { max_size 24MB }
 #       reverse_proxy 127.0.0.1:8201
 #   }
+#
+# Приложение «Управление» (Адам 02.11) — тот же процесс, что демо (порт 8101), отвечает по адресу admin.* своим приложением:
+#   admin.alapa.pro {
+#       import secure
+#       request_body { max_size 24MB }
+#       reverse_proxy 127.0.0.1:8101
+#   }

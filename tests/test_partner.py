@@ -86,7 +86,10 @@ class Partner(unittest.TestCase):
 
     def test_panel_is_separate(self):
         rows = screens.bottom_rows(self.app.ctx(ADMIN))
-        self.assertIn([("🛠 Пульт", "adm")], rows)
+        self.assertNotIn("adm", [t for row in rows for _, t in row])      # «Пульт» — в отдельном приложении «Управление»
+        self.app.panel = True
+        self.assertIn(("🛠 Ещё", "adm"), [x for row in screens.bottom_rows(self.app.ctx(ADMIN)) for x in row])
+        self.app.panel = False
         self.assertNotIn("gst", [t for row in rows for _, t in row])
         tos = [b.to for b in self.app.press(ADMIN, "adm")[0].all_buttons()]
         for to in ("gsi", "pta", "gst", "ptl", "rqs", "pr", "ptm"):

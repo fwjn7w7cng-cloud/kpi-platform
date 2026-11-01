@@ -443,8 +443,7 @@ class WebTransport(unittest.TestCase):
     def test_admin_invite_guest_and_press(self):
         d, admin = self.post("start", {"admin": "секрет"})
         self.assertTrue(d["home"])
-        self.assertTrue(any(to == "adm" for _, to in d["tools"]))      # админу — «🛠 Пульт», отдельно от показа
-        self.assertFalse(any(to == "adm" for _, to in d["extra"]))
+        self.assertFalse(any(to == "adm" for _, to in d["tools"] + d["extra"] + d["tabs"]))   # «Пульт» — в приложении «Управление»
         d, _ = self.post("press", {"to": "gsi:3"}, admin)
         link = d["msgs"][0]["text"]
         self.assertIn("https://demo.example.ru/?start=", link)

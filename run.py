@@ -38,7 +38,10 @@ def main(client, web_port=None):
     if web_port:                                           # своё приложение вместо мессенджера (core/transport/web.py)
         from core.transport.web import WebApi, serve
         api = WebApi(app, admin_key=os.environ.get("WEB_ADMIN_KEY", ""), base_url=os.environ.get("WEB_URL", ""))
-        serve(api, port=web_port)
+        panel = None
+        if app.demo:                                   # приложение управления — адрес admin.<домен> на том же порту (core/control.py)
+            panel = WebApi(app, admin_key=os.environ.get("WEB_ADMIN_KEY", ""), panel=True, lock=api.lock)
+        serve(api, port=web_port, panel=panel)
         return
     token = os.environ.get("BOT_TOKEN")
     if not token:

@@ -63,6 +63,7 @@ class App:
         self.bot_username = ""                             # ставит транспорт — для ссылок-приглашений
         self.web_url = ""                                  # адрес веб-приложения (веб-провод) — тоже для ссылок
         self.last_sid = ""                                 # какой экран открылся последним (веб-провод: главная или нет)
+        self.panel = False                                 # приложение управления (admin.<домен>): ставит веб-провод на каждый запрос
         self._dbs = {}
         self._memo = {}
         self.pending = []
@@ -205,8 +206,17 @@ class App:
         to = next((t for c, _, t in self.commands() if c == cmd), "home")
         return self.start(user_id) if to == "home" else self.press(user_id, to, top=True)
 
+    def _panel_locked(self, user_id):
+        """Приложение управления — только администратору платформы."""
+        if self.panel and int(user_id) not in self.admins:
+            return [Reply(text="🔒 Это приложение управления. Вход — только по ссылке администратора.")]
+        return None
+
     def start(self, user_id, name="", arg=""):
         from core import demo
+        locked = self._panel_locked(user_id)
+        if locked:
+            return locked
         ctx = self.ctx(user_id)
         if name:
             ctx.session["tgname"] = name[:60]
@@ -236,6 +246,9 @@ class App:
     def upload(self, user_id, name, data):
         """Файл отчёта из приложения («📥 Отчёты 1С») или мессенджера: принять и показать, что пришло (core/reports.py)."""
         from core import demo, reports
+        locked = self._panel_locked(user_id)
+        if locked:
+            return locked
         ctx = self.ctx(user_id)
         g = demo.gate(ctx, press="up")
         if g is not None:
@@ -250,6 +263,9 @@ class App:
     def press(self, user_id, data, top=False):
         """top — нажатие из нижнего меню: путь «Назад» начинается заново."""
         from core import demo
+        locked = self._panel_locked(user_id)
+        if locked:
+            return locked
         ctx = self.ctx(user_id)
         g = demo.gate(ctx, press=data)
         if g is not None:
@@ -314,6 +330,9 @@ class App:
     def text(self, user_id, text, photo=""):
         """Текст (или фото с подписью — photo: id файла в мессенджере)."""
         from core import demo
+        locked = self._panel_locked(user_id)
+        if locked:
+            return locked
         ctx = self.ctx(user_id)
         ctx.photo = photo
         g = demo.gate(ctx, text=text)

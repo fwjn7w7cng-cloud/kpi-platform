@@ -27,6 +27,7 @@ UID_START = 10 ** 12          # номера пользователей прил
 INBOX_MAX = 50
 FILES_MAX = 50
 HOME_SIDS = ("home", "mon")
+PANEL_NAME = "Управление"
 TOOLS = ("adm", "ptn", "ptm")     # «для нас» — отдельная кнопка в шапке: пульт админа, кабинет партнёра (не путать с показом)
 # Защита приложения, которое смотрит в интернет (Адам 01.11, «обезопась максимально»):
 #   заголовки браузеру — не встраивать в чужие сайты, не угадывать тип файла, не отдавать адрес с ключом другим сайтам,
@@ -84,13 +85,18 @@ class _FileBox:
 
 
 class WebApi:
-    def __init__(self, app, admin_key="", base_url="", name=None, short=BRAND):
+    def __init__(self, app, admin_key="", base_url="", name=None, short=BRAND, panel=False, lock=None):
+        """panel — приложение управления (Адам 02.11, admin.alapa.pro): та же программа демо, но только «💰 Деньги и клиенты»
+        и всё «для нас»; свой значок «Управление»; вход — только по ключу администратора. lock — общий с демо (одно приложение)."""
         self.auth_guard = Throttle(AUTH_FAILS, AUTH_WINDOW)      # отказы на входе: ключ админа, приглашение, папка 1С, ключ 1С
         self.req_guard = Throttle(REQ_LIMIT, REQ_WINDOW)         # всего запросов к /api с адреса
-        self.app, self.admin_key = app, admin_key
-        self.lock = threading.Lock()
+        self.app, self.admin_key, self.panel = app, admin_key, panel
+        self.lock = lock or threading.Lock()
         self.files = {}
-        app.web_url = base_url.rstrip("/")
+        if not panel:                                  # ссылки-приглашения ведут в демо, а не в управление
+            app.web_url = base_url.rstrip("/")
+        if panel:
+            name, short = name or f"{BRAND} · {PANEL_NAME}", PANEL_NAME
         for uid in self._office().get("web_admins") or []:
             app.admins.add(int(uid))
         self.name = name or app_name(app.cfg.name, app.demo)      # «Алапа · демо» / «Алапа · <фирма>»
@@ -124,6 +130,10 @@ class WebApi:
         admins.add(uid)
         self._office().put("web_admins", sorted(admins))
         self.app.admins.add(uid)
+        if self.panel:                                 # утренняя сводка — в приложение управления (core/control.digest)
+            pa = set(self._office().get("panel_admins") or [])
+            pa.add(uid)
+            self._office().put("panel_admins", sorted(pa))
 
     def _accepted(self, uid):
         """Пустили ли этого человека: в демо — по приглашению, у настоящего клиента — он в списке сотрудников."""
@@ -195,7 +205,7 @@ class WebApi:
                                          ctx.cfg.role_title(ctx.role) if ctx.role not in ("guest", "admin") else
                                          "Администратор" if ctx.role == "admin" else "")
         return {"ver": self.ver, "msgs": msgs, "inbox": self._inbox(uid), "home": bool(home), "tabs": tabs, "extra": extra, "tools": tools,
-                "company": ctx.cfg.name, "who": who, "role": role_t, "guest": not allowed or ctx.role == "guest",
+                "company": PANEL_NAME if self.panel else ctx.cfg.name, "who": who, "role": role_t, "guest": not allowed or ctx.role == "guest",
                 "push": None if self.app.demo or not allowed or ctx.role == "guest" else push.has(self._office(), uid)}
 
     # ---------- фоновая работа: рассылки и отчёты (core/jobs/worker.py) ----------
@@ -263,6 +273,7 @@ class WebApi:
             return 405, {"Content-Type": "text/plain; charset=utf-8"}, b"method"
         act = u[len("/api/"):]
         with self.lock:
+            self.app.panel = self.panel
             login = act == "start" and bool(body.get("arg") or body.get("admin"))    # вход по ссылке: приглашение или ключ админа
             if login and self.auth_guard.blocked(ip or "-"):
                 return 429, {"Content-Type": "text/plain; charset=utf-8", "Retry-After": "600"}, TOO_MANY.encode()
@@ -346,9 +357,14 @@ class WebApi:
             json.dumps(data, ensure_ascii=False).encode()
 
 
-def serve(api, port=8101, host="127.0.0.1"):
+def serve(api, port=8101, host="127.0.0.1", panel=None):
+    """panel — WebApi приложения управления: отвечает тем, кто пришёл на адрес admin.<домен> (заголовок Host от Caddy)."""
     class Handler(BaseHTTPRequestHandler):
         server_version = "kpi"
+
+        def _api(self):
+            h = (self.headers.get("Host") or "").split(":")[0].lower()
+            return panel if panel is not None and h.startswith("admin.") else api
 
         def _ip(self):
             """Адрес телефона: приложение слушает только 127.0.0.1, снаружи в него ходит Caddy и передаёт адрес в X-Forwarded-For."""
@@ -358,7 +374,7 @@ def serve(api, port=8101, host="127.0.0.1"):
         def _raw(self, method):
             n = min(int(self.headers.get("Content-Length") or 0), 16 * 1024 * 1024)
             body = self.rfile.read(n) if n else b""
-            code, headers, raw = api.handle_raw(method, self.path, self.headers, body, ip=self._ip())
+            code, headers, raw = self._api().handle_raw(method, self.path, self.headers, body, ip=self._ip())
             self.send_response(code)
             for k, v in SEC_HEADERS.items():
                 headers.setdefault(k, v)
@@ -390,7 +406,7 @@ def serve(api, port=8101, host="127.0.0.1"):
                 k, _, v = part.strip().partition("=")
                 if k == "kid":
                     token = v
-            code, headers, raw = api.handle(method, self.path, parse_qs(urlparse(self.path).query), body, token, ip=self._ip())
+            code, headers, raw = self._api().handle(method, self.path, parse_qs(urlparse(self.path).query), body, token, ip=self._ip())
             self.send_response(code)
             for k, v in SEC_HEADERS.items():
                 headers.setdefault(k, v)

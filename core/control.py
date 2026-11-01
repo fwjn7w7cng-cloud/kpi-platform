@@ -127,7 +127,7 @@ def money_screen(ctx):
     kb = rows([Button(f"{t} ({sum(i['b'] == k for i in items)})", f"mcl:{k}") for k, t, _ in BUCKETS if any(i["b"] == k for i in items)], 2)
     kb.append([Button(f"👥 Все клиенты ({len(items)})", "mcl:all")])
     kb.append([Button(f"📨 Заявки ({waits})", "mcr"), Button("📅 Неделя вперёд", "mcw")])
-    kb.append([Button("‹ Пульт", "adm")])
+    kb.append([Button("🛠 Ещё: гости, партнёры, анкеты", "adm")])
     return Reply(view=v, buttons=kb)
 
 
@@ -402,8 +402,9 @@ def digest(app, today):
     if not lines:
         return None
     kb.append([Button("💰 Деньги и клиенты", "mc")])
+    to = app.office().get("panel_admins") or sorted(app.admins)     # в приложение управления, если в нём уже входили
     return [Reply(text="☀️ Клиенты на сегодня, " + B.dm(today) + ":\n" + "\n".join(lines), to=a, buttons=kb)
-            for a in sorted(app.admins) if a > 0]
+            for a in sorted(set(int(x) for x in to)) if a > 0]
 
 
 class Morning:

@@ -35,6 +35,9 @@ menu("help", "❓ Как пользоваться", ALL, order=99)
 
 @screen("home")
 def home(ctx):
+    if ctx.app.panel:
+        from core.control import money_screen
+        return money_screen(ctx)
     if ctx.role == "guest":
         return ctx.ask("register", "👋 Здравствуйте! Вас пока нет в списке сотрудников.\n\n"
                                    "Вход — по ссылке-приглашению: попросите её у администратора или руководителя и откройте "
@@ -218,6 +221,9 @@ def _dept_bottom(ctx):
 
 def bottom_rows(ctx):
     """[[(подпись, экран)]] нижнего меню этого зрителя."""
+    if ctx.app.panel:                                 # приложение управления (core/control.py)
+        return [[("🏠 Деньги", "home"), ("📨 Заявки", "mcr"), ("📅 Неделя", "mcw")],
+                [("📋 Анкеты", "cds"), ("💰 Цены", "pr"), ("🛠 Ещё", "adm")]]
     if ctx.role == "guest":
         return []
     role = "rep" if ctx.role == "newbie" else ctx.role
@@ -234,8 +240,6 @@ def bottom_rows(ctx):
     out = [items[i:i + 3] for i in range(0, len(items), 3)]
     if ctx.demo:
         out.append([("🎭 Роль", "sw:role"), ("🏭 Отрасль", "swi"), ("🧩 Собрать", "sw:ed")])
-        if ctx.user_id in ctx.app.admins and ctx.app.demo_gate:
-            out.append([("🛠 Пульт", "adm")])
         from core.demo import is_partner
         if is_partner(ctx):
             out.append([("🤝 Мои клиенты", "ptn"), ("📘 Инструкция", "ptm"), ("🔄 Заново", "sw:reset")])

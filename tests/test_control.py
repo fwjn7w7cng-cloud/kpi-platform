@@ -102,5 +102,27 @@ class Control(unittest.TestCase):
         self.assertEqual(m.tick(datetime(2026, 11, 16, 9, 1)), [])
 
 
+class Panel(Control):
+    """Отдельное приложение управления (admin.<домен>): тот же демо-процесс, свой значок, только для администратора."""
+
+    def test_panel_app(self):
+        from core.transport.web import WebApi
+        demo_api = WebApi(self.demo, admin_key="ключ")
+        api = WebApi(self.demo, admin_key="ключ", panel=True, lock=demo_api.lock)
+        code, h, raw = api.handle("GET", "/manifest.webmanifest", {}, {}, None)
+        self.assertIn("Управление", raw.decode())
+        code, h, raw = api.handle("POST", "/api/start", {}, {"admin": "ключ"}, None)
+        import json
+        data = json.loads(raw)
+        self.assertEqual(data["company"], "Управление")
+        self.assertIn("Деньги и клиенты", json.dumps(data["msgs"], ensure_ascii=False))
+        self.assertIn(["📨 Заявки", "mcr"], data["tabs"])
+        self.assertTrue(self.demo.office().get("panel_admins"))
+        code, h, raw = api.handle("POST", "/api/start", {}, {}, None)          # чужой телефон без ключа
+        self.assertIn("приложение управления", raw.decode())
+        code, h, raw = demo_api.handle("POST", "/api/press", {}, {"to": "home"}, None)   # демо — без «Пульта» внизу
+        self.assertNotIn('"adm"', raw.decode())
+
+
 if __name__ == "__main__":
     unittest.main()
