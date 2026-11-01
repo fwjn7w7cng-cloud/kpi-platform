@@ -88,7 +88,7 @@ def tariff(ctx):
     q = quote_of(ctx)
     v = quote_view(ctx, q, "💳 Тариф", f"{ctx.cfg.name} · набор «{ctx.cfg.set_title}» · {q['people']} чел. в приложении")
     kb = [[Button("➕ Добавить или ➖ убрать функции и людей", "blc")],
-          [Button("📄 Договор и оплата", "bl"), Button("📄 Расчёт PDF", "tfp")]]
+          [Button("📄 Правила и оплата", "bl"), Button("📄 Расчёт PDF", "tfp")]]
     if is_admin(ctx):
         kb.append([Button("💰 Цены", "pr")])
     return Reply(view=v, buttons=kb)

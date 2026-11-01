@@ -1,4 +1,4 @@
-"""📄 Договор и оплата (Адам 01.11): даты, бесплатные дни, счета, окно «добавить / убрать» с ценой, одобрение админом."""
+"""📄 Правила и оплата (Адам 01.11): даты, бесплатные дни, счета, окно «добавить / убрать» с ценой, одобрение админом."""
 import logging
 import shutil
 import tempfile
@@ -42,7 +42,7 @@ class BillingClient(unittest.TestCase):
 
     def test_dates_trial_and_bills(self):
         r = self.app.press(700, "bl")[0]
-        self.assertIn("Договор ещё не подписан", texts(r))
+        self.assertIn("Ещё не договорились", texts(r))
         self.app.press(1, "blm:d")
         self.app.text(1, "16.11.2026 20.11.2026")
         app = self.at(date(2026, 11, 25))
@@ -115,7 +115,7 @@ class BillingClient(unittest.TestCase):
         self.assertIn("директор", self.app.press(701, "blc")[0].text)
         self.assertTrue(self.app.press(700, "bld")[0].files)
         self.assertTrue(self.app.press(700, "blo")[0].files)
-        self.assertEqual(self.app.press(700, "bly:1")[0].text, "Одобряет администратор Алапы.")
+        self.assertEqual(self.app.press(700, "bly:1")[0].text, "Заявку одобряем мы — она уже у нас.")
 
 
 class BillingDemo(unittest.TestCase):
