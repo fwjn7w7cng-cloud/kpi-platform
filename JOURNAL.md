@@ -3,6 +3,26 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-01 03:40 (Альфред) — защита выкачена: /srv/alapa, пользователь alapa, песочница, fail2ban, заголовки, копии, ssh
+1) useradd --system alapa (uid 997); stop kpi@demo kpi-web@demo; rsync /root/kpi-platform → /srv/alapa (без venv), git reset → 2c05c00,
+   venv заново (cryptography 50.0.2), py_compile ок; data/demo (demo.db, building, guests; inbox в демо нет и не было), clients/demo/.env 600;
+   chown -R alapa:alapa; старая папка → /root/kpi-platform.old-2026-11-01, /root/kpi-platform → /srv/alapa (ссылка). Для git от root:
+   git config --global safe.directory /srv/alapa.
+2) deploy/kpi@ и kpi-web@ → /etc/systemd/system; start 03:30:26 — оба active, процессы от alapa, ошибок песочницы 0 (override не нужен);
+   8101 → 200, Conflict нет. kpi-web@demo 21 МБ.
+3) python3-systemd 235; filter alapa-web.conf + jail.d/alapa-web.local; fail2ban reload — jail alapa-web активен. POST /api/start
+   {"admin":"мимо"} с X-Forwarded-For 203.0.113.9 → в журнале «auth fail admin from 203.0.113.9», jail: Currently failed 1;
+   fail2ban-regex по выгрузке журнала — 1 matched (с journalmatch fail2ban-regex 1.0.2 падает TypeError — известная ошибка утилиты).
+4) Caddyfile (копия .bak-2026-11-01-0338-secure): сниппет (secure) вверху, import secure в alapa.pro и demo.alapa.pro, в demo —
+   request_body max_size 24MB; validate, reload. Заголовки: HSTS, nosniff, X-Frame-Options DENY, Referrer-Policy; у demo ещё CSP приложения.
+5) /usr/local/sbin/alapa-backup.sh (700), alapa-backup.service/.timer, enable --now; первый прогон success →
+   /var/backups/alapa/2026-11-01.tar.gz 6,7 МБ (600, папка 700): pay.db, fitness.db, demo.db, building/kpi.db + секреты, state chogbot,
+   службы, Caddy, fail2ban, ssh, cron. Следующий — 02.11 03:30.
+6) /etc/apt/apt.conf.d/52alapa-reboot — Automatic-Reboot true, 04:40.
+7) /etc/ssh/sshd_config.d/10-alapa.conf — MaxAuthTries 3, LoginGraceTime 20; sshd -t ок, reload. Новые подключения: «can continue:
+   publickey». Вход ключом Адама проверить в Termius (его ключа на сервере нет).
+quizbot, chogbot, fitness-bot, claude-remote, ufw не трогались; kpi@demo (Telegram) active.
+
 ## 2026-11-01 03:28 (Джарвис) — защита приложения и сервера (ждёт выкатки, ecc0741)
 Проверил код глазами взломщика: экранирование есть, пути в папке 1С чистые, роли на загрузке есть. Дыры закрыты: перебор ключа админа /
 приглашений / пароля папки / ключа 1С (10 отказов → 429 + fail2ban по журналу), 300 запросов в минуту с адреса, вложения только владельцу
