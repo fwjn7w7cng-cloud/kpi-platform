@@ -48,6 +48,16 @@ def state(ctx):
     return ctx.office.get(KEY) or {}
 
 
+def today_(ctx):
+    """Какой день смотрим: у клиента — сегодня; в демо можно листать дни (Адам 01.11: «посмотреть, что к чему»)."""
+    if ctx.demo:
+        try:
+            return ctx.today + timedelta(days=int(ctx.session.get("bl_shift") or 0))
+        except (TypeError, ValueError):
+            return ctx.today
+    return ctx.today
+
+
 def save(ctx, st):
     if ctx.demo:
         ctx.session["bl"] = st
@@ -194,9 +204,9 @@ def is_paid(st, mo, b):
 def due_bills(ctx, st):
     """Выставленные и не оплаченные (или оплаченные частично) счета на сегодня: [(месяц, счёт)]."""
     out = []
-    for mo in months_to_pay(ctx, st, month_of(ctx.today)):
+    for mo in months_to_pay(ctx, st, month_of(today_(ctx))):
         b = bill(ctx, st, mo)
-        if b and b[0] <= ctx.today and not is_paid(st, mo, b):
+        if b and b[0] <= today_(ctx) and not is_paid(st, mo, b):
             out.append((mo, b))
     return out
 
@@ -206,10 +216,10 @@ def next_bill(ctx, st):
     fp = first_paid(ctx, st)
     if not fp:
         return None
-    mo = max(first_bill_month(fp), month_of(ctx.today))
+    mo = max(first_bill_month(fp), month_of(today_(ctx)))
     for _ in range(3):
         b = bill(ctx, st, mo)
-        if b and b[0] > ctx.today:
+        if b and b[0] > today_(ctx):
             return mo, b
         mo = shift_month(mo, 1)
     return None
@@ -222,13 +232,13 @@ def status(ctx, st):
     fp = first_paid(ctx, st)
     if not fp:
         return f"🛠 Настраиваем приложение. {trial_days(ctx)} бесплатных дней начнутся со дня запуска.", "blue"
-    if ctx.today < fp:
-        left = (fp - ctx.today).days
+    if today_(ctx) < fp:
+        left = (fp - today_(ctx)).days
         return f"🎁 Бесплатно ещё {left} дн. — до {dm(fp - timedelta(days=1))} включительно.", "good"
     due = due_bills(ctx, st)
     if due:
         mo, (day, pay_by, amount, _) = due[0]
-        late = (ctx.today - pay_by).days
+        late = (today_(ctx) - pay_by).days
         g = got(st, mo)
         what = (f"Счёт за {mname(mo)}: оплачено {money(g)} из {money(amount)}, осталось {money(amount - g)}" if g
                 else f"Счёт за {mname(mo)} · {money(amount)}")
@@ -236,13 +246,13 @@ def status(ctx, st):
             return f"💳 {what} — оплатить до {dm(pay_by)}.", "warn"
         view_from = pay_by + timedelta(days=STEPS[1][1])
         off_from = pay_by + timedelta(days=STEPS[2][1])
-        if ctx.today < view_from:
+        if today_(ctx) < view_from:
             return f"⚠️ {what} не оплачен. С {dm(view_from)} — только просмотр.", "bad"
-        if ctx.today < off_from:
+        if today_(ctx) < off_from:
             return f"⚠️ {what} не оплачен — по договору только просмотр. С {dm(off_from)} — отключение.", "bad"
         return f"⛔ {what} не оплачен — по договору доступ закрыт. Данные хранятся 3 месяца.", "bad"
     nb = next_bill(ctx, st)
-    paid = sorted(mo for mo in months_to_pay(ctx, st, month_of(ctx.today)) if is_paid(st, mo, bill(ctx, st, mo)))
+    paid = sorted(mo for mo in months_to_pay(ctx, st, month_of(today_(ctx))) if is_paid(st, mo, bill(ctx, st, mo)))
     head = f"✅ {mname(paid[-1]).capitalize()} оплачен." if paid else "✅ Счетов к оплате нет."
     if nb:
         mo, (day, _, amount, _) = nb
@@ -258,13 +268,13 @@ def home_line(ctx):
     fp = first_paid(ctx, st)
     if not fp:
         return ""
-    if ctx.today < fp:
-        return f"🎁 Бесплатно ещё {(fp - ctx.today).days} дн. — «📄 Договор и оплата»."
+    if today_(ctx) < fp:
+        return f"🎁 Бесплатно ещё {(fp - today_(ctx)).days} дн. — «📄 Договор и оплата»."
     if due_bills(ctx, st):
         return status(ctx, st)[0]
     nb = next_bill(ctx, st)
-    if nb and (nb[1][0] - ctx.today).days <= 3:
-        return f"💳 Счёт через {(nb[1][0] - ctx.today).days} дн.: {dm(nb[1][0])} · {money(nb[1][2])}."
+    if nb and (nb[1][0] - today_(ctx)).days <= 3:
+        return f"💳 Счёт через {(nb[1][0] - today_(ctx)).days} дн.: {dm(nb[1][0])} · {money(nb[1][2])}."
     return ""
 
 
@@ -284,7 +294,7 @@ def schedule(ctx, st):
     td = trial_days(ctx)
     if launch:
         out.append((f"{dm(launch)} – {dm(fp - timedelta(days=1))}", f"{td} дней бесплатно", 0,
-                    "сейчас" if ctx.today < fp else "✓"))
+                    "сейчас" if today_(ctx) < fp else "✓"))
         start = first_bill_month(fp)
         for mo in [start, shift_month(start, 1), shift_month(start, 2)]:
             day, due, amount, lines = bill(ctx, st, mo)
@@ -292,7 +302,7 @@ def schedule(ctx, st):
             g = got(st, mo)
             mark = ("оплачен" if is_paid(st, mo, (day, due, amount, lines)) else
                     f"оплачено {money(g)}, осталось {money(amount - g)}" if g else
-                    "ждёт оплаты" if day <= ctx.today else "")
+                    "ждёт оплаты" if day <= today_(ctx) else "")
             out.append((dm(day), f"{what}, оплатить до {dm(due)}", amount, mark))
     else:
         out.append(("с запуска", f"{td} дней бесплатно", 0, ""))
@@ -316,19 +326,21 @@ def billing_screen(ctx, note=None):
     v = View("📄 Договор и оплата", sub)
     fp = first_paid(ctx, st)
     tiles = []
-    if fp and ctx.today < fp:
-        tiles.append(("Бесплатно, дней", str((fp - ctx.today).days), "good"))
+    if fp and today_(ctx) < fp:
+        tiles.append(("Бесплатно, дней", str((fp - today_(ctx)).days), "good"))
     nb = next_bill(ctx, st)
     if nb:
         tiles.append((f"Счёт {dm(nb[1][0])}", money(nb[1][2]), None))
     tiles.append(("В месяц", money(m), None))
     v.tiles(tiles)
     v.lines([text], title="Сейчас")
+    if ctx.demo:
+        v.note(f"Пример: даты и суммы выдуманы — у вашей фирмы будут свои. Смотрим на {dm(today_(ctx))}"
+               + (" (сегодня)" if today_(ctx) == ctx.today else "") + ". Листайте дни кнопками ◀ ▶ — увидите, "
+               "как идут бесплатные дни, приходит счёт и что будет, если не оплатить.")
     if note:
         v.note(note)
-    v.table(["Когда", "Что", "₽"], [Row([when, what, "—" if amt is None else money(amt, "")],
-                                          sub=mark, mark="good" if mark in ("✓", "оплачен") else "warn" if mark == "ждёт оплаты" else None)
-                                         for when, what, amt, mark in schedule(ctx, st)])
+    v.table(["Когда и что", "₽"], sched_rows(ctx, st))
     if nb and len(nb[1][3]) > 1:
         v.table([f"Счёт {dm(nb[1][0])}", "₽"], [Row([a, money(b, "")]) for a, b in nb[1][3]] +
                 [Row([Cell("Итого", bold=True), Cell(money(nb[1][2], ""), bold=True)])])
@@ -337,6 +349,8 @@ def billing_screen(ctx, note=None):
              "Добавить или убрать функции и людей — кнопкой ниже: сразу видно, сколько это стоит, включаем после одобрения."],
             title="Как платим")
     kb = []
+    if ctx.demo:
+        kb.append([Button("◀ неделя", "blt:-7"), Button("📅 Сегодня", "blt:0"), Button("неделя ▶", "blt:7")])
     wait = [r for r in st.get("req") or [] if r.get("status") == "wait"]
     if wait:
         r = wait[-1]
@@ -359,6 +373,29 @@ def billing_screen(ctx, note=None):
     if is_admin(ctx) and not ctx.demo:
         kb.append([Button("🛠 Даты и оплата (Алапа)", "blm")])
     return Reply(view=v, buttons=kb)
+
+
+def sched_rows(ctx, st):
+    """График строками: дата крупно, что это — целиком под ней (Адам 01.11: «половины фраз нет»)."""
+    out = []
+    for when, what, amt, mark in schedule(ctx, st):
+        tone = "good" if mark in ("✓", "оплачен") else "warn" if mark and mark != "сейчас" else None
+        out.append(Row([when, "—" if amt is None else money(amt, "")], sub=what + (f" · {mark}" if mark and mark != "✓" else ""), mark=tone))
+    return out
+
+
+@screen("blt")
+def billing_shift(ctx, days="0"):
+    """Демо: листать дни вперёд-назад, чтобы увидеть, как меняются счёт и шаги."""
+    if not ctx.demo:
+        return billing_screen(ctx)
+    try:
+        d = int(days)
+    except ValueError:
+        d = 0
+    ctx.session["bl_shift"] = 0 if d == 0 else max(-30, min(120, int(ctx.session.get("bl_shift") or 0) + d))
+    ctx.save()
+    return billing_screen(ctx)
 
 
 def signed(x):
@@ -385,25 +422,25 @@ def calc(ctx, st, new_f, new_p):
     d = new - old
     fp = first_paid(ctx, st)
     now = 0
-    if d > 0 and fp and ctx.today >= fp:
-        now = part(d, ctx.today)
-    nxt = shift_month(month_of(ctx.today), 1)
-    if fp and ctx.today < fp:                     # бесплатные дни: новая цена — с первого счёта
+    if d > 0 and fp and today_(ctx) >= fp:
+        now = part(d, today_(ctx))
+    nxt = shift_month(month_of(today_(ctx)), 1)
+    if fp and today_(ctx) < fp:                     # бесплатные дни: новая цена — с первого счёта
         nb = next_bill(ctx, st)
         nxt = nb[0] if nb else first_bill_month(fp)
     st2 = dict(st, extras=list(st.get("extras") or []) + ([{"month": nxt, "amount": now,
-                                                             "title": f"доплата за {mname(month_of(ctx.today))}"}]
+                                                             "title": f"доплата за {mname(month_of(today_(ctx)))}"}]
                                                           if now else []))
     b = bill(ctx, st2, nxt, new) if fp else None
     return old, new, now, nxt, b
 
 
 def explain(ctx, d, now):
-    t = tail_days(ctx.today)
-    m = mgen(month_of(ctx.today))
+    t = tail_days(today_(ctx))
+    m = mgen(month_of(today_(ctx)))
     if d > 0 and now:
         return (f"Новая функция включается сразу. За оставшиеся {t} дн. {m} платите только за эти дни: "
-                f"{money(d)} ÷ {dim(ctx.today)} дн. × {t} дн. ≈ {money(now)}. Эта доплата придёт одной строкой "
+                f"{money(d)} ÷ {dim(today_(ctx))} дн. × {t} дн. ≈ {money(now)}. Эта доплата придёт одной строкой "
                 f"в следующем счёте 1-го числа — отдельного счёта нет. Со следующего месяца — полная новая цена.")
     if d > 0:
         return "Пока идут бесплатные дни, за добавленное не платите. Новая цена — с первого счёта."
@@ -454,10 +491,10 @@ def change_window(ctx, act=None, value=None):
         what.append(f"👥 {signed(new_p - n0).replace(' ₽', '')} чел.")
     v = View("➕➖ Изменить подключение", " · ".join(what) if what else "отметьте, что добавить или убрать")
     diff = new - old
-    cur = mgen(month_of(ctx.today))
+    cur = mgen(month_of(today_(ctx)))
     fp = first_paid(ctx, st)
-    free = not fp or ctx.today < fp
-    rows_ = [Row(["Сейчас — бесплатные дни" if free else f"Сейчас, за остаток {cur} ({tail_days(ctx.today)} дн.)",
+    free = not fp or today_(ctx) < fp
+    rows_ = [Row(["Сейчас — бесплатные дни" if free else f"Сейчас, за остаток {cur} ({tail_days(today_(ctx))} дн.)",
                   Cell(signed(now) if now else "0 ₽", "warn" if now else None, bold=True)],
                  sub="придёт строкой в следующем счёте" if now else ""),
              Row(["С первого счёта, в месяц" if free else f"С {mgen(nxt)} каждый месяц",
@@ -489,7 +526,7 @@ def send_request(ctx, st, have, new_f, n0, new_p, old, new, now, nxt):
     reqs = list(st.get("req") or [])
     rid = max([int(r.get("id", 0)) for r in reqs] + [0]) + 1
     r = {"id": rid, "add": sorted(new_f - have), "drop": sorted(have - new_f), "people": [n0, new_p], "old": old,
-         "new": new, "now": now, "from": nxt, "status": "wait", "ts": f"{ctx.today:%d.%m} {datetime.now():%H:%M}",
+         "new": new, "now": now, "from": nxt, "status": "wait", "ts": f"{today_(ctx):%d.%m} {datetime.now():%H:%M}",
          "who": ctx.name(), "uid": ctx.user_id, "funcs": sorted(new_f)}
     reqs.append(r)
     st["req"] = reqs[-50:]
@@ -499,7 +536,7 @@ def send_request(ctx, st, have, new_f, n0, new_p, old, new, now, nxt):
     out = []
     if not ctx.demo:
         text = (f"📄 {ctx.cfg.name}: {ctx.name()} просит: {req_title(r)}.\n"
-                f"Сейчас за остаток {mgen(month_of(ctx.today))}: {signed(now) if now else '0 ₽'}\n"
+                f"Сейчас за остаток {mgen(month_of(today_(ctx)))}: {signed(now) if now else '0 ₽'}\n"
                 f"С {mgen(nxt)} каждый месяц: {money(old)} → {money(new)} ({signed(new - old)})")
         out += [Reply(text=text, to=a, buttons=[[Button("✅ Одобрить", f"bly:{rid}"), Button("❌ Отказать", f"bln:{rid}")]])
                 for a in ctx.app.admins if a != ctx.user_id]
@@ -534,9 +571,9 @@ def approve(ctx, rid):
         return billing_screen(ctx, "Эта заявка уже решена.")
     fs = set(r["funcs"])
     old, new, now, nxt, _ = calc(ctx, st, fs, r["people"][1])          # доплата — на день одобрения
-    r.update(status="ok", now=now, new=new, decided=f"{ctx.today:%d.%m} {datetime.now():%H:%M}")
+    r.update(status="ok", now=now, new=new, decided=f"{today_(ctx):%d.%m} {datetime.now():%H:%M}")
     if now:
-        st.setdefault("extras", []).append({"month": nxt, "amount": now, "title": f"доплата за {mname(month_of(ctx.today))}: "
+        st.setdefault("extras", []).append({"month": nxt, "amount": now, "title": f"доплата за {mname(month_of(today_(ctx)))}: "
                                                                                  f"{req_title(r)}"})
     st["people"] = r["people"][1]
     if ctx.demo:
@@ -551,7 +588,7 @@ def approve(ctx, rid):
         ctx.db.audit(ctx.author(), "billing_ok", req_title(r))
         if r.get("uid") and r["uid"] != ctx.user_id:
             out.append(Reply(text=f"✅ Включено: {req_title(r)}. С {mgen(r['from'])} — {money(new)} в месяц"
-                                  + (f", за остаток {mgen(month_of(ctx.today))} {money(now)} — в следующем счёте." if now else "."),
+                                  + (f", за остаток {mgen(month_of(today_(ctx)))} {money(now)} — в следующем счёте." if now else "."),
                              to=r["uid"], buttons=[[Button("📄 Договор и оплата", "bl")]]))
     out.append(billing_screen(ctx.app.ctx(ctx.user_id), f"✅ Одобрено: {req_title(r)}."))
     return out
@@ -575,7 +612,7 @@ def on_reject(ctx, text, data):
     if not r or r.get("status") != "wait" or not is_admin(ctx):
         return billing_screen(ctx)
     why = (text or "").strip()
-    r.update(status="no", why="" if why in ("-", "—") else why[:300], decided=f"{ctx.today:%d.%m} {datetime.now():%H:%M}")
+    r.update(status="no", why="" if why in ("-", "—") else why[:300], decided=f"{today_(ctx):%d.%m} {datetime.now():%H:%M}")
     save(ctx, st)
     ctx.db.audit(ctx.author(), "billing_no", req_title(r))
     out = []
@@ -593,7 +630,7 @@ def manage(ctx, act=None):
     if not is_admin(ctx) or ctx.demo:
         return billing_screen(ctx)
     st = state(ctx)
-    t = ctx.today.isoformat()
+    t = today_(ctx).isoformat()
     note = None
     if act == "c":
         st["contract"] = t
@@ -728,68 +765,91 @@ def _client_lines(ctx, st):
     return rows
 
 
+LEAD = "Мы считаем зарплату и показываем цифры вашей фирмы — вы платите за это раз в месяц. Ниже — как это устроено, без мелкого шрифта."
+
 CONTRACT = [
-    ("1. Кто и о чём договаривается", [
-        "Мы — Алапа. Вы — фирма, для которой настроено приложение (название — в Приложении 1).",
-        "Мы настраиваем для вас приложение «Алапа» и даём вашим сотрудникам доступ к нему с телефона и компьютера.",
-        "Приложение берёт цифры из вашей 1С, показывает, кто как работает, и считает зарплату по вашим правилам.",
-        "Что входит и сколько стоит — Приложение 1, когда платить — Приложение 2.",
-        "Приложение наше. Пользуется им ваша фирма, доступ другим фирмам не передаётся."]),
-    ("2. Подключение и 14 дней бесплатно", [
-        "Мы настраиваем: отделы, должности, как считается зарплата, приём отчётов из 1С, вход сотрудников; даём инструкцию.",
-        "Вы даёте: анкету, список сотрудников, правила зарплаты, образцы отчётов; ваш человек или программист 1С "
-        "настраивает выгрузку по нашей инструкции.",
-        "Срок — до … рабочих дней после первой оплаты и всего, что выше. Ждём что-то от вас — срок сдвигается.",
-        "Запуск — день, когда мы написали «всё работает»: в приложении ваши цифры, сотрудники могут войти.",
-        "14 дней бесплатно — со дня запуска. Всё, что вы выбрали, работает, за месяц вы не платите. Подключение сюда не входит.",
-        "Передумали за эти 14 дней — напишите нам: за месяц ничего не платите, первая половина подключения не "
-        "возвращается, вторую (если ещё не оплатили) не платите."]),
-    ("3. Сколько и когда платить", [
-        "Подключение — один раз, двумя половинами: при подписании и в день запуска.",
-        "Можно платить частями: в приложении видно, сколько оплачено и сколько осталось.",
-        "Первый месяц — с 15-го дня после запуска до конца месяца, только за эти дни; оплата за 5 дней. "
-        "Осталось 3 дня и меньше — эти дни войдут в счёт 1-го числа.",
-        "Дальше каждый месяц — счёт 1-го числа, оплата до 5-го, вперёд за этот месяц.",
-        "Сотрудники считаются на 1-е число; директор и администратор — бесплатно. За год сразу — скидка 10 %.",
-        "Добавить функцию, отдел или людей — заявка в приложении, цена видна сразу, включаем после нашего одобрения; "
-        "за остаток месяца доплата по дням в следующем счёте.",
-        "Убрать — тоже заявка и наше одобрение; до конца оплаченного месяца всё работает, со следующего счёт меньше.",
-        "Новая функция под вас: описываете в приложении, мы показываем эскиз и цену, делаем после вашего «Согласен». "
-        "Маленькая (до 1 рабочего дня) — в счёт 1-го числа; большая — половина после «Согласен», половина после запуска."]),
-    ("4. Если оплата не пришла", [
-        "6-е — напоминание, всё работает. 10-е — только смотреть, новые отчёты 1С не принимаются. 15-е — доступ закрыт.",
-        "Оплатили — включаем в тот же день. Данные после закрытия храним 3 месяца, потом удаляем.",
-        "Договорились об отсрочке — даты сдвигаются."]),
-    ("5. Ваши данные", [
-        "Все цифры и списки сотрудников — ваши. Используем только для вашего приложения и никому не передаём.",
-        "Данные лежат на сервере, у каждой фирмы отдельно; другие клиенты их не видят.",
+    ("1. О чём договор", [
+        "Алапа настраивает для вашей фирмы приложение и держит его в работе. Ваши люди открывают его с телефона и "
+        "компьютера и каждый день видят: свои продажи, план и сколько осталось до него; свою зарплату — по строкам, "
+        "за что сколько; что нужно сделать сегодня.",
+        "Руководители видят всю картину по отделам. Цифры берутся из вашей 1С, зарплата считается по вашим правилам. "
+        "Что входит и сколько стоит — в Приложении 1.",
+        "Приложение принадлежит Алапе. Пользуется им ваша фирма и не передаёт доступ другим."]),
+    ("2. Как запускаемся", [
+        "1) Подписываем договор. Вы оплачиваете первую половину подключения.",
+        "2) Настраиваем. Мы делаем отделы, должности, правила зарплаты, приём отчётов из 1С и вход для сотрудников. "
+        "От вас — анкета, список людей, правила зарплаты и человек, который по нашей инструкции настроит выгрузку из 1С. "
+        "Срок — до … рабочих дней. Пока ждём что-то от вас, срок стоит.",
+        "3) Запуск. В приложении ваши настоящие цифры, люди могут войти. В этот день — вторая половина подключения.",
+        "4) 14 дней бесплатно — со дня запуска. Работает всё, что вы выбрали, за месяц вы не платите. Не подошло — "
+        "скажите до конца 14-го дня, и мы спокойно расстанемся: месяц не платите, вторую половину подключения тоже, "
+        "если ещё не оплатили. Первая половина остаётся за настройку — работа уже сделана."]),
+    ("3. Деньги", [
+        "Подключение — один раз: половина при подписании, половина в день запуска.",
+        "Первый месяц — на 15-й день после запуска, только за оставшиеся дни месяца; 5 дней на оплату.",
+        "Каждый следующий месяц — счёт 1-го числа, оплата до 5-го, вперёд.",
+        "В сумму месяца входят выбранные функции и люди в приложении. Директор и администратор — бесплатно.",
+        "Если от первого месяца осталось 3 дня или меньше, отдельного счёта не будет — они придут вместе со счётом 1-го числа.",
+        "Можно платить частями: в приложении видно, сколько уже оплачено и сколько осталось.",
+        "За год сразу — минус 10 %.",
+        "Всё это директор видит в приложении, в «Договор и оплата»: сколько бесплатных дней осталось, когда следующий "
+        "счёт и на какую сумму. Сюрпризов не будет."]),
+    ("4. Растёте — растёт и приложение", [
+        "Добавить функцию, отдел или людей. Директор отмечает нужное в приложении и сразу видит три цифры: сколько за "
+        "остаток этого месяца, сколько дальше в месяц и каким будет следующий счёт. Мы проверяем, что всё настроено, "
+        "и включаем — обычно в тот же день.",
+        "Убрать. Так же, через приложение. До конца оплаченного месяца всё работает как было, со следующего счёт меньше.",
+        "Нужно то, чего ещё нет. Опишите в приложении своими словами. Мы уточним, покажем эскиз и цену, а вы правите, "
+        "пока не скажете «Согласен». Небольшая доработка (до 1 рабочего дня) придёт в счёте 1-го числа. Большая — "
+        "половина после «Согласен», половина после запуска. Правки по ходу бесплатно, пока они не меняют суть."]),
+    ("5. Если что-то пошло не так", [
+        "Неверно посчитана зарплата — нажмите «Не работает» и приложите экран. Исправим за 1 рабочий день, бесплатно.",
+        "Не пришли отчёты из 1С — приложение само предупредит. Поможем найти причину — у вас в 1С или у нас.",
+        "Приложение не работало по нашей вине больше суток — вычтем эти дни из следующего счёта, просить не надо.",
+        "Не согласны со счётом — напишите до срока оплаты. Пока разбираемся, ограничения не включаются.",
+        "Оплата не пришла вовремя — на следующий день после срока напоминание. Через 5 дней — только просмотр (цифры "
+        "видно, новые отчёты не принимаются). Через 10 дней — доступ закрыт. Оплатили — включаем в тот же день.",
+        "Не договорились — любая сторона может расстаться (раздел 7)."]),
+    ("6. Ваши данные", [
+        "Все цифры и списки сотрудников — ваши. Используем их только для вашего приложения и никому не передаём.",
+        "У каждой фирмы своя отдельная база, другие клиенты её не видят. Каждую ночь делаем копию.",
         "Согласие сотрудников на обработку их данных берёте вы, как работодатель.",
-        "Выгрузим расчёты в Excel по просьбе; расстаёмся — удалим всё через 3 месяца или раньше, если попросите."]),
-    ("6. Кто за что отвечает", [
-        "Мы — чтобы приложение работало и считало по договорённым правилам; ошибки в расчёте исправляем бесплатно.",
-        "Вы — за цифры в 1С и за итоговую зарплату: перед выплатой её проверяет и утверждает ваш руководитель.",
-        "Плановые работы — предупреждаем заранее. Не работало по нашей вине больше суток — вычитаем эти дни из счёта.",
-        "Больше чем сумма за один месяц никто никому не должен."]),
-    ("7. Срок, цены и как расстаться", [
-        "Договор действует со дня подписания и сам продлевается каждый месяц, пока вы платите.",
-        "Расстаться можно в любой момент: доступ работает до конца оплаченного месяца. Платили за год — вернём за "
-        "неполные месяцы по обычной цене.",
-        "Цену меняем не чаще раза в год и предупреждаем за 30 дней; оплаченный год не меняется.",
-        "Сообщения в приложении и в мессенджере считаются официальными. Споры решаем разговором."]),
+        "Выгрузим ваши расчёты в Excel в любой момент — просто попросите."]),
+    ("7. Как расстаться", [
+        "Договор действует со дня подписания и продлевается сам каждый месяц, пока вы платите.",
+        "Уйти можно в любой момент: доступ работает до конца оплаченного месяца. Платили за год — вернём деньги за "
+        "неиспользованные полные месяцы, посчитав прошедшие по обычной цене, без скидки.",
+        "После закрытия храним ваши данные 3 месяца: передумали — продолжаем с того же места, подключение заново не "
+        "платите. Потом удаляем, раньше — если попросите.",
+        "Цену меняем не чаще раза в год и предупреждаем за 30 дней. Оплаченный год не меняется.",
+        "Сообщения в приложении и в мессенджере считаются официальными."]),
 ]
+
+ORDER_RULES = [
+    "Первый счёт — только за оставшиеся дни месяца: сумма месяца ÷ дней в месяце × оставшиеся дни.",
+    "Добавили функцию в середине месяца — за остаток месяца доплата придёт строкой в счёте 1-го числа, дальше — новая цена.",
+    "Убрали — до конца оплаченного месяца всё работает, со следующего счёт меньше.",
+    "Платите частями — в приложении видно, сколько оплачено и сколько осталось.",
+]
+LATE = [("до 5-го", "всё работает, видна строка «счёт — оплатить до 5-го»"), ("6-го", "напоминание"),
+        ("10-го", "только просмотр: цифры видно, менять нельзя, отчёты 1С не принимаются"),
+        ("15-го", "доступ закрыт, данные хранятся 3 месяца")]
 
 
 def contract_views(ctx):
     st = state(ctx)
     c = _d(st.get("contract"))
-    v = View("Договор оказания услуг «Алапа»", f"№ …… · {dm(c) + ' ' + str(c.year) if c else 'дата ……'} · {ctx.cfg.name}")
+    v = View("Договор", f"№ …… от {dm(c) + ' ' + str(c.year) if c else '……'} · {ctx.cfg.name}")
+    v.lines([LEAD])
     for title, items in CONTRACT:
-        v.lines([f"• {x}" for x in items], title=title)
+        v.lines(items if title.startswith("2.") else [f"• {x}" for x in items], title=title)
     v2 = View("Приложение 1. Что входит и сколько стоит", f"набор «{ctx.cfg.set_title}» · {people(ctx, st)} чел.")
     v2.table(["Что", "₽ в месяц"], _client_lines(ctx, st))
     v3 = View("Приложение 2. График оплат", ctx.cfg.name)
-    v3.table(["Когда", "Что", "₽"], [Row([w, x, "—" if a is None else money(a, "")]) for w, x, a, _ in schedule(ctx, st)])
-    v3.lines(["Алапа: ____________", f"{ctx.cfg.name}: ____________"], title="Подписи")
+    if ctx.demo:
+        v3.note("Пример: даты и суммы выдуманы — у вашей фирмы будут свои.")
+    v3.table(["Когда и что", "₽"], sched_rows(ctx, st))
+    v3.lines([f"Алапа: ____________          {ctx.cfg.name}: ____________"], title="Подписи")
     return [v, v2, v3]
 
 
@@ -797,9 +857,14 @@ def order_views(ctx):
     st = state(ctx)
     m = monthly(ctx, st=st)
     v = View("Порядок оплаты", f"{ctx.cfg.name} · {money(m)} в месяц · подключение {money(setup_sum(ctx, st))}")
+    v.lines(["Вы точно знаете, с какого дня платите и сколько: всё это видно в приложении, в «Договор и оплата»."])
     v.lines([status(ctx, st)[0]], title="Сейчас")
-    v.table(["Когда", "Что", "₽"], [Row([w, x, "—" if a is None else money(a, "")], sub=mk) for w, x, a, mk in schedule(ctx, st)])
-    v.lines(CONTRACT[1][1][3:5] + CONTRACT[2][1] + CONTRACT[3][1], title="Правила")
+    if ctx.demo:
+        v.note("Пример: даты и суммы выдуманы — у вашей фирмы будут свои.")
+    v.table(["Когда и что", "₽"], sched_rows(ctx, st))
+    v.lines([f"• {x}" for x in ORDER_RULES], title="Как считается")
+    v.table(["Если оплата задержалась", "Что происходит"], [Row([a, b]) for a, b in LATE])
+    v.lines(["Оплатили — всё включается в тот же день."])
     return [v]
 
 
@@ -808,7 +873,7 @@ def contract_pdf(ctx):
     if ctx.role not in ("owner", "admin") and not is_admin(ctx):
         return billing_screen(ctx)
     return Reply(text="📄 Договор — простыми словами.",
-                 files=[(f"Договор Алапа {ctx.today:%d.%m.%Y}.pdf", to_pdf(contract_views(ctx)))],
+                 files=[(f"Договор Алапа {today_(ctx):%d.%m.%Y}.pdf", to_pdf(contract_views(ctx)))],
                  buttons=[[Button("📄 Договор и оплата", "bl")]])
 
 
@@ -817,7 +882,7 @@ def order_pdf(ctx):
     if ctx.role not in ("owner", "admin") and not is_admin(ctx):
         return billing_screen(ctx)
     return Reply(text="📄 Порядок оплаты — даты и суммы вашей фирмы.",
-                 files=[(f"Порядок оплаты Алапа {ctx.today:%d.%m.%Y}.pdf", to_pdf(order_views(ctx)))],
+                 files=[(f"Порядок оплаты Алапа {today_(ctx):%d.%m.%Y}.pdf", to_pdf(order_views(ctx)))],
                  buttons=[[Button("📄 Договор и оплата", "bl")]])
 
 

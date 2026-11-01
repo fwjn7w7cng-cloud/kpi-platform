@@ -132,6 +132,11 @@ class BillingDemo(unittest.TestCase):
             self.assertIn("bly:1", [b.to for b in r.all_buttons()])
             app.press(5, "bly:1")
             self.assertIn("processes", app.ctx(5).cfg.functions)
+            for _ in range(2):
+                r = app.press(5, "blt:7")[0]                         # листаем до 15 ноября — счёт не оплачен
+            self.assertIn("не оплачен", texts(r))
+            self.assertIn("Пример: даты и суммы выдуманы", texts(r))
+            self.assertIn("Бесплатно, дней", tiles(app.press(5, "blt:0")[0]))
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
