@@ -1,9 +1,10 @@
 # /etc/fail2ban/jail.d/alapa-web.local — бан адреса на файрволе после 10 отказов за 10 минут.
 # Новый клиент → добавить его службу в journalmatch: … + _SYSTEMD_UNIT=kpi-web@<код>.service
+# quizbot.service — приложение Теплокома (teplocom.alapa.pro, 01.11): тот же формат строки «auth fail … from <ip>»
 [alapa-web]
 enabled = true
 backend = systemd
-journalmatch = _SYSTEMD_UNIT=kpi-web@demo.service
+journalmatch = _SYSTEMD_UNIT=kpi-web@demo.service + _SYSTEMD_UNIT=quizbot.service
 filter = alapa-web
 maxretry = 10
 findtime = 10m

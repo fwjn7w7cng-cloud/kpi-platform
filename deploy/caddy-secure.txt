@@ -11,3 +11,10 @@
 #   }
 # В каждом блоке сайта и приложения — строка:  import secure
 # В блоках приложений (demo.alapa.pro, <клиент>.alapa.pro) ещё:  request_body { max_size 24MB }
+#
+# Приложение Теплокома (отдельный бот quizbot, не платформа; 01.11) — такой же блок, порт 8201:
+#   teplocom.alapa.pro {
+#       import secure
+#       request_body { max_size 24MB }
+#       reverse_proxy 127.0.0.1:8201
+#   }

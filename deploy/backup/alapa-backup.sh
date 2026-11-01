@@ -6,13 +6,13 @@ set -uo pipefail
 D=/var/backups/alapa; T=$(date +%F); W=$(mktemp -d)
 mkdir -p "$D" && chmod 700 "$D"
 db() { [ -f "$1" ] && sqlite3 "$1" ".backup '$W/$2'" ; }
-db /root/quizbot/data/pay.db quizbot-pay.db
+db /srv/teplocom/data/pay.db quizbot-pay.db      # Теплоком: с 01.11 бот в /srv/teplocom (/root/quizbot — ссылка туда)
 db /root/fitness-bot/data/fitness.db fitness.db
 while IFS= read -r f; do
   db "$f" "alapa-$(echo "${f#/srv/alapa/data/}" | tr / _)"
 done < <(find /srv/alapa/data -name '*.db' -not -path '*/guests/*' 2>/dev/null)
 tar czf "$W/files.tgz" --ignore-failed-read --warning=no-file-changed \
-  /root/quizbot/.env /root/quizbot/google_key.json \
+  /srv/teplocom/.env /srv/teplocom/google_key.json /srv/teplocom/web/logo.png \
   /root/chogbot/.env /root/chogbot/state.json /root/chogbot/*.jsonl /root/chogbot/notify_details.json \
   /root/fitness-bot/.env \
   /srv/alapa/clients/*/.env \

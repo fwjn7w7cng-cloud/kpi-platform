@@ -3,6 +3,11 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-01 04:50 (Джарвис) — Теплоком получил приложение (teplocom.alapa.pro) — правки в deploy/ платформы
+Бот Теплокома (quizbot) переезжает в /srv/teplocom от пользователя teplocom: в `deploy/backup/alapa-backup.sh` путь базы и секретов
+Теплокома → /srv/teplocom; в `deploy/fail2ban/alapa-web.local` journalmatch + quizbot.service; в `deploy/caddy-secure.txt` — блок
+teplocom.alapa.pro → 127.0.0.1:8201. На сервере это применяет Альфред вместе с выкаткой приложения. Код платформы не менялся.
+
 ## 2026-11-01 03:40 (Альфред) — защита выкачена: /srv/alapa, пользователь alapa, песочница, fail2ban, заголовки, копии, ssh
 1) useradd --system alapa (uid 997); stop kpi@demo kpi-web@demo; rsync /root/kpi-platform → /srv/alapa (без venv), git reset → 2c05c00,
    venv заново (cryptography 50.0.2), py_compile ок; data/demo (demo.db, building, guests; inbox в демо нет и не было), clients/demo/.env 600;
