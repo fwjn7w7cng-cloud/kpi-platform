@@ -113,3 +113,22 @@ class Partner(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PartnerNewDevice(unittest.TestCase):
+    setUp, tearDown, guest = Partner.setUp, Partner.tearDown, Partner.guest
+
+    def test_guest_made_partner(self):
+        """Тот же партнёр с нового входа (значок «Домой») пришёл заявкой — админ делает его партнёром."""
+        self.app.start(STRANGER)
+        self.app.text(STRANGER, "Ислам, это я с телефона")
+        self.assertEqual(self.guest(STRANGER)["status"], "wait")
+        card = self.app.press(ADMIN, f"gso:{STRANGER}")[-1]
+        self.assertIn(f"gsp:{STRANGER}", [b.to for b in card.all_buttons()])
+        out = self.app.press(ADMIN, f"gsp:{STRANGER}")
+        self.assertTrue(any(x.to == STRANGER and "партнёр" in x.text for x in out))
+        g = self.guest(STRANGER)
+        self.assertEqual((g["partner"], g["status"], g["till"]), (True, "on", "2999-12-31"))
+        ctx = self.app.ctx(STRANGER)
+        self.assertIn(("🤝 Мои клиенты", "ptn"), [x for row in screens.bottom_rows(ctx) for x in row])
+
