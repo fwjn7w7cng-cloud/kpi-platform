@@ -3,6 +3,12 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-02 12:24 (Альфред) — из демо убран ключ Telegram-бота
+Адам: бот демо не нужен. Копия clients/demo/.env.bak-2026-11-02-1223-bot (600), из clients/demo/.env удалена строка BOT_TOKEN —
+kpi@demo без неё не стартует («Нет BOT_TOKEN»). Сайт демо и «Управление» токен не используют (run.py --web выходит раньше проверки):
+kpi-web@demo active, demo.alapa.pro и admin.alapa.pro → 200. Шаблоны kpi@.service / kpi-web@.service и база демо не тронуты.
+Самого бота в Telegram (@BotFather → /deletebot) Адам удаляет сам, по желанию.
+
 ## 2026-11-02 12:20 (Альфред) — Telegram-бот демо выключен (kpi@demo)
 По просьбе Адама: systemctl disable --now kpi@demo → inactive / disabled (после перезагрузки сервера не стартует). Файлы, база
 data/demo/demo.db и clients/demo/.env не трогал. kpi-web@demo не трогал — active / enabled (с 08:04, NRestarts 0), ошибок 0;
