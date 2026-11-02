@@ -3,6 +3,11 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-02 12:20 (Альфред) — Telegram-бот демо выключен (kpi@demo)
+По просьбе Адама: systemctl disable --now kpi@demo → inactive / disabled (после перезагрузки сервера не стартует). Файлы, база
+data/demo/demo.db и clients/demo/.env не трогал. kpi-web@demo не трогал — active / enabled (с 08:04, NRestarts 0), ошибок 0;
+demo.alapa.pro и admin.alapa.pro → 200, «Управление» на месте. Включить обратно: systemctl enable --now kpi@demo.
+
 ## 2026-11-02 08:06 (Альфред) — демо обновлено до 65cea75: оформление — 7 стилей и живые линии
 git reset → 65cea75 (web/app.html, CLAUDE.md, журнал), chown alapa, restart kpi@demo kpi-web@demo → active, NRestarts 0, Traceback/ERROR 0;
 web/site → /var/www/kpi/site. demo.alapa.pro, admin.alapa.pro, alapa.pro → 200; обе страницы отдают новый app.html (🎨 в шапке).
