@@ -70,7 +70,14 @@ def home(ctx):
                    "«🔄 Заново» — свежие цифры перед каждым показом.")
     # Что уже есть в нижнем меню, на главной не повторяем (переключатели демо, «Смотреть как», отзывы — тоже там).
     kb = rows(_dept_buttons(ctx), 2) + rows(_home_buttons(ctx), 2)
-    if ctx.demo and ctx.app.demo_gate and ctx.user_id not in ctx.app.admins:
+    if ctx.demo and ctx.session.get("built"):        # Адам 05.11: посмотрел свой бот — теперь «Хочу так» под рукой
+        from core.ui import tariff as T
+        q = T.quote_of(ctx)
+        price = q["monthly_year"] if ctx.session.get("year") else q["monthly"]
+        v.note(f"🧩 Ваш набор: {money(price)} в месяц{' при оплате за год' if ctx.session.get('year') else ''}, "
+               f"подключение {money(q['setup'])}. Здесь включено только то, что вы выбрали; остальное — с замком 🔒.")
+        kb.insert(0, [Button("✏️ Изменить набор", "sw:ed"), Button("📨 Хочу так", "sw:req")])
+    elif ctx.demo and ctx.app.demo_gate and ctx.user_id not in ctx.app.admins:
         from core.demo import is_partner
         if not is_partner(ctx):                      # гость-клиент: анкета для подключения всегда под рукой
             kb.append([Button("🧩 Собрать и цена", "sw:ed"), Button("📋 Анкета для подключения", "cd")])

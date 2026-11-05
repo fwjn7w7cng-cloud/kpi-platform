@@ -252,6 +252,7 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 .bnum input { width: 96px; border: 0; box-shadow: var(--edge); border-radius: 8px; padding: 6px 8px; font: inherit; font-weight: 600; font-size: 15px; color: var(--ink); background: var(--surface); font-variant-numeric: tabular-nums; text-align: right; }
 .bfc { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--ink-2); }
 .bfx { display: flex; gap: 8px; font-size: 13px; color: var(--ink-2); } .bfx em { font-style: normal; color: var(--ink); text-align: right; flex: 1; }
+.bend { display: grid; gap: 8px; padding-bottom: 8px; }
 .blink { border: 0; background: none; color: var(--accent); font-weight: 600; font-size: 14px; text-align: left; padding: 2px 0; cursor: pointer; }
 .brow2 { display: flex; gap: 14px; flex-wrap: wrap; }
 .bmore { display: flex; flex-direction: column; gap: 7px; border-top: 1px dashed var(--line); padding-top: 8px; }
@@ -785,11 +786,15 @@ function bRole(r) {
 function bPage2(q) {
   const rs = BS.d.roles.filter(r => q.on[r.d]);
   return `<div class="bsec"><div class="bst">Как платите людям</div><p class="bhint">Отметьте, из чего состоит зарплата, и впишите цифры. Пример расчёта — на человеке из демо-фирмы.</p></div>` +
-    (rs.length ? rs.map(bRole).join("") : `<p class="bhint">Включите хотя бы один отдел на первой странице.</p>`);
+    (rs.length ? rs.map(bRole).join("") : `<p class="bhint">Включите хотя бы один отдел на первой странице.</p>`) +
+    `<div class="bsec bend">${BS.d.partner ? `<button class="blink" data-b="go" data-v="look">👀 Посмотреть демо с этим набором</button>`
+      : `<p class="bhint">Нажмите «👀 Посмотреть мой бот» — откроется демо только с вашими отделами и функциями. Понравится — там же «📨 Хочу так».</p><button class="blink" data-b="go" data-v="req">📨 Уже решили? Отправить заявку</button>`}</div>`;
 }
 function bSum(q) {
   const main = BS.year ? q.year : q.monthly;
-  const btn = BS.ui.tab === 0 ? `<button class="bgo" data-b="tab" data-v="1">Дальше ›</button>` : `<button class="bgo" data-b="go" data-v="req">📨 Хочу так</button>`;
+  // Адам 05.11: клиенту сначала «Посмотреть мой бот», «Хочу так» — потом; партнёр оформляет при клиенте — у него «Хочу так»
+  const btn = BS.ui.tab === 0 ? `<button class="bgo" data-b="tab" data-v="1">Дальше ›</button>` :
+    BS.d.partner ? `<button class="bgo" data-b="go" data-v="req">📨 Хочу так</button>` : `<button class="bgo" data-b="go" data-v="look">👀 Посмотреть мой бот</button>`;
   return `<div class="bsum"><div class="bm"><b>${bfmt(main)} ₽ / мес</b><span>${BS.year ? "при оплате за год · " : ""}подключение ${bfmt(q.setup)} ₽ · ${q.people} чел. · ${BS.d.prices.trial_days} дней бесплатно</span></div>${btn}</div>`;
 }
 function bldRender() {

@@ -199,7 +199,7 @@ class WebApi:
                 (tools if to in TOOLS else extra if to.startswith("sw:") else tabs).append([label, to])
         msgs = [reply_json(r, self._files(uid)) for r in mine]
         first = msgs[0].get("view") if msgs else None
-        home = sid in HOME_SIDS or (sid == "sw" and first and first.get("title") == ctx.cfg.name)
+        home = sid in HOME_SIDS or (sid in ("sw", "swb") and first and first.get("title") == ctx.cfg.name)
         who = ctx.me["fio"] if ctx.me and allowed else ""
         role_t = "" if not allowed else (ctx.position_name if ctx.role in ("staff", "head") and ctx.position_name else
                                          ctx.cfg.role_title(ctx.role) if ctx.role not in ("guest", "admin") else

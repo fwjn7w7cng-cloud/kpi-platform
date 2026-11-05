@@ -84,6 +84,17 @@ class Builder(unittest.TestCase):
         monthly = round((s - disc + ext) / pr["round"]) * pr["round"]
         self.assertEqual(monthly, d["check"]["monthly"])
 
+    def test_look_then_want(self):
+        """Адам 05.11: «👀 Посмотреть мой бот» — сохраняет набор и открывает главную демо, «📨 Хочу так» — уже там."""
+        d = builder_of(self.app.press(ADMIN, "sw:ed"))
+        self.assertFalse(d["partner"])
+        out = self.app.press(ADMIN, "swb:s:look", form={"funcs": ["kpi", "debts"], "counts": {"sales": 8}})
+        self.assertTrue(self.app.ctx(ADMIN).session.get("built"))
+        btns = [b.to for r in out for row in (r.buttons or []) for b in row]
+        self.assertIn("sw:req", btns)
+        self.assertIn("sw:ed", btns)
+        self.assertEqual(set(self.app.ctx(ADMIN).cfg.functions), {"debts", "kpi"})
+
     def test_quiet_save_over_web(self):
         api = WebApi(self.app)
         _, h, _ = api.handle("POST", "/api/start", "", {}, "")

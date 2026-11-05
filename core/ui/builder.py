@@ -107,7 +107,8 @@ def data(ctx, ex=None, ui=None):
                           "quick": [[b, v or PB.variants(b, pos)[0][0], t] for b, v, t in QUICK[pos]]})
     sizes = [[c, x["title"], x["size"], dict(x["people"]), sorted(E.preset_functions(c))] for c, x in E.PRESETS.items()]
     q = T.quote_of(ctx)
-    return {
+    from core.demo import is_partner
+    return {"partner": bool(is_partner(ctx)),
         "sid": "swb", "sizes": sizes, "base": T.base_of(ctx), "depts": depts,
         "all": [[f, E.FUNC_SHORT[f], pr["f_" + f], T.LOCK.get(f, E.MODULES[f][0])] for f in E.FUNCS if E.FUNCS[f][0] == "all"],
         "extra": [[f, E.FUNC_SHORT[f], pr["f_" + f], T.LOCK.get(f, E.MODULES[f][0])] for f in E.FUNCS if E.FUNCS[f][0] == "max"],
@@ -216,6 +217,9 @@ def builder(ctx, act=None, *args):
     ui = form.get("ui") if isinstance(form, dict) else None
     if act == "s":
         save(ctx, form)
+        if args and args[0] == "look":
+            ctx.session["built"] = True              # на том же ctx — его сессию сохраняет App.press после экрана
+            ctx.save()
         ctx = ctx.app.ctx(ctx.user_id)
         nxt = args[0] if args else ""
         from core.ui import tariff as T
@@ -228,6 +232,9 @@ def builder(ctx, act=None, *args):
             return SCREENS["cd"][0](ctx)
         if nxt == "pb" and len(args) > 1 and args[1] in PB.POSITIONS:
             return PB.page(ctx, args[1])
+        if nxt == "look":                            # Адам 05.11: сначала посмотреть свой бот в деле, «Хочу так» — потом
+            from core.ui.screens import home
+            return home(ctx)
         if nxt == "ex" and len(args) > 1:
             return page(ctx, ex=args[1], ui=ui)
     return page(ctx, ui=ui)
