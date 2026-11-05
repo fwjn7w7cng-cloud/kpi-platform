@@ -43,6 +43,7 @@ class Ctx:
             self.month = month_of(self.today)
         self._kpi, self._pay = {}, {}
         self.photo = ""
+        self.form = None                  # данные формы одной страницей из приложения (core/ui/builder.py)
         self._resolve()
 
     # ---------- сессия ----------

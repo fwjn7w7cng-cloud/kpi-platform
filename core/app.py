@@ -30,7 +30,7 @@ MODULES = ["debts", "reminders", "achievements", "staff", "payroll", "tasks", "a
 
 
 RESET = {"home", "mon"}          # главная и смена месяца: путь «Назад» начинается заново
-REPLACE = {"pb", "rating", "blt"}       # вкладки внизу одного экрана (должность в конструкторе, показатель рейтинга) — не копят шаги «Назад»
+REPLACE = {"pb", "rating", "blt", "swb"}       # вкладки внизу одного экрана (должность в конструкторе, показатель рейтинга) — не копят шаги «Назад»
 STEPLESS = {"qzs", "qza"}        # прохождение теста: вопросы не копятся в путь, «‹ Назад» — к списку тестов
 
 
@@ -69,6 +69,7 @@ class App:
         self.pending = []
         importlib.import_module("core.ui.screens")
         importlib.import_module("core.ui.tariff")
+        importlib.import_module("core.ui.builder")
         importlib.import_module("core.billing")
         importlib.import_module("core.control")
         importlib.import_module("core.onboard")
@@ -260,13 +261,14 @@ class App:
         self.last_sid = "up"
         return self._with_keyboard(user_id, self._finish(ctx, reports.receive(ctx, name, data), "up"))
 
-    def press(self, user_id, data, top=False):
-        """top — нажатие из нижнего меню: путь «Назад» начинается заново."""
+    def press(self, user_id, data, top=False, form=None):
+        """top — нажатие из нижнего меню: путь «Назад» начинается заново. form — данные формы одной страницей (приложение)."""
         from core import demo
         locked = self._panel_locked(user_id)
         if locked:
             return locked
         ctx = self.ctx(user_id)
+        ctx.form = form if isinstance(form, dict) else None
         g = demo.gate(ctx, press=data)
         if g is not None:
             return g

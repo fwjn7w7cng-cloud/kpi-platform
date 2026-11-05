@@ -95,6 +95,13 @@ def tariff(ctx):
 
 
 def build(ctx):
+    if ctx.demo:                                     # Адам 05.11: собирается одной-двумя страницами (core/ui/builder.py)
+        from core.ui import builder as B
+        return B.page(ctx)
+    return summary(ctx)
+
+
+def summary(ctx):
     q = quote_of(ctx)
     counts = counts_of(ctx)
     people = sum(counts.values())

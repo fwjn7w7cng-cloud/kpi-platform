@@ -210,6 +210,65 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 .welcome { text-align: center; padding-block: 24px 8px; } .welcome .ic { font-size: 44px; }
 .welcome p { color: var(--ink-2); margin: 0; }
 #htitle { cursor: pointer; }
+/* 🧩 «Собрать бота» одной страницей (Адам 05.11) */
+.bld { display: flex; flex-direction: column; gap: 14px; }
+.bseg { display: flex; gap: 4px; background: var(--sunk); border-radius: 12px; padding: 4px; position: sticky; top: 0; z-index: 3; }
+.bseg button { flex: 1; border: 0; background: none; border-radius: 9px; padding: 9px 6px; font-weight: 600; font-size: 14px; color: var(--ink-2); cursor: pointer; }
+.bseg button.on { background: var(--surface); color: var(--ink); box-shadow: var(--edge); }
+.bbody { display: flex; flex-direction: column; gap: 18px; }
+.bsec { display: flex; flex-direction: column; gap: 8px; }
+.bst { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); display: flex; justify-content: space-between; gap: 8px; }
+.bst em { font-style: normal; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.bhint { margin: 0; font-size: 13px; color: var(--ink-2); }
+.bchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.bchip { border: 0; box-shadow: var(--edge); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 8px 12px; font-size: 13.5px; font-weight: 500; line-height: 1.2; cursor: pointer; }
+.bchip small { margin-left: 5px; opacity: .65; font-weight: 400; }
+.bchip.on { background: var(--ink); color: var(--bg); box-shadow: none; }
+.bchip.red.on { background: var(--accent); color: var(--onacc); }
+.bchip.sm { font-size: 12.5px; padding: 6px 10px; }
+.bdept { box-shadow: var(--edge); background: var(--surface); border-radius: var(--r); overflow: hidden; }
+.bdept.on { box-shadow: 0 0 0 1.5px var(--ink); }
+.bdrow { display: flex; align-items: center; gap: 10px; padding: 11px 12px; }
+.bic { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); flex: none; font-size: 17px; }
+.bic .si { width: 19px; height: 19px; }
+.bt { flex: 1; min-width: 0; } .bt b { display: block; font-size: 15px; } .bt span { display: block; font-size: 12.5px; color: var(--ink-2); }
+.bsw { width: 46px; height: 28px; border-radius: 14px; background: var(--line); border: 0; position: relative; flex: none; cursor: pointer; transition: background .15s; }
+.bsw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.bsw.on { background: var(--accent); } .bsw.on::after { transform: translateX(18px); }
+.binner { border-top: 1px solid var(--line); padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 10px; background: var(--sunk); }
+.blab { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; }
+.bstep { display: inline-flex; align-items: center; box-shadow: var(--edge); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.bstep button { border: 0; background: none; width: 36px; height: 34px; font-size: 19px; font-weight: 600; cursor: pointer; }
+.bstep input { width: 48px; border: 0; text-align: center; font: inherit; font-weight: 600; background: none; color: var(--ink); font-variant-numeric: tabular-nums; }
+.bghost { border: 0; box-shadow: var(--edge); background: var(--surface); border-radius: 12px; padding: 12px; font-weight: 600; font-size: 14px; cursor: pointer; }
+.brole { box-shadow: var(--edge); background: var(--surface); border-radius: var(--r); padding: 12px; display: flex; flex-direction: column; gap: 9px; }
+.brh { display: flex; align-items: center; gap: 10px; } .brh b { font-size: 15.5px; }
+.bitem { background: var(--sunk); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.bih { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; } .bih b { font-size: 13.5px; } .bih b .si { width: 15px; height: 15px; display: inline-block; vertical-align: -2px; }
+.bih span { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink-2); }
+.bx { border: 0; background: none; color: var(--ink-2); font-size: 14px; cursor: pointer; padding: 0 2px; }
+.bnum { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
+.bnum span { flex: 1; min-width: 0; }
+.bnum input { width: 96px; border: 0; box-shadow: var(--edge); border-radius: 8px; padding: 6px 8px; font: inherit; font-weight: 600; font-size: 15px; color: var(--ink); background: var(--surface); font-variant-numeric: tabular-nums; text-align: right; }
+.bfc { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--ink-2); }
+.bfx { display: flex; gap: 8px; font-size: 13px; color: var(--ink-2); } .bfx em { font-style: normal; color: var(--ink); text-align: right; flex: 1; }
+.blink { border: 0; background: none; color: var(--accent); font-weight: 600; font-size: 14px; text-align: left; padding: 2px 0; cursor: pointer; }
+.brow2 { display: flex; gap: 14px; flex-wrap: wrap; }
+.bmore { display: flex; flex-direction: column; gap: 7px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.bmg { font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); margin-top: 3px; }
+.bmore .bchip .si { width: 15px; height: 15px; display: inline-block; vertical-align: -2px; }
+.bvrow { display: flex; flex-direction: column; gap: 5px; padding: 7px 8px; background: var(--sunk); border-radius: 10px; font-size: 12.5px; color: var(--ink-2); }
+.bex { background: var(--sunk); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; font-size: 13px; }
+.bex > div { display: flex; justify-content: space-between; gap: 10px; } .bex small { display: block; color: var(--ink-2); font-size: 11.5px; }
+.bex b { font-variant-numeric: tabular-nums; white-space: nowrap; } .bex .neg { color: var(--bad); }
+.bexh { font-weight: 700; color: var(--ink-2); font-size: 12px; }
+.btot { border-top: 1px solid var(--line); padding-top: 6px; font-weight: 700; }
+.bsum { position: sticky; bottom: 0; z-index: 3; display: flex; align-items: center; gap: 10px; background: var(--surface); box-shadow: var(--edge), 0 -6px 18px rgba(0,0,0,.06);
+  border-radius: 14px; padding: 10px 12px; margin-bottom: 4px; }
+.bm { flex: 1; min-width: 0; } .bm b { display: block; font-family: var(--display); font-size: 21px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.bm span { display: block; font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+.bgo { border: 0; background: var(--accent); color: var(--onacc); font-weight: 700; font-size: 14.5px; border-radius: 12px; padding: 12px 14px; white-space: nowrap; cursor: pointer; }
+
 /* ===== Оформление (Адам 02.11): 7 стилей + «Классика»; выбор — 🎨 в шапке, хранится на телефоне ===== */
 html:root[data-skin] { --bgfx: none; }
 html:root[data-skin="glass"] { color-scheme: dark;
@@ -539,6 +598,7 @@ function block(b) {
     case "medals": return T + `<div class="cards">${b.items.map(([img, t, s, r]) => `<div class="medal"><span class="m">${/gold|зол/i.test(img) ? "🥇" : /silver|сер/i.test(img) ? "🥈" : /bronze|брон/i.test(img) ? "🥉" : "🏅"}</span><div><b>${esc(t)}</b>${s ? `<small>${esc(s)}</small>` : ""}</div>${r ? `<b class="r">${esc(r)}</b>` : ""}</div>`).join("")}</div>`;
     case "lines": return T + `<div class="lines">${b.items.map(l => `<p>${esc(l)}</p>`).join("")}</div>`;
     case "note": return `<div class="note">${esc(b.text)}</div>`;
+    case "builder": BLDD = b.data; return `<div class="bld" id="bld"></div>`;
   }
   return "";
 }
@@ -608,6 +668,165 @@ function winOf(msgs) {
 }
 function backOf(msgs) { for (const m of msgs) for (const r of m.buttons || []) for (const [, to] of r) if (to.startsWith("bk:")) return to; return null; }
 
+// ===== 🧩 «Собрать бота» одной страницей (Адам 05.11; core/ui/builder.py) =====
+// Всё меняется на телефоне без запроса к серверу: страница стоит на месте, сумма считается здесь же (как pricing.quote).
+// На сервер выбор уходит JSON-ом: тихо через секунду после изменений (swb:s:q) и при КП / заявке / анкете / примере расчёта.
+let BS = null, BLDD = null, BUI = null, BLDT = null;
+const bfmt = n => Math.round(n).toLocaleString("ru-RU").replace(/[ ,]/g, " ");
+function bldInit(d) {
+  const ui = BUI || d.ui || {};
+  BS = {d, funcs: new Set(d.funcs), counts: {...d.counts}, year: !!d.year, base: d.base,
+        pb: Object.fromEntries(d.roles.map(r => [r.pos, JSON.parse(JSON.stringify(r.items))])),
+        ui: {tab: ui.tab || 0, more: ui.more || {}, ex: ui.ex || ""}};
+  BUI = BS.ui;
+  const el = $("bld"); if (!el) return;
+  el.addEventListener("click", bldClick);
+  el.addEventListener("input", bldInput);
+  el.addEventListener("change", bldInput);
+  bldRender();
+}
+function bQuote() {
+  const d = BS.d, pr = d.prices, R = x => Math.round(x / pr.round) * pr.round;
+  const on = {}; let sum = 0, people = 0, extra = 0;
+  d.all.forEach(([f, , p]) => { if (BS.funcs.has(f)) sum += p; });
+  d.depts.forEach(x => x.fs.forEach(([f, , p]) => { if (BS.funcs.has(f)) { sum += p; on[x.k] = true; } }));
+  d.depts.forEach(x => { if (on[x.k]) people += +BS.counts[x.k] || 0; });
+  sum += people * pr.user;
+  const all = d.depts.every(x => on[x.k]);
+  const disc = all ? sum * pr.disc_all / 100 : 0;
+  d.extra.forEach(([f, , p]) => { if (BS.funcs.has(f)) extra += p; });
+  const monthly = R(sum - disc + extra), year = R(monthly * (1 - pr.disc_year / 100));
+  const setup = BS.funcs.size ? Math.max(Math.round(monthly * pr.setup_mult / 1000) * 1000, pr.setup_min) : 0;
+  return {monthly, year, setup, people, on, all};
+}
+function bToggleFunc(f) {
+  const req = BS.d.requires;
+  if (BS.funcs.has(f)) { BS.funcs.delete(f); Object.entries(req).forEach(([need, deps]) => { if (deps.includes(f)) BS.funcs.delete(need); }); }
+  else { BS.funcs.add(f); (req[f] || []).forEach(x => BS.funcs.add(x)); }
+}
+function bDept(k) {
+  const x = BS.d.depts.find(y => y.k === k), on = x.fs.some(([f]) => BS.funcs.has(f));
+  if (on) x.fs.forEach(([f]) => { if (BS.funcs.has(f)) bToggleFunc(f); });
+  else { x.fs.forEach(([f]) => { if (!BS.funcs.has(f)) bToggleFunc(f); }); if (!+BS.counts[k]) BS.counts[k] = BS.d.sizes.find(s => s[0] === "company")[3][k] || 5; }
+}
+const bVs = (b, pos) => BS.d.bricks[b].vs.filter(v => !v.for || v.for.includes(pos));
+const bVar = (b, v) => BS.d.bricks[b].vs.find(x => x.v === v);
+function bNew(b, v) { const x = bVar(b, v); const fx = {}; x.f.forEach(f => { if (f[2] === "fixed") fx[f[0]] = f[3]; }); return {b, v, p: JSON.parse(JSON.stringify(x.p)), fx}; }
+function bPick(pos, b, v) {
+  const its = BS.pb[pos], i = its.findIndex(t => t.b === b && t.v === v);
+  if (i >= 0) { its.splice(i, 1); return; }
+  const g = bVar(b, v).g;
+  for (let j = its.length - 1; j >= 0; j--) if (its[j].b === b && bVar(b, its[j].v) && bVar(b, its[j].v).g === g) its.splice(j, 1);
+  its.push(bNew(b, v));
+}
+function bSave(next) {
+  clearTimeout(BLDT);
+  const form = {funcs: [...BS.funcs], counts: BS.counts, year: BS.year, base: BS.base,
+                pb: Object.fromEntries(Object.entries(BS.pb).map(([k, its]) => [k, its.map(t => ({b: t.b, v: t.v, p: t.p}))])), ui: BS.ui};
+  if (next) { call("press", {to: "swb:s:" + next, form}); return; }
+  fetch("/api/press", {method: "POST", headers: {"Content-Type": "application/json"}, credentials: "same-origin",
+                       body: JSON.stringify({to: "swb:s:q", form})}).catch(() => {});
+}
+const bLater = () => { clearTimeout(BLDT); BLDT = setTimeout(() => bSave(""), 1200); };
+document.addEventListener("visibilitychange", () => { if (document.hidden && BLDT && BS) bSave(""); });
+
+function bChip(on, a, v, t, cls = "", info = "") {
+  return `<button class="bchip ${on ? "on" : ""} ${cls}" data-b="${a}" data-v="${esc(v)}"${info ? ` title="${esc(info)}"` : ""}>${t}</button>`;
+}
+function bStep(k) {
+  return `<span class="bstep"><button data-b="minus" data-v="${k}" aria-label="меньше">−</button><input id="bn-${k}" value="${+BS.counts[k] || 0}" inputmode="numeric" data-b="num" data-v="${k}" aria-label="людей"><button data-b="plus" data-v="${k}" aria-label="больше">+</button></span>`;
+}
+function bPage1(q) {
+  const d = BS.d;
+  let h = `<div class="bsec"><div class="bst">Сколько людей в фирме</div><div class="bchips">${d.sizes.map(([c, t, sz, ppl]) =>
+    bChip(BS.base === c, "size", c, `${esc(t)}<small>${Object.values(ppl).reduce((a, b) => a + b, 0)} чел.</small>`, "", sz)).join("")}</div>
+    <p class="bhint">Набор — только начало: дальше любой отдел и функцию можно включить или снять.</p></div>`;
+  h += `<div class="bsec"><div class="bst">Для всех отделов</div><div class="bchips">${d.all.map(([f, t, , i]) => bChip(BS.funcs.has(f), "func", f, esc(t), "", i)).join("")}</div></div>`;
+  h += `<div class="bsec"><div class="bst">Отделы <em>включите нужные</em></div>` + d.depts.map(x => {
+    const on = q.on[x.k], n = x.fs.filter(([f]) => BS.funcs.has(f)).length;
+    return `<div class="bdept ${on ? "on" : ""}"><div class="bdrow"><span class="bic">${ic(x.ic)}</span><div class="bt"><b>${esc(x.t)}</b><span>${on ? `${+BS.counts[x.k] || 0} чел. · ${n} из ${x.fs.length} функций` : esc(x.who)}</span></div>
+      <button class="bsw ${on ? "on" : ""}" data-b="dept" data-v="${x.k}" role="switch" aria-checked="${!!on}" aria-label="${esc(x.t)}"></button></div>
+      ${on ? `<div class="binner"><div class="blab">Людей в отделе ${bStep(x.k)}</div><div class="bchips">${x.fs.map(([f, t, , i]) => bChip(BS.funcs.has(f), "func", f, esc(t), "", i)).join("")}</div></div>` : ""}</div>`;
+  }).join("") + `</div>`;
+  h += `<div class="bsec"><div class="bst">Дополнительно</div><div class="bchips">${d.extra.map(([f, t, , i]) => bChip(BS.funcs.has(f), "func", f, esc(t), "", i)).join("")}
+    ${bChip(BS.year, "year", "", `Оплата за год −${d.prices.disc_year}%`)}</div></div>`;
+  h += `<div class="bsec"><button class="bghost" data-b="go" data-v="pdf">📄 Коммерческое предложение</button><button class="bghost" data-b="go" data-v="cd">📋 Анкета для подключения</button></div>`;
+  return h;
+}
+function bField(pos, i, t, f) {
+  const [k, label, kind, opt] = f, val = t.p[k];
+  if (kind === "fixed") return `<div class="bfx"><span>${esc(label)}</span><em>${esc((t.fx && t.fx[k]) || opt || "")}</em></div>`;
+  if (kind === "choice") return `<div class="bfc"><span>${esc(label)}</span><div class="bchips">${opt.map(([v, l]) =>
+    bChip(String(val) === String(v), "fch", `${pos}|${i}|${k}|${JSON.stringify(v)}`, esc(l), "sm")).join("")}</div></div>`;
+  const shown = kind === "pct" ? +((+val || 0) * 100).toFixed(4) : val;
+  const unit = kind === "pct" ? "%" : kind === "money" ? "₽" : "";
+  return `<label class="bnum"><span>${esc(label)}</span><input id="bf-${pos}-${i}-${k}" value="${esc(shown ?? "")}" inputmode="${kind === "text" ? "text" : "decimal"}" data-b="fld" data-v="${pos}|${i}|${k}|${kind}">${unit}</label>`;
+}
+function bRole(r) {
+  const d = BS.d, pos = r.pos, its = BS.pb[pos], more = BS.ui.more[pos];
+  const list = Object.entries(d.bricks).filter(([, b]) => b.roles.includes(pos));
+  const groups = [...new Set(list.map(([, b]) => b.g))];
+  let h = `<div class="brole"><div class="brh"><span class="bic">${ic(r.ic)}</span><b>${esc(r.t)}</b></div>`;
+  h += `<div class="bchips">${r.quick.map(([b, v, t]) => bChip(its.some(x => x.b === b && x.v === v), "quick", `${pos}|${b}|${v}`, esc(t), "red")).join("")}</div>`;
+  h += its.map((t, i) => { const b = d.bricks[t.b], vr = bVar(t.b, t.v); if (!b || !vr) return "";
+    return `<div class="bitem"><div class="bih"><b>${ic(b.ic)} ${esc(b.t)}</b><span>${esc(vr.t)}</span><button class="bx" data-b="del" data-v="${pos}|${i}" aria-label="убрать">✕</button></div>${vr.f.map(f => bField(pos, i, t, f)).join("")}</div>`; }).join("");
+  if (!its.length) h += `<p class="bhint">Ничего не выбрано — отметьте, из чего состоит зарплата.</p>`;
+  h += `<button class="blink" data-b="more" data-v="${pos}">${more ? "− Скрыть способы" : `➕ Ещё способы оплаты · ${list.length}`}</button>`;
+  if (more) h += `<div class="bmore">${groups.map(g => `<div class="bmg">${esc(g)}</div><div class="bchips">${list.filter(([, b]) => b.g === g).map(([k, b]) =>
+      bChip(its.some(x => x.b === k), "brick", `${pos}|${k}`, `${ic(b.ic)} ${esc(b.t)}`, "", b.note)).join("")}</div>` +
+      list.filter(([k, b]) => b.g === g && its.some(x => x.b === k) && bVs(k, pos).length > 1).map(([k, b]) =>
+        `<div class="bvrow"><span>${esc(b.t)}:</span><div class="bchips">${bVs(k, pos).map(v => bChip(its.some(x => x.b === k && x.v === v.v), "var", `${pos}|${k}|${v.v}`, esc(v.t), "sm", v.i)).join("")}</div></div>`).join("")).join("")}</div>`;
+  const ex = d.example && d.example[pos];
+  h += `<div class="brow2"><button class="blink" data-b="go" data-v="ex:${pos}">🧾 ${ex ? "Пересчитать пример" : "Пример расчёта"}</button><button class="blink" data-b="go" data-v="pb:${pos}">🧱 Ступени подробно</button></div>`;
+  if (ex) h += ex.none ? `<p class="bhint">${esc(ex.none)}</p>` : `<div class="bex"><div class="bexh">${esc(ex.who)}</div>${ex.rows.map(([n, s, x]) =>
+      `<div><span>${esc(n)}${x ? `<small>${esc(x)}</small>` : ""}</span><b class="${s < 0 ? "neg" : ""}">${s < 0 ? "− " : ""}${bfmt(Math.abs(s))}</b></div>`).join("")}<div class="btot"><span>Итого за месяц</span><b>${bfmt(ex.total)} ₽</b></div></div>`;
+  return h + `</div>`;
+}
+function bPage2(q) {
+  const rs = BS.d.roles.filter(r => q.on[r.d]);
+  return `<div class="bsec"><div class="bst">Как платите людям</div><p class="bhint">Отметьте, из чего состоит зарплата, и впишите цифры. Пример расчёта — на человеке из демо-фирмы.</p></div>` +
+    (rs.length ? rs.map(bRole).join("") : `<p class="bhint">Включите хотя бы один отдел на первой странице.</p>`);
+}
+function bSum(q) {
+  const main = BS.year ? q.year : q.monthly;
+  const btn = BS.ui.tab === 0 ? `<button class="bgo" data-b="tab" data-v="1">Дальше ›</button>` : `<button class="bgo" data-b="go" data-v="req">📨 Хочу так</button>`;
+  return `<div class="bsum"><div class="bm"><b>${bfmt(main)} ₽ / мес</b><span>${BS.year ? "при оплате за год · " : ""}подключение ${bfmt(q.setup)} ₽ · ${q.people} чел. · ${BS.d.prices.trial_days} дней бесплатно</span></div>${btn}</div>`;
+}
+function bldRender() {
+  const el = $("bld"); if (!el || !BS) return;
+  const q = bQuote(), t = BS.ui.tab;
+  el.innerHTML = `<div class="bseg"><button class="${t === 0 ? "on" : ""}" data-b="tab" data-v="0">1 · Что нужно</button><button class="${t === 1 ? "on" : ""}" data-b="tab" data-v="1">2 · Как платим</button></div>` +
+    `<div class="bbody">${t === 0 ? bPage1(q) : bPage2(q)}</div>` + bSum(q);
+}
+function bldClick(e) {
+  const b = e.target.closest("[data-b]"); if (!b || b.tagName === "INPUT") return;
+  const a = b.dataset.b, v = b.dataset.v || "";
+  if (a === "go") { bSave(v); return; }
+  if (a === "tab") { BS.ui.tab = +v; bldRender(); $("main").scrollTop = 0; bLater(); return; }
+  if (a === "size") { const s = BS.d.sizes.find(x => x[0] === v); BS.base = v; BS.funcs = new Set(s[4]); BS.counts = {...s[3]}; }
+  else if (a === "func") bToggleFunc(v);
+  else if (a === "dept") bDept(v);
+  else if (a === "year") BS.year = !BS.year;
+  else if (a === "plus" || a === "minus") { BS.counts[v] = Math.max(0, (+BS.counts[v] || 0) + (a === "plus" ? 1 : -1)); if (!BS.counts[v]) bDept(v); }
+  else if (a === "quick") { const [pos, k, vv] = v.split("|"); bPick(pos, k, vv); }
+  else if (a === "var") { const [pos, k, vv] = v.split("|"); bPick(pos, k, vv); }
+  else if (a === "brick") { const [pos, k] = v.split("|"); const its = BS.pb[pos];
+    if (its.some(x => x.b === k)) BS.pb[pos] = its.filter(x => x.b !== k); else its.push(bNew(k, bVs(k, pos)[0].v)); }
+  else if (a === "del") { const [pos, i] = v.split("|"); BS.pb[pos].splice(+i, 1); }
+  else if (a === "more") BS.ui.more[v] = !BS.ui.more[v];
+  else if (a === "fch") { const [pos, i, k, val] = v.split("|"); BS.pb[pos][+i].p[k] = JSON.parse(val); }
+  else return;
+  bldRender(); bLater();
+}
+function bldInput(e) {
+  const el = e.target, a = el.dataset && el.dataset.b; if (!a) return;
+  if (a === "num") { const n = parseInt(String(el.value).replace(/\D/g, ""), 10); BS.counts[el.dataset.v] = isNaN(n) ? 0 : Math.min(n, 5000);
+    if (e.type === "change") bldRender(); else { const s = document.querySelector("#bld .bsum"); if (s) s.outerHTML = bSum(bQuote()); } bLater(); return; }
+  if (a === "fld") { const [pos, i, k, kind] = el.dataset.v.split("|"), it = BS.pb[pos][+i]; if (!it) return;
+    if (kind === "text") it.p[k] = el.value.slice(0, 60);
+    else { const n = parseFloat(String(el.value).replace(/\s/g, "").replace(",", ".")); if (!isNaN(n)) it.p[k] = kind === "pct" ? n / 100 : n; }
+    bLater(); }
+}
 function show(d) {
   if (d.tabs) { S.tabs = d.tabs; S.extra = d.extra || []; S.tools = d.tools || []; }
   const msgs = d.msgs || [], parts = [];
@@ -615,9 +834,13 @@ function show(d) {
   if (d.home && d.push === false) { const pb = pushBar(); if (pb) parts.push(pb); }
   msgs.forEach((m, i) => parts.push(msgHtml(m, d.home, i === 0)));
   // то же окно выбора (отметили галочку) — страница остаётся на месте, не уезжает наверх
-  const win = winOf(msgs), same = win && win === S.win;
+  const isB = msgs.some(m => m.view && (m.view.blocks || []).some(b => b.k === "builder"));
+  if (!isB) { BUI = null; BS = null; }
+  const win = winOf(msgs), same = (win && win === S.win) || (isB && S.wasB);
+  S.wasB = isB;
   const keep = same ? $("main").scrollTop : 0, keepW = same ? window.scrollY : 0;
   $("main").innerHTML = `<div class="screen">${parts.join("")}</div>`;
+  if (BLDD) { const x = BLDD; BLDD = null; bldInit(x); }
   $("main").scrollTop = keep;
   if (same) window.scrollTo(0, keepW);
   S.win = win;

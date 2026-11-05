@@ -105,6 +105,11 @@ class View:
             self.blocks.append(("lines", (title, items)))
         return self
 
+    def builder(self, data):
+        """🧩 Конструктор бота одной страницей (core/ui/builder.py): данные для приложения, картинка и текст его не рисуют."""
+        self.blocks.append(("builder", data))
+        return self
+
     def note(self, text, where="all"):
         """where: all — везде, img — только на картинке, txt — только в тексте."""
         if text:

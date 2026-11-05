@@ -52,6 +52,8 @@ def view_json(v):
         elif k == "lines":
             title, items = data
             out.append({"k": "lines", "title": title, "items": [str(x) for x in items]})
+        elif k == "builder":
+            out.append({"k": "builder", "data": data})
         elif k == "note":
             text, where = data
             if where != "txt":

@@ -292,7 +292,10 @@ class WebApi:
                         self._fail("invite", ip)
                 elif act == "press":
                     to = str(body.get("to") or "home")[:64]
-                    out = self.app.press(uid, to, top=bool(body.get("top")))
+                    form = body.get("form") if isinstance(body.get("form"), dict) else None
+                    out = self.app.press(uid, to, top=bool(body.get("top")), form=form)
+                    if to == "swb:s:q":                # тихое сохранение конструктора: экран не нужен, ленту 🔔 не трогаем
+                        return self._json({"ok": True})
                     sid = getattr(self.app, "last_sid", to.split(":")[0])
                 elif act == "push":                        # подписка телефона на уведомления (или отписка)
                     if body.get("off"):
