@@ -64,6 +64,14 @@ class Base(unittest.TestCase):
 
     @staticmethod
     def tiles(r):
+        """Суммы экрана; у конструктора одной страницей (core/ui/builder.py) — те же числа из его данных."""
+        b = next((b for k, b in r.view.blocks if k == "builder"), None)
+        if b is not None:
+            m = lambda x: f"{x:,} ₽".replace(",", " ")
+            out = {"Подключение, один раз": m(b["check"]["setup"]), "Дальше, в месяц": m(b["check"]["monthly"])}
+            if b["year"]:
+                out["За год: в месяц"] = m(b["check"]["year"])
+            return out
         return dict((a, b) for a, b, _ in next(b for k, b in r.view.blocks if k == "tiles"))
 
 
@@ -109,16 +117,16 @@ class Builder(Base):
         ctx = self.app.ctx(11)
         self.assertFalse(ctx.cfg.has_module("clients"))
         self.assertTrue(ctx.cfg.has_module("stock") and ctx.cfg.dept_on("purchasing") if ctx.cfg.dept("purchasing") else True)
-        self.assertIn("«Старт + 1 функц.»", self.app.press(11, "sw:ed")[0].view.subtitle)
+        self.assertIn("«Старт + 1 функц.»", self.app.press(11, "sw:sum")[0].view.subtitle)
         self.assertEqual(self.app.ctx(11).session["counts"]["sales"], 6)    # набор — типовые люди
-        r3 = self.app.press(11, "sw:ed:company")[0]
-        self.assertIn("«Компания»", r3.view.subtitle)
+        self.app.press(11, "sw:ed:company")
+        self.assertIn("«Компания»", self.app.press(11, "sw:sum")[0].view.subtitle)
 
     def test_people_counts_and_year(self):
         self.owner(12)
         self.app.press(12, "sw:pn")
         r = self.app.text(12, "8 3 4 2")[0]
-        self.assertIn("людей в фирме 17", r.view.subtitle)
+        self.assertIn("людей в фирме 17", self.app.press(12, "sw:sum")[0].view.subtitle)
         q = P.quote(self.app.ctx(12).cfg.packages, {"sales": 8, "stock": 3, "logistics": 4, "office": 2}, P.DEFAULT)
         self.assertEqual(self.tiles(r)["Дальше, в месяц"], f"{q['monthly']:,} ₽".replace(",", " "))
         r = pick(self.app, 12, "y")[0]

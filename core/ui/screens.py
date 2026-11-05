@@ -867,6 +867,8 @@ def demo(ctx, what=None, value=None, *more):
         return T.set_packages(ctx, E.PRESETS[value]["packages"], base=value)
     if what == "ed":
         return T.build(ctx)
+    if what == "sum":                                # расчёт строками (прежний экран «🧩 Собрать»)
+        return T.summary(ctx)
     if what == "pk":
         return T.packages_window(ctx)
     if what == "pn":

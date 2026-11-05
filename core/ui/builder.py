@@ -1,4 +1,4 @@
-"""🧩 «Собрать бота» одной страницей (Адам 05.11: «как в Теплокоме — набор собирается на одной-двух страницах, страница не
+"""🧩 «Собрать бота» одной страницей (Адам 05.11: «как во втором приложении — набор собирается на одной-двух страницах, страница не
 прыгает наверх»; выбраны эскизы 1 «Одна лента» и 2 «Две страницы»).
 
 Экран `swb` отдаёт приложению всё сразу одним блоком `builder` (View.builder): наборы по размеру фирмы, отделы с функциями
@@ -116,7 +116,7 @@ def data(ctx, ex=None, ui=None):
         "requires": {k: sorted(v) for k, v in E.REQUIRES.items()},
         "roles": roles, "bricks": bricks_json(), "fields": {k: [x[0], x[1]] for k, x in PB.F.items()},
         "example": {ex: example_json(ctx, ex)} if ex in PB.POSITIONS else {},
-        "ui": ui if isinstance(ui, dict) else {}, "check": {"monthly": q["monthly"], "setup": q["setup"]},
+        "ui": ui if isinstance(ui, dict) else {}, "check": {"monthly": q["monthly"], "setup": q["setup"], "year": q["monthly_year"]},
     }
 
 
