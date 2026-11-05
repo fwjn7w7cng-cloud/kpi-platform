@@ -280,8 +280,18 @@ def functions_of(packages):
     return {m for m in modules_of(packages) if m in FUNCS}
 
 
-def packages_of(functions):
-    """Набор пакетов по выбранным функциям: отдел включён, если в нём есть функция; уровень продаж — по самой старшей."""
+DEPT_CODES = ("sales", "stock", "logistics", "office")
+
+
+def depts_of(functions):
+    """Отделы, в которых выбрана хотя бы одна функция."""
+    fs = set(functions or ())
+    return {d for d in DEPT_CODES if any(FUNCS.get(f, ("",))[0] == d for f in fs)}
+
+
+def packages_of(functions, depts=()):
+    """Набор пакетов по выбранным функциям: отдел включён, если в нём есть функция или он включён сам (depts — Адам 05.11:
+    отдел без функций — «только зарплата и табель», например водители на окладе); уровень продаж — по самой старшей."""
     fs = set(functions or ())
     out = {code: False for code in PACKAGES}
     out["sales"] = None
@@ -290,8 +300,11 @@ def packages_of(functions):
         out["sales"] = max(levels, key=LEVEL_ORDER.index) if levels else "start"
     for code in ("stock", "logistics", "office", "max"):
         out[code] = any(FUNCS.get(f, ("",))[0] == code for f in fs)
-    if not any(v for k, v in out.items() if k != "max") and "payroll" in fs:
-        pass
+    for d in depts or ():
+        if d == "sales":
+            out["sales"] = out["sales"] or "start"
+        elif d in DEPT_CODES:
+            out[d] = True
     return out
 
 

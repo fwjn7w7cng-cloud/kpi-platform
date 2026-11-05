@@ -116,7 +116,7 @@ def counts_for(ctx, n):
     from core.ui.tariff import counts_of
     c = dict(counts_of(ctx))
     diff = n - sum(c.values())
-    pk = E.packages_of(funcs(ctx))
+    pk = E.packages_of(funcs(ctx), ctx.cfg.depts or ())
     key = next((k for k in ("sales", "stock", "logistics", "office") if pk.get(k)), "sales")
     c[key] = max(0, c.get(key, 0) + diff)
     return c

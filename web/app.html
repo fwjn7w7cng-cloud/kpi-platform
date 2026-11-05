@@ -676,7 +676,7 @@ let BS = null, BLDD = null, BUI = null, BLDT = null;
 const bfmt = n => Math.round(n).toLocaleString("ru-RU").replace(/[ ,]/g, " ");
 function bldInit(d) {
   const ui = BUI || d.ui || {};
-  BS = {d, funcs: new Set(d.funcs), counts: {...d.counts}, year: !!d.year, base: d.base,
+  BS = {d, funcs: new Set(d.funcs), on: new Set(d.on || []), counts: {...d.counts}, year: !!d.year, base: d.base,
         pb: Object.fromEntries(d.roles.map(r => [r.pos, JSON.parse(JSON.stringify(r.items))])),
         ui: {tab: ui.tab || 0, more: ui.more || {}, ex: ui.ex || ""}};
   BUI = BS.ui;
@@ -690,25 +690,28 @@ function bQuote() {
   const d = BS.d, pr = d.prices, R = x => Math.round(x / pr.round) * pr.round;
   const on = {}; let sum = 0, people = 0, extra = 0;
   d.all.forEach(([f, , p]) => { if (BS.funcs.has(f)) sum += p; });
-  d.depts.forEach(x => x.fs.forEach(([f, , p]) => { if (BS.funcs.has(f)) { sum += p; on[x.k] = true; } }));
+  // Адам 05.11: отдел включается сам — даже без функций («только зарплата и табель»); скидка — когда в каждом есть платная функция
+  const paid = {};
+  d.depts.forEach(x => { if (BS.on.has(x.k)) on[x.k] = true; x.fs.forEach(([f, , p]) => { if (BS.funcs.has(f)) { sum += p; on[x.k] = paid[x.k] = true; } }); });
   d.depts.forEach(x => { if (on[x.k]) people += +BS.counts[x.k] || 0; });
   sum += people * pr.user;
-  const all = d.depts.every(x => on[x.k]);
+  const all = d.depts.every(x => paid[x.k]);
   const disc = all ? sum * pr.disc_all / 100 : 0;
   d.extra.forEach(([f, , p]) => { if (BS.funcs.has(f)) extra += p; });
   const monthly = R(sum - disc + extra), year = R(monthly * (1 - pr.disc_year / 100));
-  const setup = BS.funcs.size ? Math.max(Math.round(monthly * pr.setup_mult / 1000) * 1000, pr.setup_min) : 0;
+  const setup = (BS.funcs.size || people) ? Math.max(Math.round(monthly * pr.setup_mult / 1000) * 1000, pr.setup_min) : 0;
   return {monthly, year, setup, people, on, all};
 }
 function bToggleFunc(f) {
   const req = BS.d.requires;
   if (BS.funcs.has(f)) { BS.funcs.delete(f); Object.entries(req).forEach(([need, deps]) => { if (deps.includes(f)) BS.funcs.delete(need); }); }
   else { BS.funcs.add(f); (req[f] || []).forEach(x => BS.funcs.add(x)); }
+  BS.d.depts.forEach(x => { if (x.fs.some(([g]) => BS.funcs.has(g))) BS.on.add(x.k); });   // функция включает свой отдел, снятие — не выключает
 }
 function bDept(k) {
-  const x = BS.d.depts.find(y => y.k === k), on = x.fs.some(([f]) => BS.funcs.has(f));
-  if (on) x.fs.forEach(([f]) => { if (BS.funcs.has(f)) bToggleFunc(f); });
-  else { x.fs.forEach(([f]) => { if (!BS.funcs.has(f)) bToggleFunc(f); }); if (!+BS.counts[k]) BS.counts[k] = BS.d.sizes.find(s => s[0] === "company")[3][k] || 5; }
+  const x = BS.d.depts.find(y => y.k === k), on = BS.on.has(k);
+  if (on) { x.fs.forEach(([f]) => { if (BS.funcs.has(f)) bToggleFunc(f); }); BS.on.delete(k); }
+  else { BS.on.add(k); x.fs.forEach(([f]) => { if (!BS.funcs.has(f)) bToggleFunc(f); }); if (!+BS.counts[k]) BS.counts[k] = BS.d.sizes.find(s => s[0] === "company")[3][k] || 5; }
 }
 const bVs = (b, pos) => BS.d.bricks[b].vs.filter(v => !v.for || v.for.includes(pos));
 const bVar = (b, v) => BS.d.bricks[b].vs.find(x => x.v === v);
@@ -722,7 +725,7 @@ function bPick(pos, b, v) {
 }
 function bSave(next) {
   clearTimeout(BLDT);
-  const form = {funcs: [...BS.funcs], counts: BS.counts, year: BS.year, base: BS.base,
+  const form = {funcs: [...BS.funcs], on: [...BS.on], counts: BS.counts, year: BS.year, base: BS.base,
                 pb: Object.fromEntries(Object.entries(BS.pb).map(([k, its]) => [k, its.map(t => ({b: t.b, v: t.v, p: t.p}))])), ui: BS.ui};
   if (next) { call("press", {to: "swb:s:" + next, form}); return; }
   fetch("/api/press", {method: "POST", headers: {"Content-Type": "application/json"}, credentials: "same-origin",
@@ -745,9 +748,9 @@ function bPage1(q) {
   h += `<div class="bsec"><div class="bst">Для всех отделов</div><div class="bchips">${d.all.map(([f, t, , i]) => bChip(BS.funcs.has(f), "func", f, esc(t), "", i)).join("")}</div></div>`;
   h += `<div class="bsec"><div class="bst">Отделы <em>включите нужные</em></div>` + d.depts.map(x => {
     const on = q.on[x.k], n = x.fs.filter(([f]) => BS.funcs.has(f)).length;
-    return `<div class="bdept ${on ? "on" : ""}"><div class="bdrow"><span class="bic">${ic(x.ic)}</span><div class="bt"><b>${esc(x.t)}</b><span>${on ? `${+BS.counts[x.k] || 0} чел. · ${n} из ${x.fs.length} функций` : esc(x.who)}</span></div>
+    return `<div class="bdept ${on ? "on" : ""}"><div class="bdrow"><span class="bic">${ic(x.ic)}</span><div class="bt"><b>${esc(x.t)}</b><span>${on ? `${+BS.counts[x.k] || 0} чел. · ${n ? `${n} из ${x.fs.length} функций` : "только зарплата и табель"}` : esc(x.who)}</span></div>
       <button class="bsw ${on ? "on" : ""}" data-b="dept" data-v="${x.k}" role="switch" aria-checked="${!!on}" aria-label="${esc(x.t)}"></button></div>
-      ${on ? `<div class="binner"><div class="blab">Людей в отделе ${bStep(x.k)}</div><div class="bchips">${x.fs.map(([f, t, , i]) => bChip(BS.funcs.has(f), "func", f, esc(t), "", i)).join("")}</div></div>` : ""}</div>`;
+      ${on ? `<div class="binner"><div class="blab">Людей в отделе ${bStep(x.k)}</div>${n ? "" : `<p class="bhint">Без функций отдел всё равно в боте: оклад, табель, штрафы, «Моя зарплата» у каждого. Платите только за людей.</p>`}<div class="bchips">${x.fs.map(([f, t, , i]) => bChip(BS.funcs.has(f), "func", f, esc(t), "", i)).join("")}</div></div>` : ""}</div>`;
   }).join("") + `</div>`;
   h += `<div class="bsec"><div class="bst">Дополнительно</div><div class="bchips">${d.extra.map(([f, t, , i]) => bChip(BS.funcs.has(f), "func", f, esc(t), "", i)).join("")}
     ${bChip(BS.year, "year", "", `Оплата за год −${d.prices.disc_year}%`)}</div></div>`;
@@ -808,7 +811,8 @@ function bldClick(e) {
   const a = b.dataset.b, v = b.dataset.v || "";
   if (a === "go") { bSave(v); return; }
   if (a === "tab") { BS.ui.tab = +v; bldRender(); $("main").scrollTop = 0; bLater(); return; }
-  if (a === "size") { const s = BS.d.sizes.find(x => x[0] === v); BS.base = v; BS.funcs = new Set(s[4]); BS.counts = {...s[3]}; }
+  if (a === "size") { const s = BS.d.sizes.find(x => x[0] === v); BS.base = v; BS.funcs = new Set(s[4]); BS.counts = {...s[3]};
+    BS.on = new Set(BS.d.depts.filter(x => x.fs.some(([f]) => BS.funcs.has(f))).map(x => x.k)); }
   else if (a === "func") bToggleFunc(v);
   else if (a === "dept") bDept(v);
   else if (a === "year") BS.year = !BS.year;

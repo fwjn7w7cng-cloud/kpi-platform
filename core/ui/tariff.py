@@ -40,10 +40,16 @@ def funcs_of(cfg):
     return set(cfg.functions) if cfg.functions is not None else E.functions_of(cfg.packages)
 
 
-def quote_of(ctx, sel=None, year=None, counts=None):
+def depts_on(cfg):
+    """Включённые отделы: с функциями и «только зарплата» (05.11)."""
+    return set(cfg.depts) if cfg.depts is not None else E.depts_of(funcs_of(cfg))
+
+
+def quote_of(ctx, sel=None, year=None, counts=None, depts=None):
     if year is None:
         year = bool(ctx.session.get("year")) if ctx.demo else False
-    return P.quote(sel if sel is not None else funcs_of(ctx.cfg), counts or counts_of(ctx), P.prices(ctx.office), year=year)
+    return P.quote(sel if sel is not None else funcs_of(ctx.cfg), counts or counts_of(ctx), P.prices(ctx.office), year=year,
+                   depts=depts_on(ctx.cfg) if depts is None else depts)
 
 
 def quote_view(ctx, q, title, sub):

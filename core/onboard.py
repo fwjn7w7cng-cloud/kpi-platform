@@ -131,7 +131,8 @@ def snapshot(ctx, c):
     counts = counts_of(ctx)
     from core import paybuilder as PB
     from core.ui.tariff import funcs_of
-    c["set"] = {"packages": ctx.cfg.packages, "functions": sorted(funcs_of(ctx.cfg)), "title": ctx.cfg.set_title, "counts": counts, "people": sum(counts.values()),
+    from core.ui.tariff import depts_on
+    c["set"] = {"packages": ctx.cfg.packages, "functions": sorted(funcs_of(ctx.cfg)), "depts": sorted(depts_on(ctx.cfg)), "title": ctx.cfg.set_title, "counts": counts, "people": sum(counts.values()),
                 "monthly": q["monthly"], "setup": q["setup"], "pay": pay_of(ctx), "industry": ctx.industry}
     if ctx.session.get("pb"):                                    # 🧱 конструктор зарплаты: схемы по должностям
         c["set"]["schemes"] = PB.schemes(ctx.session)
@@ -437,6 +438,8 @@ def build_raw(c):
     raw["packages"] = {k: (v or False) if k == "sales" else bool(v) for k, v in pk.items()}
     if s.get("functions"):                                       # функции поштучно (31.10) — как выбрали в окне набора
         raw["functions"] = [f for f in s["functions"] if f in E.FUNCS]
+        if s.get("depts"):                                       # отделы без функций — «только зарплата и табель» (05.11)
+            raw["depts"] = [d for d in s["depts"] if d in E.DEPT_CODES]
     kinds_on = {"sales"} if pk["sales"] else set()
     kinds_on |= {"warehouse", "purchasing"} if pk["stock"] else set()
     kinds_on |= {"logistics"} if pk["logistics"] else set()

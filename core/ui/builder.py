@@ -112,7 +112,7 @@ def data(ctx, ex=None, ui=None):
         "sid": "swb", "sizes": sizes, "base": T.base_of(ctx), "depts": depts,
         "all": [[f, E.FUNC_SHORT[f], pr["f_" + f], T.LOCK.get(f, E.MODULES[f][0])] for f in E.FUNCS if E.FUNCS[f][0] == "all"],
         "extra": [[f, E.FUNC_SHORT[f], pr["f_" + f], T.LOCK.get(f, E.MODULES[f][0])] for f in E.FUNCS if E.FUNCS[f][0] == "max"],
-        "funcs": funcs, "counts": T.counts_of(ctx), "year": bool(ctx.session.get("year")),
+        "funcs": funcs, "on": sorted(T.depts_on(ctx.cfg)), "counts": T.counts_of(ctx), "year": bool(ctx.session.get("year")),
         "prices": {k: pr[k] for k in ("user", "disc_all", "disc_year", "setup_mult", "setup_min", "trial_days")} | {"round": P.ROUND},
         "requires": {k: sorted(v) for k, v in E.REQUIRES.items()},
         "roles": roles, "bricks": bricks_json(), "fields": {k: [x[0], x[1]] for k, x in PB.F.items()},
@@ -202,6 +202,8 @@ def save(ctx, form):
             pb[pos] = _clean_items(pos, items, PB.items_of(ctx, pos))
     ctx.session["pb"] = pb
     ctx.session["funcs"] = sorted(fs)
+    on = form.get("on")                               # отделы включаются сами по себе — даже без функций (Адам 05.11)
+    ctx.session["depts"] = sorted(E.depts_of(fs) | ({d for d in on if d in DEPTS} if isinstance(on, list) else set()))
     ctx.session.pop("packages", None)
     ctx.session.pop("edition", None)
     ctx.session.pop("pk_draft", None)

@@ -84,6 +84,25 @@ class Builder(unittest.TestCase):
         monthly = round((s - disc + ext) / pr["round"]) * pr["round"]
         self.assertEqual(monthly, d["check"]["monthly"])
 
+    def test_dept_without_functions(self):
+        """Адам 05.11: отдел без функций (водители на окладе) остаётся в боте и в цене — люди × цена за человека."""
+        from core.access import pricing as P
+        form = {"funcs": ["kpi"], "on": ["logistics", "stock", "office", "zzz"],
+                "counts": {"sales": 5, "logistics": 15, "stock": 0, "office": 0}}
+        d = builder_of(self.app.press(ADMIN, "swb:s:q2", form=form))
+        self.assertEqual(d["on"], ["logistics", "office", "sales", "stock"])
+        ctx = self.app.ctx(ADMIN)
+        self.assertTrue(ctx.cfg.packages["logistics"])
+        self.assertIn("staff", ctx.cfg.modules)                 # кабинет сотрудника есть
+        self.assertNotIn("logistics", ctx.cfg.functions)         # «Рейсы» — нет
+        pr = P.prices(ctx.office)
+        q = P.quote({"kpi"}, {"sales": 5, "logistics": 15}, pr, depts={"sales", "stock", "logistics", "office"})
+        self.assertEqual(q["people"], 20)
+        self.assertFalse(q["all_depts"])                         # 4 отдела без платных функций — без скидки
+        self.assertTrue(any("только зарплата" in x[2] for x in q["lines"]))
+        self.assertEqual(q["monthly"], d["check"]["monthly"])
+        self.assertEqual(P.quote(set(), {"logistics": 10}, pr, depts={"logistics"})["monthly"], P.rnd(10 * pr["user"]))
+
     def test_look_then_want(self):
         """Адам 05.11: «👀 Посмотреть мой бот» — сохраняет набор и открывает главную демо, «📨 Хочу так» — уже там."""
         d = builder_of(self.app.press(ADMIN, "sw:ed"))

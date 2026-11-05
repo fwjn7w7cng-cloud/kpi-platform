@@ -28,7 +28,7 @@ class Ctx:
         cfg = app.cfg
         if self.demo:                                 # конструктор демо: набор живёт в сессии зрителя
             if isinstance(self.session.get("funcs"), list):
-                cfg = cfg.with_functions(self.session["funcs"])
+                cfg = cfg.with_functions(self.session["funcs"], self.session.get("depts"))
             elif isinstance(self.session.get("packages"), dict):
                 cfg = cfg.with_packages(self.session["packages"])
             elif self.session.get("edition") in E.PRESETS:
@@ -36,7 +36,7 @@ class Ctx:
         else:                                         # одобренные Адамом добавления / удаления функций (core/billing)
             b = self.office.get("billing") or {}
             if isinstance(b.get("functions"), list):
-                cfg = cfg.with_functions(b["functions"])
+                cfg = cfg.with_functions(b["functions"], cfg.depts)
         self.cfg = cfg
         self.month = self.session.get("month") or month_of(self.today)
         if self.month > month_of(self.today):

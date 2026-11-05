@@ -73,6 +73,7 @@ class ClientConfig:
     positions: list = field(default_factory=list)
     raw: dict = field(repr=False, default_factory=dict)
     functions: object = None     # выбранные поштучно функции (31.10) или None — тогда по пакетам
+    depts: object = None         # включённые отделы (05.11): с функциями и без («только зарплата и табель»)
 
     @property
     def modules(self):
@@ -81,12 +82,14 @@ class ClientConfig:
             return E.modules_from(self.functions, self.packages)
         return E.modules_of(self.packages)
 
-    def with_functions(self, functions):
-        """Копия анкеты с функциями поштучно (демо: окно набора; клиент: functions в анкете)."""
+    def with_functions(self, functions, depts=None):
+        """Копия анкеты с функциями поштучно (демо: окно набора; клиент: functions в анкете).
+        depts — включённые отделы; отдел с функцией включён всегда, без функций — если назван в depts."""
         import copy
         c = copy.copy(self)
         c.functions = {f for f in functions if f in E.FUNCS}
-        c.packages = E.packages_of(c.functions)
+        c.depts = E.depts_of(c.functions) | {d for d in (depts or ()) if d in E.DEPT_CODES}
+        c.packages = E.packages_of(c.functions, c.depts)
         c.edition = E.preset_of(c.packages) if E.functions_of(c.packages) == c.functions else E.CUSTOM
         return c
 
@@ -101,6 +104,7 @@ class ClientConfig:
         import copy
         c = copy.copy(self)
         c.functions = None
+        c.depts = None
         c.packages = E.normalize(packages)
         c.edition = E.preset_of(c.packages)
         return c
@@ -405,6 +409,9 @@ def parse(client_id, raw, hooks=None):
     if funcs is not None:
         if not isinstance(funcs, list) or any(f not in E.FUNCS for f in funcs):
             p.append(f"functions — список функций: {', '.join(E.FUNCS)}")
+    dlist = raw.get("depts")
+    if dlist is not None and (not isinstance(dlist, list) or any(d not in E.DEPT_CODES for d in dlist)):
+        p.append(f"depts — список отделов: {', '.join(E.DEPT_CODES)}")
     if p:
         raise ConfigError(client_id, p)
     cfg = ClientConfig(
@@ -413,7 +420,7 @@ def parse(client_id, raw, hooks=None):
         lines=lines, source=source, pay=pay, holidays={str(k): v for k, v in holidays.items()},
         positions=positions, raw=raw)
     if funcs is not None:                     # функции поштучно (31.10) — важнее пакетов
-        cfg = cfg.with_functions(funcs)
+        cfg = cfg.with_functions(funcs, raw.get("depts"))
     return cfg
 
 

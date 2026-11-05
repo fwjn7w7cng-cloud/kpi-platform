@@ -85,12 +85,13 @@ def fmt(x):
     return s
 
 
-def quote(sel, counts, pr, year=False):
+def quote(sel, counts, pr, year=False, depts=()):
     """Расчёт по функциям: {lines, dept_sum, discount, monthly, monthly_year, year_total, setup_lines, setup, people,
     all_depts, functions, packages}. sel — набор функций (множество / список) или, по-старому, словарь пакетов.
     lines — [(подпись, сумма в месяц, пояснение)]: отделы с их функциями, люди, дополнительное."""
     funcs = E.functions_of(sel) if isinstance(sel, dict) else {f for f in (sel or ()) if f in E.FUNCS}
-    p = E.packages_of(funcs)
+    p = E.packages_of(funcs, depts)
+    paid = E.packages_of(funcs)                  # скидка за все 4 отдела — только если в каждом есть платная функция (Адам 05.11)
     counts = counts or {}
     lines, setup_lines = [], []
     dept_sum = 0.0
@@ -99,6 +100,8 @@ def quote(sel, counts, pr, year=False):
             continue
         fs = [f for f in E.FUNCS if f in funcs and E.FUNCS[f][0] == grp]
         if not fs:
+            if grp in E.DEPT_CODES and p.get(grp):
+                lines.append((f"{icon} {gtitle}", 0, "без функций — только зарплата и табель"))
             continue
         amount = sum(pr[f"f_{f}"] for f in fs)
         lines.append((f"{icon} {gtitle}", amount, f"{len(fs)} функц.: " + ", ".join(E.FUNC_SHORT[f] for f in fs)))
@@ -107,7 +110,7 @@ def quote(sel, counts, pr, year=False):
     if people:
         lines.append(("👥 Люди в приложении", people * pr["user"], f"{people} чел. × {fmt(pr['user'])}"))
         dept_sum += people * pr["user"]
-    all_depts = all(p.get(d) for d in ("sales", "stock", "logistics", "office"))
+    all_depts = all(paid.get(d) for d in ("sales", "stock", "logistics", "office"))
     discount = dept_sum * pr["disc_all"] / 100 if all_depts else 0.0
     extra = [f for f in E.FUNCS if f in funcs and E.FUNCS[f][0] == "max"]
     max_sum = sum(pr[f"f_{f}"] for f in extra)
@@ -117,7 +120,7 @@ def quote(sel, counts, pr, year=False):
     monthly = rnd(dept_sum - discount + max_sum)
     monthly_year = rnd(monthly * (1 - pr["disc_year"] / 100))
     setup = 0
-    if funcs:
+    if funcs or people:
         raw = monthly * pr["setup_mult"]
         setup = max(int(round(raw / 1000)) * 1000, int(pr["setup_min"]))
         setup_lines.append((f"Месячная оплата × {fmt(pr['setup_mult'])}", setup) if setup > pr["setup_min"] else
@@ -125,5 +128,5 @@ def quote(sel, counts, pr, year=False):
     return {"lines": lines, "dept_sum": dept_sum, "discount": discount, "all_depts": all_depts, "monthly": monthly,
             "monthly_year": monthly_year, "year": bool(year), "year_total": monthly_year * 12, "setup_lines": setup_lines,
             "setup": setup, "people": people, "packages": p, "functions": funcs, "trial_days": int(pr["trial_days"]),
-            "empty": not funcs}
+            "empty": not funcs and not people}
 
