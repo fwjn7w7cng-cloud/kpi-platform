@@ -268,6 +268,12 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 .bend { display: grid; gap: 8px; padding-bottom: 8px; }
 .blink { border: 0; background: none; color: var(--accent); font-weight: 600; font-size: 14px; text-align: left; padding: 2px 0; cursor: pointer; }
 .brow2 { display: flex; gap: 14px; flex-wrap: wrap; }
+/* лёгкая сборка (Адам 09.11): свёрнутые карточки — итог словами, «✏️» раскрывает всё */
+.bsum2 { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-2); padding: 0 12px 10px; }
+.bsum2 span { min-width: 0; } .bsum2 .blink { flex: none; }
+.bwords { font-size: 13.5px; color: var(--ink-2); line-height: 1.35; } .bwords b { color: var(--ink); font-weight: 600; }
+.btot2 { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-2); }
+.btot2 em { font-style: normal; font-weight: 700; color: var(--ink); font-size: 15px; } .brole.open { box-shadow: 0 0 0 1.5px var(--accent); }
 .bmore { display: flex; flex-direction: column; gap: 7px; border-top: 1px dashed var(--line); padding-top: 8px; }
 .bmg { font-size: 11.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); margin-top: 3px; }
 .bmore .bchip .si { width: 15px; height: 15px; display: inline-block; vertical-align: -2px; }
@@ -692,7 +698,7 @@ function bldInit(d) {
   const ui = BUI || d.ui || {};
   BS = {d, funcs: new Set(d.funcs), on: new Set(d.on || []), counts: {...d.counts}, year: !!d.year, base: d.base,
         pb: Object.fromEntries(d.roles.map(r => [r.pos, JSON.parse(JSON.stringify(r.items))])),
-        ui: {tab: ui.tab || 0, more: ui.more || {}, ex: ui.ex || ""}};
+        ui: {tab: ui.tab || 0, more: ui.more || {}, ex: ui.ex || "", fx: ui.fx || {}, open: ui.open || {}}};
   BUI = BS.ui;
   const el = $("bld"); if (!el) return;
   el.addEventListener("click", bldClick);
@@ -758,16 +764,17 @@ function bPage1(q) {
   const d = BS.d;
   let h = `<div class="bsec"><div class="bst">Сколько людей в фирме</div><div class="bchips">${d.sizes.map(([c, t, sz, ppl]) =>
     bChip(BS.base === c, "size", c, `${esc(t)}<small>${Object.values(ppl).reduce((a, b) => a + b, 0)} чел.</small>`, "", sz)).join("")}</div>
-    <p class="bhint">Набор — только начало: дальше любой отдел и функцию можно включить или снять.</p></div>`;
-  h += `<div class="bsec"><div class="bst">Для всех отделов</div><div class="bchips">${d.all.map(([f, t, , i]) => bChip(BS.funcs.has(f), "func", f, esc(t), "", i)).join("")}</div></div>`;
+    <p class="bhint">Всё уже заполнено типовым набором для фирмы такого размера. Меняйте только то, что у вас иначе.</p></div>`;
   h += `<div class="bsec"><div class="bst">Отделы <em>включите нужные</em></div>` + d.depts.map(x => {
-    const on = q.on[x.k], n = x.fs.filter(([f]) => BS.funcs.has(f)).length;
-    return `<div class="bdept ${on ? "on" : ""}"><div class="bdrow"><span class="bic">${ic(x.ic)}</span><div class="bt"><b>${esc(x.t)}</b><span>${on ? `${+BS.counts[x.k] || 0} чел. · ${n ? `${n} из ${x.fs.length} функций` : "только зарплата и табель"}` : esc(x.who)}</span></div>
+    const on = q.on[x.k], sel = x.fs.filter(([f]) => BS.funcs.has(f)), n = sel.length, price = sel.reduce((a, [, , p]) => a + p, 0), fx = BS.ui.fx[x.k];
+    const words = n ? sel.map(([, t]) => t).join(", ") : "Без функций: оклад, табель, штрафы, «Моя зарплата» у каждого";
+    return `<div class="bdept ${on ? "on" : ""}"><div class="bdrow"><span class="bic">${ic(x.ic)}</span><div class="bt"><b>${esc(x.t)}</b><span>${on ? `${+BS.counts[x.k] || 0} чел. · ${n ? `${n} из ${x.fs.length} функций · ${bfmt(price)} ₽/мес` : "только зарплата и табель"}` : esc(x.who)}</span></div>
       <button class="bsw ${on ? "on" : ""}" data-b="dept" data-v="${x.k}" role="switch" aria-checked="${!!on}" aria-label="${esc(x.t)}"></button></div>
-      ${on ? `<div class="binner"><div class="blab">Людей в отделе ${bStep(x.k)}</div>${n ? "" : `<p class="bhint">Без функций отдел всё равно в боте: оклад, табель, штрафы, «Моя зарплата» у каждого. Платите только за людей.</p>`}<div class="bchips">${x.fs.map(([f, t, , i]) => bChip(BS.funcs.has(f), "func", f, esc(t), "", i)).join("")}</div></div>` : ""}</div>`;
+      ${on ? `<div class="bsum2"><span>${esc(words)}</span><button class="blink" data-b="fx" data-v="${x.k}">${fx ? "Свернуть ▴" : "✏️ Функции и люди"}</button></div>` : ""}
+      ${on && fx ? `<div class="binner"><div class="blab">Людей в отделе ${bStep(x.k)}</div><div class="bchips">${x.fs.map(([f, t, p, i]) => bChip(BS.funcs.has(f), "func", f, `${esc(t)}<small>${bfmt(p)} ₽</small>`, "", i)).join("")}</div></div>` : ""}</div>`;
   }).join("") + `</div>`;
-  h += `<div class="bsec"><div class="bst">Дополнительно</div><div class="bchips">${d.extra.map(([f, t, , i]) => bChip(BS.funcs.has(f), "func", f, esc(t), "", i)).join("")}
-    ${bChip(BS.year, "year", "", `Оплата за год −${d.prices.disc_year}%`)}</div></div>`;
+  h += `<div class="bsec"><div class="bst">Ещё</div><div class="bchips">${d.all.map(([f, t, , i]) => bChip(BS.funcs.has(f), "func", f, esc(t), "", i)).join("")}
+    ${bChip(BS.year, "year", "", `Оплата за год −${d.prices.disc_year}%`)}${d.extra.map(([f, t, , i]) => bChip(BS.funcs.has(f), "func", f, esc(t), "", i)).join("")}</div></div>`;
   h += `<div class="bsec"><button class="bghost" data-b="go" data-v="pdf">📄 Коммерческое предложение</button><button class="bghost" data-b="go" data-v="cd">📋 Анкета для подключения</button></div>`;
   return h;
 }
@@ -781,10 +788,16 @@ function bField(pos, i, t, f) {
   return `<label class="bnum"><span>${esc(label)}</span><input id="bf-${pos}-${i}-${k}" value="${esc(shown ?? "")}" inputmode="${kind === "text" ? "text" : "decimal"}" data-b="fld" data-v="${pos}|${i}|${k}|${kind}">${unit}</label>`;
 }
 function bRole(r) {
-  const d = BS.d, pos = r.pos, its = BS.pb[pos], more = BS.ui.more[pos];
+  const d = BS.d, pos = r.pos, its = BS.pb[pos], more = BS.ui.more[pos], open = BS.ui.open[pos], ex0 = d.example && d.example[pos];
   const list = Object.entries(d.bricks).filter(([, b]) => b.roles.includes(pos));
   const groups = [...new Set(list.map(([, b]) => b.g))];
-  let h = `<div class="brole"><div class="brh"><span class="bic">${ic(r.ic)}</span><b>${esc(r.t)}</b></div>`;
+  if (!open) {                                              // свёрнуто: одной строкой словами + сумма на живом примере
+    const words = its.map(t => bWords(t, its.filter(x => x.b === t.b).length > 1)).filter(Boolean);
+    return `<div class="brole"><div class="brh"><span class="bic">${ic(r.ic)}</span><b>${esc(r.t)}</b></div>` +
+      `<div class="bwords">${words.length ? words.join(" · ") : "Ничего не выбрано — нажмите «Изменить»"}</div>` +
+      `<div class="btot2"><span>${ex0 && !ex0.none && ex0.who ? `${esc(ex0.who.split(" ")[0])}, к сегодня: <em>≈ ${bfmt(ex0.total)} ₽</em>` : ""}</span><button class="blink" data-b="open" data-v="${pos}">✏️ Изменить</button></div></div>`;
+  }
+  let h = `<div class="brole open"><div class="brh"><span class="bic">${ic(r.ic)}</span><b>${esc(r.t)}</b><button class="blink" style="margin-left:auto" data-b="open" data-v="${pos}">Свернуть ▴</button></div>`;
   h += `<div class="bchips">${r.quick.map(([b, v, t]) => bChip(its.some(x => x.b === b && x.v === v), "quick", `${pos}|${b}|${v}`, esc(t), "red")).join("")}</div>`;
   h += its.map((t, i) => { const b = d.bricks[t.b], vr = bVar(t.b, t.v); if (!b || !vr) return "";
     return `<div class="bitem"><div class="bih"><b>${ic(b.ic)} ${esc(b.t)}</b><span>${esc(vr.t)}</span><button class="bx" data-b="del" data-v="${pos}|${i}" aria-label="убрать">✕</button></div>${vr.f.map(f => bField(pos, i, t, f)).join("")}</div>`; }).join("");
@@ -800,9 +813,21 @@ function bRole(r) {
       `<div><span>${esc(n)}${x ? `<small>${esc(x)}</small>` : ""}</span><b class="${s < 0 ? "neg" : ""}">${s < 0 ? "− " : ""}${bfmt(Math.abs(s))}</b></div>`).join("")}<div class="btot"><span>Итого за месяц</span><b>${bfmt(ex.total)} ₽</b></div></div>`;
   return h + `</div>`;
 }
+// Слова для свёрнутой строки должности: название блока + главная цифра («Оклад 30 000», «% от продаж 1 %»)
+const BW = {pct: "% от продаж", pct_gate: "% с порога плана", pct_steps: "% растёт с планом", pct_split: "% до и сверх плана",
+  pct_debt: "% от просрочки", pct_groups: "% по группам", fix: "фикс за план", gate: "фикс с порога", steps: "бонус за план ступенями",
+  linear: "бонус пропорционально плану", below: "минус ниже порога"};
+function bWords(t, dup) {
+  const b = BS.d.bricks[t.b], vr = bVar(t.b, t.v); if (!b || !vr) return "";
+  const name = t.b === "sales" ? (BW[t.v] || b.t) : dup ? `${b.t} · ${vr.t}` : b.t;   // «Продажи» дважды — говорим вариантом
+  const f = vr.f.find(x => ["money", "pct", "int"].includes(x[2]) && t.p[x[0]] != null);
+  if (!f) return `<b>${esc(name)}</b>`;
+  const v = t.p[f[0]], s = f[2] === "pct" ? `${+((+v || 0) * 100).toFixed(2)} %` : f[2] === "money" ? `${bfmt(v)} ₽` : String(v);
+  return `<b>${esc(name)}</b> ${s}`;
+}
 function bPage2(q) {
   const rs = BS.d.roles.filter(r => q.on[r.d]);
-  return `<div class="bsec"><div class="bst">Как платите людям</div><p class="bhint">Отметьте, из чего состоит зарплата, и впишите цифры. Пример расчёта — на человеке из демо-фирмы.</p></div>` +
+  return `<div class="bsec"><div class="bst">Как платите людям</div><p class="bhint">У каждой должности уже стоит типовая схема. Нажмите «✏️ Изменить», если у вас иначе. Суммы — на людях демо-фирмы.</p></div>` +
     (rs.length ? rs.map(bRole).join("") : `<p class="bhint">Включите хотя бы один отдел на первой странице.</p>`) +
     `<div class="bsec bend">${BS.d.partner ? `<button class="blink" data-b="go" data-v="look">👀 Посмотреть демо с этим набором</button>`
       : `<p class="bhint">Нажмите «👀 Посмотреть мой бот» — откроется демо только с вашими отделами и функциями. Понравится — там же «📨 Хочу так».</p><button class="blink" data-b="go" data-v="req">📨 Уже решили? Отправить заявку</button>`}</div>`;
@@ -837,6 +862,8 @@ function bldClick(e) {
     if (its.some(x => x.b === k)) BS.pb[pos] = its.filter(x => x.b !== k); else its.push(bNew(k, bVs(k, pos)[0].v)); }
   else if (a === "del") { const [pos, i] = v.split("|"); BS.pb[pos].splice(+i, 1); }
   else if (a === "more") BS.ui.more[v] = !BS.ui.more[v];
+  else if (a === "fx") BS.ui.fx[v] = !BS.ui.fx[v];
+  else if (a === "open") BS.ui.open[v] = !BS.ui.open[v];
   else if (a === "fch") { const [pos, i, k, val] = v.split("|"); BS.pb[pos][+i].p[k] = JSON.parse(val); }
   else return;
   bldRender(); bLater();

@@ -116,7 +116,7 @@ def data(ctx, ex=None, ui=None):
         "prices": {k: pr[k] for k in ("user", "disc_all", "disc_year", "setup_mult", "setup_min", "trial_days")} | {"round": P.ROUND},
         "requires": {k: sorted(v) for k, v in E.REQUIRES.items()},
         "roles": roles, "bricks": bricks_json(), "fields": {k: [x[0], x[1]] for k, x in PB.F.items()},
-        "example": {ex: example_json(ctx, ex)} if ex in PB.POSITIONS else {},
+        "example": {p: example_json(ctx, p) for p in PB.POSITIONS},     # Адам 09.11: сумма примера — в свёрнутой строке должности
         "ui": ui if isinstance(ui, dict) else {}, "check": {"monthly": q["monthly"], "setup": q["setup"], "year": q["monthly_year"]},
     }
 
