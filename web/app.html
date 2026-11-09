@@ -44,8 +44,8 @@ body { background: var(--bgfx, var(--bg)); background-attachment: fixed; color: 
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--hdr, var(--bg)); }
 button { font: inherit; color: inherit; }
 .app { display: flex; flex-direction: column; height: 100%; max-width: 560px; margin: 0 auto; }
-header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--hdr, var(--bg));
-  display: flex; align-items: center; gap: 8px; padding-block: 10px 8px;
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--hdr, var(--bg)); }
+header { display: flex; align-items: center; gap: 8px; padding-block: 10px 8px;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 .back { width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--surface); font-size: 20px; line-height: 1;
   cursor: pointer; box-shadow: var(--edge); flex: none; }
@@ -145,6 +145,19 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 .ring { width: 84px; height: 84px; } .ring text { font-family: var(--display); font-weight: 700; font-size: 20px; }
 .tring { width: 44px; height: 44px; flex: none; } .tring text { font-family: var(--display); font-weight: 700; font-size: 12.5px; fill: var(--ink); }
 .tile.withring { display: flex; align-items: center; gap: 10px; }
+/* полоса демо (Адам 09.11): кто я, отрасль, собрать, поиск — всегда под шапкой */
+.dbar { display: flex; gap: 6px; padding: 6px max(16px, env(safe-area-inset-left, 0px)) 8px; margin-top: -4px; }
+.dbar .sc { display: flex; gap: 6px; flex: 1; min-width: 0; }
+.dbar .sc button { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.dbar .sc button:first-child { flex: 0 1 auto; max-width: 62%; } .dbar .sc button:last-child { flex: 1 1 0; min-width: 44px; }
+.dbar button { border: 0; background: var(--surface); box-shadow: var(--edge); border-radius: 999px; padding: 6px 11px; font-size: 12.5px;
+  white-space: nowrap; cursor: pointer; color: var(--ink); flex: none; }
+.dbar button b { font-weight: 600; } .dbar button.go { background: var(--accent); color: #fff; font-weight: 600; }
+.dbar button.sq { padding: 6px 9px; }
+.chips2 { display: flex; flex-wrap: wrap; gap: 6px; } .chips2 button { border: 1px solid var(--line, #e5e5ea); background: var(--surface);
+  border-radius: 20px; padding: 7px 11px; font-size: 13.5px; cursor: pointer; } .chips2 button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.sheet h3 { font-size: 13px; color: var(--ink-2); margin: 8px 0 2px; text-transform: uppercase; letter-spacing: .05em; }
+.lt.hot { background: var(--accent); color: #fff; } .lt.hot .ic { background: rgba(255,255,255,.18); }
 .launch { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .lt { border: 0; background: var(--surface); border-radius: 18px; padding: 14px 8px 12px; box-shadow: var(--edge); cursor: pointer;
   display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
@@ -386,13 +399,14 @@ html:root[data-skin="carbon"] .hero { box-shadow: 0 0 0 1px rgba(255,106,0,.45),
 </head>
 <body>
 <div class="app">
-  <header>
+  <div class="top"><header>
     <button class="back" id="back" hidden aria-label="Назад">‹</button>
     <div class="htitle"><b id="htitle">__NAME__</b><span id="hsub"></span></div>
     <button class="role tools" id="skinBtn" aria-label="Оформление"></button>
     <button class="role tools" id="tools" hidden>🛠</button>
     <button class="role" id="role" hidden>🎭</button>
   </header>
+  <div class="dbar" id="dbar" hidden></div></div>
   <main id="main"><div class="screen"><div class="welcome"><div class="ic">⏳</div><p>Загружаю…</p></div></div></main>
   <nav class="tabs" id="tabs" hidden></nav>
 </div>
@@ -611,7 +625,7 @@ function buttons(rows, home, sum) {
   let html = "";
   if (home) {
     html = `<div class="launch">${all.map(([l, to]) => { const [i, t] = splitLabel(l);
-      return `<button class="lt" data-to="${esc(to)}"><span class="ic" style="--ic:${icOf(t)}">${ic(i || "•")}</span><span class="tx">${esc(t)}</span></button>`; }).join("")}</div>`;
+      return `<button class="lt${to === "sw:ed" && S.demo ? " hot" : ""}" data-to="${esc(to)}"><span class="ic" style="--ic:${icOf(t)}">${ic(i || "•")}</span><span class="tx">${esc(t)}</span></button>`; }).join("")}</div>`;
   } else {
     // ряд из 3+ кнопок или короткие подписи без значков (люди, месяцы, варианты) — «таблетки»; остальное — список со стрелкой
     const isPill = r => r.length >= 3 || r.every(([l]) => !splitLabel(l)[0] && String(l).length <= 18);
@@ -839,6 +853,7 @@ function bldInput(e) {
 function show(d) {
   if (d.tabs) { S.tabs = d.tabs; S.extra = d.extra || []; S.tools = d.tools || []; }
   const msgs = d.msgs || [], parts = [];
+  if ("bar" in d) S.demo = d.bar || null;
   if (d.inbox && d.inbox.length) parts.push(`<div class="inbox">${d.inbox.map(m => msgHtml(m, false, false)).join("")}</div>`);
   if (d.home && d.push === false) { const pb = pushBar(); if (pb) parts.push(pb); }
   msgs.forEach((m, i) => parts.push(msgHtml(m, d.home, i === 0)));
@@ -858,7 +873,8 @@ function show(d) {
   $("back").hidden = !S.back;
   if (d.company) $("htitle").textContent = d.company;
   $("hsub").textContent = [d.who, d.role].filter(Boolean).join(" · ");
-  const rb = $("role"); rb.hidden = !S.extra.length; rb.textContent = "🎭 " + (d.role || "Демо");
+  dbar();
+  const rb = $("role"); rb.hidden = !S.extra.length || !!S.demo; rb.textContent = "🎭 " + (d.role || "Демо");
   const tb = $("tools"); tb.hidden = !S.tools.length;
   tb.textContent = S.tools.length ? (S.tools.some(([, to]) => to === "adm") ? "🛠 Пульт" : "🤝 Партнёр") : "";
   tabs();
@@ -943,6 +959,20 @@ async function uploadFiles(files) {
 }
 function go(to, top) { if (top) S.cur = to; call("press", {to, top: !!top}); }
 function sheet(html) { $("sheetBody").innerHTML = html; $("sheet").hidden = false; }
+// Полоса демо (Адам 09.11): «Смотрю как» и отрасль — листом, одно нажатие — экран перестроился; «Собрать» и поиск — сразу.
+function dbar() {
+  const el = $("dbar"), b = S.demo; el.hidden = !b; if (!b) return;
+  el.innerHTML = `<div class="sc"><button data-d="role" title="Чьими глазами смотрим">👤 <b>${esc(b.role)}</b> ▾</button><button data-d="ind" title="Отрасль демо-фирмы">🏭 ${esc(b.industry)} ▾</button></div>` +
+    `<button class="go" data-tab="${esc(b.build)}">🧩 Собрать</button><button class="sq" data-tab="${esc(b.find)}" aria-label="Найти">🔍</button>`;
+}
+$("dbar").addEventListener("click", e => {
+  const x = e.target.closest("button"); if (!x) return;
+  if (x.dataset.tab) { go(x.dataset.tab, true); return; }
+  const b = S.demo, chip = ([l, to]) => `<button data-tab="${esc(to)}"${to === b.cur ? ' class="on"' : ""}>${esc(l)}</button>`;
+  if (x.dataset.d === "role") sheet(`<h2>Чьими глазами смотреть</h2><div class="chips2">${b.roles.map(chip).join("")}</div>` +
+    `<h3>Или конкретный человек</h3><div class="chips2">${b.people.map(chip).join("")}<button data-tab="${esc(b.more)}">Все люди ›</button></div>`);
+  else sheet(`<h2>Отрасль демо-фирмы</h2><p class="bhint">Названия клиентов, товаров и групп — как в этой отрасли.</p><div class="chips2">${b.industries.map(chip).join("")}</div>`);
+});
 $("sheet").addEventListener("click", e => {
   if (e.target === $("sheet")) { $("sheet").hidden = true; return; }
   const b = e.target.closest("button"); if (!b) return;

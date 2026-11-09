@@ -42,7 +42,7 @@ class Base(unittest.TestCase):
 class ClientCard(Base):
     def test_client_fills_card_and_snapshot(self):
         r = self.app.start(CLIENT)
-        self.assertIn("cd", [b.to for x in r for b in x.all_buttons()])          # кнопка анкеты на главной гостя
+        self.assertIn("sw:ed", [b.to for x in r for b in x.all_buttons()])       # «Собрать» на главной гостя; анкета — внутри
         self.app.press(CLIENT, "sw:ed:business")
         self.app.press(CLIENT, "sw:pn")
         self.app.text(CLIENT, "6 0 0 1")

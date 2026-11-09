@@ -65,7 +65,8 @@ class Demo(unittest.TestCase):
         tos = [b.to for b in menu]
         self.assertIn("deptv:warehouse", tos)                    # все отделы — отдельными кнопками
         self.assertIn("sales", tos)
-        self.assertNotIn("sw:role", [b.to for r in self.app.start(15) for b in r.all_buttons()])
+        first = [b.to for r in self.app.start(15) for b in r.all_buttons()][:3]
+        self.assertEqual(first, ["sw:ed", "sw:role", "help"])   # Адам 09.11: три действия клиента — первым рядом
 
     def test_menu_commands(self):
         cmds = [c for c, _, _ in self.app.commands()]

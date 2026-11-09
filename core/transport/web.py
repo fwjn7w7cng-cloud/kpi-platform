@@ -204,7 +204,12 @@ class WebApi:
         role_t = "" if not allowed else (ctx.position_name if ctx.role in ("staff", "head") and ctx.position_name else
                                          ctx.cfg.role_title(ctx.role) if ctx.role not in ("guest", "admin") else
                                          "Администратор" if ctx.role == "admin" else "")
+        bar = None
+        if ctx.demo and allowed and not self.panel and ctx.role != "guest":
+            from core.ui import orient
+            bar = orient.demo_bar(ctx)
         return {"ver": self.ver, "msgs": msgs, "inbox": self._inbox(uid), "home": bool(home), "tabs": tabs, "extra": extra, "tools": tools,
+                "bar": bar,
                 "company": PANEL_NAME if self.panel else ctx.cfg.name, "who": who, "role": role_t, "guest": not allowed or ctx.role == "guest",
                 "push": None if self.app.demo or not allowed or ctx.role == "guest" else push.has(self._office(), uid)}
 

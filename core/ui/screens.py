@@ -45,6 +45,9 @@ def home(ctx):
                        buttons=[])
     if ctx.me and ctx.role not in ("owner", "admin") and not ctx.cfg.dept_on(ctx.me["dept"]):
         return _dept_off(ctx)
+    from core.ui import orient
+    if orient.welcome_due(ctx):                       # Адам 09.11: гостю демо — что это и что делать, один раз
+        return orient.welcome(ctx)
     role_t = ctx.cfg.role_title(ctx.role) if ctx.role in R.ROLES else "Администратор"
     if ctx.role in ("staff", "head") and ctx.position_name:
         role_t = ctx.position_name
@@ -77,10 +80,8 @@ def home(ctx):
         v.note(f"🧩 Ваш набор: {money(price)} в месяц{' при оплате за год' if ctx.session.get('year') else ''}, "
                f"подключение {money(q['setup'])}. Здесь включено только то, что вы выбрали; остальное — с замком 🔒.")
         kb.insert(0, [Button("✏️ Изменить набор", "sw:ed"), Button("📨 Хочу так", "sw:req")])
-    elif ctx.demo and ctx.app.demo_gate and ctx.user_id not in ctx.app.admins:
-        from core.demo import is_partner
-        if not is_partner(ctx):                      # гость-клиент: анкета для подключения всегда под рукой
-            kb.append([Button("🧩 Собрать и цена", "sw:ed"), Button("📋 Анкета для подключения", "cd")])
+    if ctx.demo:                                     # Адам 09.11: три действия клиента — первым рядом
+        kb.insert(1 if ctx.session.get("built") else 0, orient.home_row(ctx))
     kb.append(_month_switch(ctx))
     return Reply(view=v, buttons=kb)
 
@@ -243,7 +244,8 @@ def bottom_rows(ctx):
         items = [("🎓 Обучение", "qz")] + items[:3]
     fb = ("💬 Отзывы", "fbl") if ctx.role == "admin" else \
         ("🐞 Не работает", "fb") if ctx.role in ("rep", "newbie", "staff") else ("💬 Предложение", "fb")
-    items = [("🏠 Главная", "home")] + [x for x in items if x != fb] + [fb]
+    find = [("🔍 Найти", "find")] if items else []            # поиск всем (Адам 09.11); отдел не подключён — не нужен
+    items = [("🏠 Главная", "home")] + [x for x in items if x != fb] + find + [fb]
     out = [items[i:i + 3] for i in range(0, len(items), 3)]
     if ctx.demo:
         out.append([("🎭 Роль", "sw:role"), ("🏭 Отрасль", "swi"), ("🧩 Собрать", "sw:ed")])
@@ -891,7 +893,7 @@ def demo(ctx, what=None, value=None, *more):
     if what == "req":
         return T.request(ctx)
     if what == "reset":
-        ctx.app.reset_demo(ctx.industry, ctx.user_id)
+        ctx.db = ctx.app.reset_demo(ctx.industry, ctx.user_id)   # старая база закрыта — App.press после экрана смотрит ctx.db
         ctx.session = {"industry": ctx.industry}
         ctx.save()
         return [Reply(text="🔄 Демо заполнено заново."), home(ctx.app.ctx(ctx.user_id))]
