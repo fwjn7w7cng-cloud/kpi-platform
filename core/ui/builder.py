@@ -34,6 +34,13 @@ QUICK = {
                ("piece", "trips", "За рейс"), ("discipline", "both", "Бонус без ошибок и пропусков")],
     "office": [("salary", "calendar", "Оклад по календарю"), ("company", "steps", "Доля от плана компании")],
 }
+STEPS = {   # Адам 09.11: ступени правятся прямо на странице — порог и сумма каждой, добавить / убрать ступень
+    "steps_money": {"a": "%", "sa": 100, "b": "₽", "sb": 1},
+    "steps_rate": {"a": "%", "sa": 100, "b": "%", "sb": 100},
+    "steps_coef": {"a": "%", "sa": 100, "b": "×", "sb": 1},
+    "steps_min": {"a": "мин", "sa": 1, "b": "₽", "sb": 1},
+}
+MAX_STEPS = 10
 SIMPLE = {"money", "pct", "int", "choice", "text"}       # поля, которые меняются прямо на странице; остальное — «🧱 подробно»
 MAX_ITEMS = 40
 
@@ -51,13 +58,15 @@ def _fields(bid, v, p):
     for key, val in p.items():
         if key not in PB.F:
             continue
-        label, kind = PB.F[key][0], _kind(bid, v, key)
+        label, kind, info = PB.F[key][0], _kind(bid, v, key), PB.field_info(key)
         if kind == "choice":
-            out.append([key, label, kind, [[k, t] for k, t in PB.F[key][2].items()]])
+            out.append([key, label, kind, [[k, t] for k, t in PB.F[key][2].items()], info])
         elif kind in SIMPLE:
-            out.append([key, label, kind, None])
+            out.append([key, label, kind, None, info])
+        elif kind in STEPS:
+            out.append([key, label, "steps", STEPS[kind], info])
         else:
-            out.append([key, label, "fixed", PB.fmt(key, val)])
+            out.append([key, label, "fixed", PB.fmt(key, val), info])
     return out
 
 
@@ -69,7 +78,7 @@ def bricks_json():
         for v, label, p, _tpl in PB.variants(bid):
             vs.append({"v": v, "t": label, "g": PB.group(bid, v), "p": copy.deepcopy(p), "f": _fields(bid, v, p),
                        "for": list(PB.UNITS[v][1]) if bid in ("piece", "cut") else None,
-                       "i": PB.BLOCK_VARIANT_INFO.get((bid, v)) or PB.VARIANT_INFO.get(v, "")})
+                       "i": PB.variant_info(bid, v, label)})
         out[bid] = {"g": grp, "ic": ic, "t": title, "note": note, "roles": list(roles), "vs": vs}
     return out
 
@@ -78,7 +87,7 @@ def _fixed_text(items):
     """Готовый текст сложных полей (ступени, свои штрафы…) у сохранённых схем — их правят в «🧱 подробно»."""
     for it in items:
         it["fx"] = {k: PB.fmt(k, val) for k, val in it.get("p", {}).items()
-                    if k in PB.F and _kind(it["b"], it["v"], k) not in SIMPLE}
+                    if k in PB.F and _kind(it["b"], it["v"], k) not in SIMPLE and _kind(it["b"], it["v"], k) not in STEPS}
     return items
 
 
@@ -174,6 +183,15 @@ def _clean_items(pos, items, old):
                         p[key] = k
             elif kind == "text":
                 p[key] = " ".join(str(val).split())[:60]
+            elif kind in STEPS and isinstance(val, list):
+                rows = []
+                for r in val[:MAX_STEPS]:
+                    if isinstance(r, (list, tuple)) and len(r) == 2:
+                        a, b2 = _num(r[0], 0, 100_000), _num(r[1], -10_000_000, 10_000_000)
+                        if a is not None and b2 is not None:
+                            rows.append([round(a, 6), int(b2) if kind in ("steps_money", "steps_min") else round(b2, 6)])
+                if rows:
+                    p[key] = sorted(rows, key=lambda x: x[0])
         out.append({"b": b, "v": v, "p": p})
     return out
 

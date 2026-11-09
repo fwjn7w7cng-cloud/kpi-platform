@@ -114,6 +114,28 @@ class Builder(unittest.TestCase):
         self.assertIn("sw:ed", btns)
         self.assertEqual(set(self.app.ctx(ADMIN).cfg.functions), {"debts", "kpi"})
 
+    def test_every_variant_and_field_explained(self):
+        """Адам 09.11: пояснение к каждому расчёту и каждой функции."""
+        d = builder_of(self.app.press(ADMIN, "sw:ed"))
+        for k, b in d["bricks"].items():
+            self.assertTrue(b["note"], k)
+            for v in b["vs"]:
+                self.assertGreater(len(v["i"]), 20, (k, v["v"]))
+                for f in v["f"]:
+                    self.assertTrue(f[4], (k, v["v"], f[0]))
+        for x in d["depts"]:
+            for f in x["fs"]:
+                self.assertTrue(f[3], f[0])
+
+    def test_steps_edited_on_page(self):
+        """Ступени правятся прямо на странице: порог, сумма, число ступеней; мусор отбрасывается, порядок — по порогу."""
+        rep = {"b": "sales", "v": "steps", "p": {"steps": [[1.2, "35 000"], [0.75, 9000], ["x", 1], [1.0, 20000]]}}
+        d = builder_of(self.app.press(ADMIN, "swb:s:q2", form={"funcs": ["kpi", "payroll"], "pb": {"rep": [rep]}}))
+        it = next(r for r in d["roles"] if r["pos"] == "rep")["items"][0]
+        self.assertEqual(it["p"]["steps"], [[0.75, 9000], [1.0, 20000], [1.2, 35000]])
+        f = next(f for f in d["bricks"]["sales"]["vs"] if f["v"] == "steps")["f"]
+        self.assertEqual(next(x for x in f if x[0] == "steps")[2], "steps")
+
     def test_quiet_save_over_web(self):
         api = WebApi(self.app)
         _, h, _ = api.handle("POST", "/api/start", "", {}, "")
