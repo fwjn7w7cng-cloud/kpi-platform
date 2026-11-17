@@ -3,6 +3,13 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-18 01:08 (Альфред) — тестовый клиент proba убран целиком (по команде Адама), всё перенесено в /root/removed-proba/
+systemctl disable --now kpi-web@proba → inactive. /etc/caddy/clients/proba.caddy (и proba.caddy.off.old) → /root/removed-proba/caddy/; caddy validate ок, reload.
+clients/proba → /root/removed-proba/clients-proba, data/proba → /root/removed-proba/data-proba, data/_duty/proba.* → /root/removed-proba/duty/.
+fail2ban alapa-web.local: из journalmatch убран kpi-web@proba.service (копия до правки — /root/removed-proba/alapa-web.local.before); fail2ban-client -t ок, reload.
+Проверка: kpi-web@proba inactive; proba.alapa.pro не отвечает; пульт (control.codes()) видит только ['demo'];
+demo, admin, botter, teplocom, fit, alapa.pro → 200. Насовсем ничего не удалено.
+
 ## 2026-11-18 01:04 (Альфред) — демо до f12ba30 (порт из .env клиента); proba запущен дежурным на 8301
 git reset → f12ba30 (run.py: web_port_of — порт из clients/<код>/.env, без порта не запускается; тест), chown alapa, restart kpi-web@demo → active,
 8101 держит kpi-web@demo. web/site → /var/www/kpi/site. demo.alapa.pro и admin.alapa.pro → 200. tests.test_run и tests.test_control (от alapa) — ок.
