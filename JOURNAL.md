@@ -3,6 +3,9 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-17 11:48 (Джарвис) — AGENTS.md: памятка для любого помощника
+Адам: «на всякий случай», если работать с другим помощником (Codex и др.). AGENTS.md отсылает к CLAUDE.md и журналу, главные правила и выкатка коротко.
+
 ## 2026-11-09 23:33 (Альфред) — демо обновлено до 1553fe5: пояснения ⓘ и ступени в сборке
 git reset → 1553fe5 (core/paybuilder.py, core/ui/builder.py, web/app.html, тест), chown alapa, restart kpi-web@demo → active, NRestarts 0, ошибок 0;
 web/site → /var/www/kpi/site. demo.alapa.pro и admin.alapa.pro → 200. tests.test_builder и tests.test_orient (unittest от alapa) — 12 тестов, ок.
