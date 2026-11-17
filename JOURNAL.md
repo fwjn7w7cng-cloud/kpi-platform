@@ -3,6 +3,18 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-18 00:55 (Альфред) — демо до 70491b3; новый дежурный поставлен; proba на 8301 — дежурный отказал, причина в run.py
+git reset → 70491b3 (core/onboard.py, deploy/duty, тест), chown alapa, restart kpi-web@demo → active (8101 держит kpi-web@demo), web/site → /var/www/kpi/site.
+demo.alapa.pro и admin.alapa.pro → 200. tests.test_control и tests.test_onboard (от alapa) — ок.
+С «да» Адама: install alapa-duty.sh → /usr/local/sbin (сверено cmp). ss: 8301 свободен. clients/proba/.env: WEB_PORT=8102 → 8301;
+/etc/caddy/clients/proba.caddy.off → proba.caddy.off.old; data/_duty/proba.ok → proba.ok.old; записка proba.new в 00:53:00.
+Дежурный 00:53:11: proba.bad — «приложение не заняло свой порт 8301 (перезапусков 1) — служба остановлена»; kpi-web@proba inactive/disabled, адрес в Caddy не создан.
+Причина: kpi-web@.service не подгружает clients/<код>/.env (нет EnvironmentFile), а run.py берёт порт из окружения:
+`int(os.environ.get("WEB_PORT", "8101"))` — у любого клиента, кроме демо, выходит 8101 (порт демо) → «Address already in use».
+Так было и 18.11 в 00:38 (proba занял 8101 демо). Нужно Джарвису: порт клиента из его .env (EnvironmentFile=-/srv/alapa/clients/%i/.env в службе
+или чтение .env в run.py до выбора порта); без порта — отказ, а не 8101. Сайты: demo, admin, botter, teplocom, fit → 200; proba.alapa.pro не отвечает.
+Ничего не удалено.
+
 ## 2026-11-18 01:00 (Джарвис) — порт нового клиента: только свободный на сервере
 Альфред нашёл: proba получил 8102 (занят Botter) — крутился в перезапусках, а после рестарта демо занял 8101. Исправлено: `onboard.next_port`
 — ряд 8301–8999 и проверка, что порт никто не слушает; дежурный перед запуском проверяет порт через ss, после — что его слушает именно
