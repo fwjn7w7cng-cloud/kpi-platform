@@ -3,6 +3,16 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-18 01:04 (Альфред) — демо до f12ba30 (порт из .env клиента); proba запущен дежурным на 8301
+git reset → f12ba30 (run.py: web_port_of — порт из clients/<код>/.env, без порта не запускается; тест), chown alapa, restart kpi-web@demo → active,
+8101 держит kpi-web@demo. web/site → /var/www/kpi/site. demo.alapa.pro и admin.alapa.pro → 200. tests.test_run и tests.test_control (от alapa) — ок.
+С «да» Адама: data/_duty/proba.bad → proba.bad.old; ss — 8301 свободен; записка proba.new в 01:03:02.
+Дежурный 01:03:06: proba.ok — «запущено: proba.alapa.pro → 127.0.0.1:8301, ответ 200». kpi-web@proba active/enabled, перезапусков 0;
+8301 слушает именно процесс kpi-web@proba; /etc/caddy/clients/proba.caddy → 127.0.0.1:8301. proba.alapa.pro → 200, заголовок «Алапа · Проба»
+(демо — «Алапа · демо», botter — «Botter»; ответы 8301/8101/8102 разные). 8101 — kpi-web@demo, 8102 — chogbot.
+Все сайты → 200: alapa.pro, demo, admin, botter, teplocom, fit, proba. Старые файлы (.old) на месте, ничего не удалено.
+clients/proba/ в git не добавлял (в git status — неотслеживаемая папка; .env в git не идёт).
+
 ## 2026-11-18 01:10 (Джарвис) — run.py брал порт до чтения .env клиента
 Альфред нашёл: `run.py <код> --web` читал WEB_PORT из окружения раньше, чем загружал clients/<код>/.env → любой новый клиент садился на 8101 (демо).
 Теперь `web_port_of`: сначала .env, нет WEB_PORT — не запускается (кроме demo: 8101). Службу менять не нужно. Осталось: Альфреду — записка для proba.
