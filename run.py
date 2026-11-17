@@ -27,6 +27,21 @@ def load_env(path):
             os.environ.setdefault(k.strip(), v.strip().strip('"'))
 
 
+def web_port_of(client):
+    """Порт приложения клиента — из его clients/<код>/.env (18.11: раньше брался до чтения .env, и новый клиент садился на порт
+    демо 8101). Нет WEB_PORT — не запускаемся: чужой порт занимать нельзя. Только демо по старинке — 8101."""
+    load_env(ROOT / "clients" / client / ".env")
+    raw = os.environ.get("WEB_PORT", "").strip()
+    if not raw:
+        if client == "demo":
+            return 8101
+        sys.exit(f"Нет WEB_PORT в clients/{client}/.env — приложение не запускаю, чтобы не занять чужой порт")
+    try:
+        return int(raw)
+    except ValueError:
+        sys.exit(f"WEB_PORT в clients/{client}/.env — не число: {raw!r}")
+
+
 def main(client, web_port=None):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     for noisy in ("httpx", "httpcore", "telegram.ext.Updater"):     # их адреса запросов содержат токен бота
@@ -69,6 +84,6 @@ if __name__ == "__main__":
     if len(args) == 1:
         main(args[0])
     elif len(args) in (2, 3) and args[1] == "--web":
-        main(args[0], web_port=int(args[2]) if len(args) == 3 else int(os.environ.get("WEB_PORT", "8101")))
+        main(args[0], web_port=int(args[2]) if len(args) == 3 else web_port_of(args[0]))
     else:
         sys.exit("Запуск: python3 run.py <код_клиента>  или  python3 run.py <код_клиента> --web [порт]")
