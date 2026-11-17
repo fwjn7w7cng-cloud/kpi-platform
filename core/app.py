@@ -182,7 +182,7 @@ class App:
         """Кэш тяжёлых расчётов между нажатиями: живёт, пока в базе ничего не поменялось.
         Ключ — расчёт, база, месяц, сегодня, редакция и версия данных."""
         db = ctx.db
-        key = (name, id(db), month or ctx.month, ctx.today, ctx.cfg.edition, frozenset(ctx.cfg.modules), db.rev())
+        key = (name, id(db), month or ctx.month, ctx.today, ctx.cfg.edition, frozenset(ctx.cfg.modules), db.rev(), db.hide)
         if key not in self._memo:
             if len(self._memo) > 400:
                 self._memo.clear()

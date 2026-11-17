@@ -38,6 +38,7 @@ class Ctx:
             if isinstance(b.get("functions"), list):
                 cfg = cfg.with_functions(b["functions"], cfg.depts)
         self.cfg = cfg
+        self.db.hide = self._hidden() if self.demo else frozenset()
         self.month = self.session.get("month") or month_of(self.today)
         if self.month > month_of(self.today):
             self.month = month_of(self.today)
@@ -45,6 +46,32 @@ class Ctx:
         self.photo = ""
         self.form = None                  # данные формы одной страницей из приложения (core/ui/builder.py)
         self._resolve()
+
+    def _hidden(self):
+        """Демо (Адам 17.11: «что в сборке — то и везде»): отделы, выключенные в «Собрать», и люди сверх выбранного числа
+        не показываются нигде — ни в фонде, ни в командах, ни в ролях. Директор, админ и бухгалтер остаются всегда."""
+        if not isinstance(self.session.get("funcs"), list):
+            return frozenset()
+        counts = self.session.get("counts") or {}
+        keep_roles = {"owner", "admin", "accountant"}
+        lead = {"head": 0, "sv": 1}
+        hide, by = set(), {}
+        for e in self.db._employees(active=None):
+            d = self.cfg.dept(e["dept"])
+            code = E.dept_package(d.kind) if d else None
+            if e["role"] in keep_roles or not code:
+                continue
+            if not self.cfg.dept_on(e["dept"]):
+                hide.add(e["id"])
+            else:
+                by.setdefault(code, []).append(e)
+        for code, es in by.items():
+            n = counts.get(code)
+            if n is None:
+                continue
+            es.sort(key=lambda e: (lead.get(e["role"], 2), e["id"]))      # руководители — первыми, остальные по порядку
+            hide |= {e["id"] for e in es[int(n):]}
+        return frozenset(hide)
 
     # ---------- сессия ----------
 
@@ -73,7 +100,7 @@ class Ctx:
         if self.demo:
             role = self.session.get("role", "owner")
             emp_id = self.session.get("as")
-            emp = self.db.employee(emp_id) if emp_id else None
+            emp = self.db.employee(emp_id) if emp_id and emp_id not in self.db.hide else None   # не в сборке — другой человек
             if role == "admin":
                 self.admin, self.role, self.me = True, "admin", None
                 return

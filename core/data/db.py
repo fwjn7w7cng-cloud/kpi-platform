@@ -199,7 +199,14 @@ class DB:
         r = self.c.execute("SELECT * FROM employees WHERE tg_id = ?", (tg_id,)).fetchone()
         return _emp(r) if r else None
 
+    hide = frozenset()     # демо: кого не показывать этому зрителю (его сборка — меньше людей и отделов), ставит Ctx
+
     def employees(self, dept=None, team=None, active=True):
+        if self.hide:
+            return [e for e in self._employees(dept, team, active) if e["id"] not in self.hide]
+        return self._employees(dept, team, active)
+
+    def _employees(self, dept=None, team=None, active=True):
         q, a = "SELECT * FROM employees WHERE 1", []
         if dept is not None:
             q, a = q + " AND dept = ?", a + [dept]

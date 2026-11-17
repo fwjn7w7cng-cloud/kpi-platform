@@ -82,7 +82,9 @@ def feed(ctx, limit=6):
             ev.append((last[0]["ts"], "📊", f"Пришли отчёты 1С: {', '.join(kinds[:4])}{' и др.' if len(kinds) > 4 else ''} — цифры обновились"))
     if ctx.can("route"):
         since = (today - timedelta(days=1)).isoformat()
-        for r in db.q("SELECT day, emp_id, ts FROM visit_reports WHERE day >= ? ORDER BY ts DESC LIMIT 6", since):
+        for r in db.q("SELECT day, emp_id, ts FROM visit_reports WHERE day >= ? ORDER BY ts DESC LIMIT 12", since):
+            if r["emp_id"] not in names:
+                continue
             ms = db.q("SELECT status, amount FROM visit_marks WHERE day = ? AND emp_id = ?", r["day"], r["emp_id"])
             sold = sum(1 for x in ms if x["status"] == "sold")
             total = sum(x["amount"] or 0 for x in ms)
@@ -92,6 +94,8 @@ def feed(ctx, limit=6):
         from core.calendar import month_of
         allm = db.get(f"dm:{month_of(today)}") or {}
         for eid, days in allm.items():
+            if int(eid) not in names:                          # не в этой сборке демо
+                continue
             for d, m in days.items():
                 if d < (today - timedelta(days=1)).isoformat():
                     continue
@@ -111,6 +115,8 @@ def feed(ctx, limit=6):
         k = ctx.kpi()
         worst = []
         for eid, rs in k.debts.items():
+            if eid not in names:
+                continue
             for r in rs:
                 over = r["d61_90"] + r["d91"]
                 if over > 0:
@@ -150,7 +156,7 @@ def decisions(ctx):
     if ctx.can("approval") and ctx.role in ("owner", "admin"):
         from core.month import cycle
         names = {e["id"]: e["fio"] for e in ctx.db.employees(active=None)}
-        for e in cycle.edits(ctx.db, ctx.month, "wait")[:5]:
+        for e in [x for x in cycle.edits(ctx.db, ctx.month, "wait") if x["emp_id"] in names][:5]:
             sign = "Премия" if e["amount"] > 0 else "Удержание"
             out.append({"t": f"{sign} {short(names.get(e['emp_id'], '?'))} {money(abs(e['amount']))}",
                         "why": f"{e['reason']} — {e['author']}",

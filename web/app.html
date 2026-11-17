@@ -346,6 +346,8 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 .bi { display: inline-grid; place-items: center; width: 20px; height: 20px; margin: -3px -4px -3px 6px; border-radius: 50%; vertical-align: middle;
   font: italic 700 12px/1 Georgia, serif; color: var(--accent); box-shadow: inset 0 0 0 1.3px var(--accent); background: var(--surface); cursor: help; }
 .bchip.on .bi { background: #fff; }
+.bsum .bhow { color: var(--ink); }
+.bt span.bi { display: inline-grid; font-size: 12px; color: var(--accent); }   /* ⓘ у названия отдела — в строку, не отдельной строкой */
 .bsteps { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--ink-2); }
 .bsrow { display: flex; align-items: center; gap: 6px; } .bsrow small { width: 18px; text-align: center; }
 .bsrow input { width: 76px; border: 0; box-shadow: var(--edge); border-radius: 8px; padding: 6px 8px; font: inherit; font-weight: 600; font-size: 15px;
@@ -866,7 +868,7 @@ function bQuote() {
   d.extra.forEach(([f, , p]) => { if (BS.funcs.has(f)) extra += p; });
   const monthly = R(sum - disc + extra), year = R(monthly * (1 - pr.disc_year / 100));
   const setup = (BS.funcs.size || people) ? Math.max(Math.round(monthly * pr.setup_mult / 1000) * 1000, pr.setup_min) : 0;
-  return {monthly, year, setup, people, on, all};
+  return {monthly, year, setup, people, on, all, full: R(sum + extra), disc: R(disc), funcs: sum - people * pr.user, users: people * pr.user, extra};
 }
 function bToggleFunc(f) {
   const req = BS.d.requires;
@@ -914,8 +916,8 @@ function bStep(k) {
 }
 function bPage1(q) {
   const d = BS.d;
-  let h = `<div class="bsec"><div class="bst">Сколько людей в фирме</div><div class="bchips">${d.sizes.map(([c, t, sz, ppl]) =>
-    bChip(BS.base === c, "size", c, `${esc(t)}<small>${Object.values(ppl).reduce((a, b) => a + b, 0)} чел.</small>`, "", sz)).join("")}</div>
+  let h = `<div class="bsec"><div class="bst">Сколько людей в фирме</div><div class="bchips">${d.sizes.map(([c, t, sz, ppl, , rng]) =>
+    bChip(BS.base === c, "size", c, `${esc(t)}<small>${esc(rng)}</small>`, "", sz)).join("")}</div>
     <p class="bhint">Всё уже заполнено типовым набором для фирмы такого размера. Меняйте только то, что у вас иначе.</p></div>`;
   h += `<div class="bsec"><div class="bst">Отделы <em>включите нужные</em></div>` + d.depts.map(x => {
     const on = q.on[x.k], sel = x.fs.filter(([f]) => BS.funcs.has(f)), n = sel.length, price = sel.reduce((a, [, , p]) => a + p, 0), fx = BS.ui.fx[x.k];
@@ -925,8 +927,8 @@ function bPage1(q) {
       ${on ? `<div class="bsum2"><span>${esc(words)}</span><button class="blink" data-b="fx" data-v="${x.k}">${fx ? "Свернуть ▴" : "✏️ Функции и люди"}</button></div>` : ""}
       ${on && fx ? `<div class="binner"><div class="blab">Людей в отделе ${bStep(x.k)}</div><div class="bchips">${x.fs.map(([f, t, p, i]) => bChip(BS.funcs.has(f), "func", f, `${esc(t)}<small>${bfmt(p)} ₽</small>`, "", i)).join("")}</div></div>` : ""}</div>`;
   }).join("") + `</div>`;
-  h += `<div class="bsec"><div class="bst">Ещё</div><div class="bchips">${d.all.map(([f, t, , i]) => bChip(BS.funcs.has(f), "func", f, esc(t), "", i)).join("")}
-    ${bChip(BS.year, "year", "", `Оплата за год −${d.prices.disc_year}%`)}${d.extra.map(([f, t, , i]) => bChip(BS.funcs.has(f), "func", f, esc(t), "", i)).join("")}</div></div>`;
+  h += `<div class="bsec"><div class="bst">Ещё</div><div class="bchips">${d.all.map(([f, t, p, i]) => bChip(BS.funcs.has(f), "func", f, `${esc(t)}<small>${p ? bfmt(p) + " ₽" : "бесплатно"}</small>`, "", i)).join("")}
+    ${d.extra.map(([f, t, p, i]) => bChip(BS.funcs.has(f), "func", f, `${esc(t)}<small>${p ? bfmt(p) + " ₽" : "бесплатно"}</small>`, "", i)).join("")}${bChip(BS.year, "year", "", `Оплата за год <small>−${d.prices.disc_year}%</small>`)}</div></div>`;
   h += `<div class="bsec"><button class="bghost" data-b="go" data-v="pdf">📄 Коммерческое предложение</button><button class="bghost" data-b="go" data-v="cd">📋 Анкета для подключения</button></div>`;
   return h;
 }
@@ -997,7 +999,12 @@ function bSum(q) {
   // Адам 05.11: клиенту сначала «Посмотреть мой бот», «Хочу так» — потом; партнёр оформляет при клиенте — у него «Хочу так»
   const btn = BS.ui.tab === 0 ? `<button class="bgo" data-b="tab" data-v="1">Дальше ›</button>` :
     BS.d.partner ? `<button class="bgo" data-b="go" data-v="req">📨 Хочу так</button>` : `<button class="bgo" data-b="go" data-v="look">👀 Посмотреть мой бот</button>`;
-  return `<div class="bsum"><div class="bm"><b>${bfmt(main)} ₽ / мес</b><span>${BS.year ? "при оплате за год · " : ""}подключение ${bfmt(q.setup)} ₽ · ${q.people} чел. · ${BS.d.prices.trial_days} дней бесплатно</span></div>${btn}</div>`;
+  // Адам 17.11: «по функциям 30 000 + люди, а внизу меньше» — видно, из чего сумма и откуда скидка
+  const pr = BS.d.prices, nb = x => (bfmt(x) + "\u00a0₽").replace(/ /g, "\u00a0");
+  const how = `функции ${nb(q.funcs)} + люди ${q.people}\u00a0×\u00a0${nb(pr.user)} = ${nb(q.funcs + q.users)}` +
+    (q.disc ? `<br>скидка ${pr.disc_all}% за все 4 отдела: −${nb(q.disc)}` : "") + (q.extra ? `<br>дополнительно: +${nb(q.extra)}` : "") +
+    (BS.year ? `<br>оплата за год: ещё −${pr.disc_year}%` : "");
+  return `<div class="bsum"><div class="bm"><b>${bfmt(main)} ₽ / мес</b><span class="bhow">${how}</span><span>подключение ${bfmt(q.setup)} ₽ · ${BS.d.prices.trial_days} дней бесплатно</span></div>${btn}</div>`;
 }
 function bldRender() {
   const el = $("bld"); if (!el || !BS) return;

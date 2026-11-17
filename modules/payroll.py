@@ -80,7 +80,8 @@ def fund(ctx, kind=None, ident=None):
         parts = [(d, [e for e in es if e["dept"] == d.id]) for d in ctx.cfg.departments]
         parts = [(d, ps, sum(p.calc(e).total for e in ps)) for d, ps in parts if ps]
         mx = max([x[2] for x in parts] or [1]) or 1
-        v.ui("rows", {"items": [{"t": d.name, "s": f"{len(ps)} чел.", "v": money(s), "bar": [s / mx, ""], "chip": ["›", f"fund:dept:{d.id}", ""]}
+        # отдел не в наборе, а в нём директор / бухгалтер (они есть всегда) — так и подписываем (Адам 17.11)
+        v.ui("rows", {"items": [{"t": d.name if ctx.cfg.dept_on(d.id) else "Руководство", "s": f"{len(ps)} чел.", "v": money(s), "bar": [s / mx, ""], "chip": ["›", f"fund:dept:{d.id}", ""]}
                                 for d, ps, s in parts]}, "По отделам",
              fallback=[f"{d.name}: {money(s)} · {len(ps)} чел." for d, ps, s in parts])
         kb = []

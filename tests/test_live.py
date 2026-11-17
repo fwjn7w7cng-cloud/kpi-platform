@@ -128,6 +128,27 @@ class Live(unittest.TestCase):
         self.assertIn("setbar", b)
         self.assertEqual([a[1] for a in b["setbar"]["d"]["acts"]], ["sw:ed", "sw:req"])
 
+    def test_build_rules_everywhere(self):
+        """Адам 17.11: «в сборке убрал склад — а в фонде он есть». Что в «Собрать» — то и везде: отделы, люди, роли."""
+        from core.access import editions as E
+        self.app.press(ADMIN, "sw:role:owner")
+        funcs = [f for f, (d, _) in E.FUNCS.items() if d in ("sales", "logistics")]
+        self.app.press(ADMIN, "swb:s:q", form={"funcs": funcs, "on": ["sales", "logistics"],
+                                               "counts": {"sales": 8, "stock": 0, "logistics": 3, "office": 0}})
+        ctx = self.app.ctx(ADMIN)
+        kinds = {d.id: d.kind for d in ctx.cfg.departments}
+        b = blocks(self.app.press(ADMIN, "fund"))
+        names = [x["t"] for x in b["rows"]["d"]["items"]]
+        self.assertFalse([d.name for d in ctx.cfg.departments if d.kind in ("warehouse", "purchasing") and d.name in names])
+        es = ctx.db.employees()
+        sales = [e for e in es if kinds[e["dept"]] == "sales" and e["role"] not in ("owner", "admin", "accountant")]
+        self.assertEqual(len(sales), 8)
+        self.assertFalse([e for e in es if kinds[e["dept"]] in ("warehouse", "purchasing")])
+        tiles = [t[1] for t in blocks(self.app.press(ADMIN, "home"))["tiles"]["d"]["items"]]
+        self.assertFalse([d.name for d in ctx.cfg.departments if d.kind in ("warehouse", "purchasing") and d.name in tiles])
+        from core.ui import orient
+        self.assertFalse([r for r in orient.demo_bar(self.app.ctx(ADMIN))["roles"] if "складом" in r[0] or "закуп" in r[0].lower()])
+
     def test_billing_hidden_in_demo(self):
         from core.ui.screens import _menu_items
         self.app.press(ADMIN, "sw:role:owner")

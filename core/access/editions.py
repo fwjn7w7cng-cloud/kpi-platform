@@ -91,6 +91,9 @@ SIZES = {
     "max":      ("крупная · 100+ человек, филиалы", {"sales": 60, "stock": 25, "logistics": 30, "office": 12}, _ALL_ROLES,
                  "всё плюс свой бренд, филиалы, функции на заказ"),
 }
+# Как набор называется в «Собрать» (Адам 17.11: «поменяй эти названия» — по размеру фирмы, чтобы было ясно, что это про людей).
+SIZE_NAMES = {"start": ("Маленькая", "до 10 чел."), "business": ("Небольшая", "10–25 чел."), "control": ("Средняя", "25–50 чел."),
+              "company": ("Крупная", "50–100 чел."), "max": ("Большая", "100+ чел.")}
 for _k, (_size, _people, _roles, _what) in SIZES.items():
     PRESETS[_k]["size"] = _size
     PRESETS[_k]["people"] = {d: _people.get(d, 0) for d in ("sales", "stock", "logistics", "office")}

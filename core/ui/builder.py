@@ -114,7 +114,8 @@ def data(ctx, ex=None, ui=None):
             title, ic = PB.POSITIONS[pos][:2]
             roles.append({"pos": pos, "t": title, "ic": ic, "d": d, "items": _fixed_text(copy.deepcopy(PB.items_of(ctx, pos))),
                           "quick": [[b, v or PB.variants(b, pos)[0][0], t] for b, v, t in QUICK[pos]]})
-    sizes = [[c, x["title"], x["size"], dict(x["people"]), sorted(E.preset_functions(c))] for c, x in E.PRESETS.items()]
+    sizes = [[c, E.SIZE_NAMES[c][0], f"{x['size']}: {x['what']}.", dict(x["people"]), sorted(E.preset_functions(c)), E.SIZE_NAMES[c][1]]
+             for c, x in E.PRESETS.items()]
     q = T.quote_of(ctx)
     from core.demo import is_partner
     return {"partner": bool(is_partner(ctx)),
