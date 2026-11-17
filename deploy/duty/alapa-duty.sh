@@ -19,13 +19,26 @@ for f in "$DIR"/*.new; do
   port=$(grep -E '^WEB_PORT=' "$envf" | head -1 | cut -d= -f2 | tr -d '[:space:]"')
   url=$(grep -E '^WEB_URL=' "$envf" | head -1 | cut -d= -f2 | tr -d '[:space:]"')
   host=${url#https://}
-  [[ "$port" =~ ^[0-9]+$ ]] && (( port >= 8102 && port <= 8999 )) || { fail "порт «$port» вне 8102–8999"; continue; }
+  [[ "$port" =~ ^[0-9]+$ ]] && (( port >= 8301 && port <= 8999 )) || { fail "порт «$port» вне 8301–8999"; continue; }
   [[ "$host" =~ ^[a-z0-9-]+\.alapa\.pro$ ]] || { fail "адрес «$host» не *.alapa.pro"; continue; }
   if grep -lE "^WEB_PORT=$port\s*$" "$ROOT"/clients/*/.env 2>/dev/null | grep -v "/clients/$code/.env" | grep -q .; then
     fail "порт $port уже у другого клиента"; continue
   fi
+  # 18.11: порт может держать любой бот сервера (Botter, fit, теплоком…), не только клиенты Алапы — проверяем, кто слушает на деле
+  if ss -Hltn "sport = :$port" | grep -q .; then fail "порт $port уже занят на сервере другой программой"; continue; fi
   chown -R alapa:alapa "$ROOT/clients/$code"
   systemctl enable --now "kpi-web@$code" || { fail "служба kpi-web@$code не запустилась"; continue; }
+  ok=""
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 1
+    pid=$(systemctl show -p MainPID --value "kpi-web@$code")
+    if [[ "$pid" != "0" ]] && ss -Hltnp "sport = :$port" | grep -q "pid=$pid,"; then ok=1; break; fi
+  done
+  if [[ -z "$ok" ]]; then
+    n=$(systemctl show -p NRestarts --value "kpi-web@$code")
+    systemctl disable --now "kpi-web@$code"
+    fail "приложение не заняло свой порт $port (перезапусков $n) — служба остановлена"; continue
+  fi
   mkdir -p "$CADDY"
   cat > "$CADDY/$code.caddy" <<EOF
 $host {

@@ -40,6 +40,16 @@ class Base(unittest.TestCase):
 
 
 class ClientCard(Base):
+    def test_port_skips_busy(self):
+        import socket
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", O.PORT_FIRST))
+        srv.listen(1)
+        try:
+            self.assertNotEqual(O.next_port(Path(tempfile.mkdtemp())), O.PORT_FIRST)            # занятый на сервере — пропускаем
+        finally:
+            srv.close()
+
     def test_client_fills_card_and_snapshot(self):
         r = self.app.start(CLIENT)
         from core.ui import screens
@@ -173,14 +183,15 @@ class CreateClient(Base):
         folder = self.clients / "stroybaza_yug"
         self.assertTrue((folder / "config.yaml").exists() and (folder / "parser.py").exists())
         env = (folder / ".env").read_text(encoding="utf-8")
-        self.assertIn("WEB_PORT=8102", env)                                       # 8101 — демо
+        port = int(env.split("WEB_PORT=")[1].split()[0])
+        self.assertTrue(8301 <= port <= 8999 and not O.port_busy(port))           # свой ряд, не занят на сервере (Адам 18.11)
         self.assertIn("WEB_URL=https://stroybaza-yug.example.ru", env)            # домен — от адреса демо, дефис вместо _
         self.assertIn("WEB_ADMIN_KEY=", env)
         cfg = C.load_client("stroybaza_yug")
         self.assertEqual((cfg.name, cfg.edition), ("Стройбаза Юг", "company"))
         self.assertEqual({d.kind for d in cfg.departments}, {"sales", "warehouse", "purchasing", "logistics", "office"})
         info = O.card(self.office(), uid)["client"]
-        self.assertEqual(info["port"], 8102)
+        self.assertEqual(info["port"], port)
         self.assertIn(info["key"], self.app.press(ADMIN, f"cdk:{uid}")[0].text)  # ссылка администратора — с ключом
         r = self.app.press(ADMIN, f"cd:{uid}")[0]
         self.assertIn(f"cdw:{uid}", [b.to for b in r.all_buttons()])            # вместо «Создать» — «Что дальше»

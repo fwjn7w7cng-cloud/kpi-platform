@@ -542,8 +542,19 @@ def domain(ctx):
     return host.split(".", 1)[1] if host.count(".") >= 2 else DOMAIN
 
 
+PORT_FIRST, PORT_LAST = 8301, 8999      # свой ряд для клиентов (Адам 18.11: 8102 оказался занят другим ботом сервера)
+
+
+def port_busy(port):
+    """Кто-то уже слушает этот порт на сервере (любой бот, не только Алапа)."""
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.3)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
 def next_port(clients_dir):
-    """Свободный порт для службы kpi-web@<код>: следующий за занятыми в clients/*/.env (демо — 8101)."""
+    """Свободный порт для службы kpi-web@<код>: не записан ни у одного клиента в clients/*/.env и не занят на сервере."""
     used = {8101}
     for env in clients_dir.glob("*/.env"):
         for line in env.read_text(encoding="utf-8").splitlines():
@@ -552,7 +563,10 @@ def next_port(clients_dir):
                     used.add(int(line.split("=", 1)[1].strip()))
                 except ValueError:
                     pass
-    return max(used) + 1
+    for port in range(PORT_FIRST, PORT_LAST + 1):
+        if port not in used and not port_busy(port):
+            return port
+    raise RuntimeError("нет свободного порта для нового клиента")
 
 
 def create(c, who, dom, clients_dir=None):
