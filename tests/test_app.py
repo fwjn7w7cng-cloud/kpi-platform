@@ -22,6 +22,16 @@ class Crawl(unittest.TestCase):
         self.assertEqual(errs, [], "\n".join(errs[:20]))
 
 
+def links(out, to=False):
+    """Подписи (или экраны) из «☰ Все функции»."""
+    for r in out:
+        if r.view:
+            for k, b in r.view.blocks:
+                if k == "ui" and b[0] == "links":
+                    return [x[1 if to else 0] for _, bs in b[1]["groups"] for x in bs]
+    return []
+
+
 class Demo(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -39,7 +49,7 @@ class Demo(unittest.TestCase):
         self.app.press(10, "sw:ed:start")
         self.app.press(10, "sw:role:rep")
         out = self.app.start(10)
-        labels = self.labels(out)
+        labels = self.labels(out) + links(self.app.press(10, "all"))       # Адам 17.11: остальное — в «Все функции»
         kb = [x for r in out if r.keyboard for row in r.keyboard for x in row]
         self.assertIn("😴 Клиенты", kb)                        # то, что в нижнем меню, на главной не повторяется
         self.assertIn("📈 Мой план", kb)
@@ -53,18 +63,18 @@ class Demo(unittest.TestCase):
     def test_long_home_is_grouped(self):
         self.app.press(15, "sw:ed:control")
         self.app.press(15, "sw:role:owner")
-        tos = [b.to for r in self.app.start(15) for b in r.all_buttons()]
+        self.app.start(15)
+        tos = links(self.app.press(15, "all"), to=True)
         self.assertIn("lock:stock", tos)                         # Премиум — только продажи: склад под замком пакета
         self.assertNotIn("deptv:warehouse", tos)
         self.app.press(15, "sw:ed:company")
-        menu = [b for r in self.app.start(15) for b in r.all_buttons() if not b.to.startswith(("sw:", "mon:"))]
-        self.assertLessEqual(len(menu), 12)
-        self.assertIn("mg:money", [b.to for b in menu])
+        menu = [b for r in self.app.start(15) for b in r.all_buttons() if not b.to.startswith(("sw:", "mon:", "bk:"))]
+        self.assertEqual(menu, [])                               # Адам 17.11: живая главная без плиток меню
         inside = self.labels(self.app.press(15, "mg:money"))
         self.assertNotIn("🗓 Месяц", inside)                    # он в нижнем меню
         self.assertIn("📋 Планы", inside)
-        tos = [b.to for b in menu]
-        self.assertIn("deptv:warehouse", tos)                    # все отделы — отдельными кнопками
+        tos = links(self.app.press(15, "all"), to=True)
+        self.assertIn("deptv:warehouse", tos)                    # все отделы — отдельными кнопками (в «Все функции»)
         self.assertIn("sales", tos)
         self.app.start(15)
         tabs = [to for row in screens.bottom_rows(self.app.ctx(15)) for _, to in row][:3]

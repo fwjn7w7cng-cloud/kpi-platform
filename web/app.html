@@ -219,12 +219,24 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 .umx tr.r { cursor: pointer; } .umx tr.d td { white-space: normal; overflow: visible; font-weight: 400; }
 .updet { background: var(--sunk); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; text-align: left; font-size: 13px; }
 .ufld { display: grid; grid-template-columns: 1fr 120px; align-items: center; gap: 10px; font-size: 14px; padding: 6px 0; }
-.ufld input, .ufld textarea { width: 100%; border: 0; box-shadow: 0 0 0 1px var(--line); background: var(--sunk); border-radius: 10px; padding: 9px 10px; font: inherit; font-weight: 600; color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.ufld input, .ufld textarea { box-sizing: border-box; min-width: 0; width: 100%; border: 0; box-shadow: 0 0 0 1px var(--line); background: var(--sunk); border-radius: 10px; padding: 9px 10px; font: inherit; font-weight: 600; color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
 .ufld.w { grid-template-columns: 1fr; } .ufld.w input, .ufld textarea { text-align: left; font-weight: 500; }
 .ufld em { grid-column: 2; font-style: normal; font-size: 11.5px; color: var(--good); text-align: right; margin-top: -4px; }
 .uwel { background: var(--surface); border-radius: 20px; box-shadow: 0 0 0 1.5px var(--accent); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 .uwel h3 { margin: 0; font-family: var(--display); font-size: 19px; } .uwel ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--ink-2); }
 .uwel ol b { color: var(--ink); } .uwel p { margin: 0; font-size: 13px; color: var(--ink-2); }
+.uquick { display: flex; flex-wrap: wrap; gap: 8px; }
+.uquick button { border: 0; border-radius: 999px; padding: 10px 14px; font-size: 14px; font-weight: 600; background: var(--surface); box-shadow: var(--edge); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.uquick button .si { width: 18px; height: 18px; } .uquick button.all { background: var(--sunk); box-shadow: none; color: var(--ink-2); }
+.uset { background: var(--surface); border-radius: 16px; box-shadow: var(--edge); padding: 12px 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.uset .tx { flex: 1; min-width: 160px; } .uset .tx b { font-weight: 700; } .uset .tx span { display: block; font-size: 12.5px; color: var(--ink-2); }
+.uset .ubtns { flex: none; }
+.ulinks { display: flex; flex-direction: column; gap: 14px; }
+.ulinks h4 { margin: 0 0 6px; font-family: var(--display); font-size: 15px; }
+.ulinks .ubox button { border: 0; background: none; width: 100%; text-align: left; padding: 12px 0; border-top: 1px solid var(--line); font-size: 15px; color: var(--ink); cursor: pointer; display: flex; align-items: center; gap: 10px; }
+.ulinks .ubox button:first-child { border-top: 0; } .ulinks .ubox button::after { content: "›"; margin-left: auto; color: var(--ink-2); }
+.ulinks .ubox button .si { width: 20px; height: 20px; }
+.utop { padding: 10px 0 8px; border-bottom: 1px solid var(--line); font-size: 13.5px; } .utop small { display: block; color: var(--ink-2); font-size: 12px; margin-bottom: 2px; } .utop b { font-weight: 600; }
 .roles2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .roles2 button { border: 0; border-radius: 14px; padding: 12px; background: var(--sunk); text-align: left; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--ink); }
 .roles2 button.on { background: var(--ink); color: var(--bg); }
@@ -741,10 +753,16 @@ const UI = {
         `<tr class="d" id="${id}" hidden><td colspan="${r.cells.length + 1}"><div class="updet">${r.det ? `<div>${esc(r.det)}</div>` : ""}${(r.acts || []).length ? `<div class="ubtns">${r.acts.map(([l, to], i) => `<button class="ub${i ? "" : " ok"}"${uTo(to)}>${esc(l)}</button>`).join("")}</div>` : ""}</div></td></tr>`; }).join("")}</tbody></table>` +
     (d.note ? `<p class="muted" style="margin:4px 0 8px;font-size:12.5px;color:var(--ink-2)">${esc(d.note)}</p>` : "") + `</div>`; },
   form(d, t) { const fid = "f" + (++UID);
-    return uHead(t, d.right ? `<small>${esc(d.right)}</small>` : "") + `<div class="ubox" data-form="${fid}" style="padding:8px 14px">${(d.fields || []).map(f =>
+    return uHead(t, d.right ? `<small>${esc(d.right)}</small>` : "") + `<div class="ubox" data-form="${fid}" style="padding:8px 14px">${d.top ? `<div class="utop"><small>${esc(d.top[0])}</small><b>${esc(d.top[1])}</b></div>` : ""}${(d.fields || []).map(f =>
       `<label class="ufld${f.w ? " w" : ""}"><span>${esc(f.l)}</span>${f.area ? `<textarea name="${esc(f.k)}" placeholder="${esc(f.ph || "")}"${d.done ? " disabled" : ""}>${esc(f.v || "")}</textarea>` :
         `<input name="${esc(f.k)}" value="${esc(f.v ?? "")}" placeholder="${esc(f.ph || "")}" inputmode="${f.num ? "decimal" : "text"}"${f.money ? ' data-money="1"' : ""}${d.done ? " disabled" : ""}>`}</label>`).join("")}` +
       (d.done ? `<div class="urow"><span class="ustamp">${esc(d.done)}</span></div>` : `<div class="urow" style="flex-wrap:wrap"><button class="ub pri" style="flex:1" data-send="${fid}" data-sto="${esc(d.send[1])}">${esc(d.send[0])}</button>${d.hint ? `<span style="flex-basis:100%;font-size:12.5px;color:var(--ink-2)">${esc(d.hint)}</span>` : ""}</div>`) + `</div>`; },
+  quick(d) { return `<div class="uquick">${(d.items || []).map(([l, to]) => { const [i, t] = splitLabel(l);
+    return `<button class="${to === "all" ? "all" : ""}"${uTo(to)}>${i ? ic(i) : ""}${esc(t)}${to === "all" ? " ›" : ""}</button>`; }).join("")}</div>`; },
+  setbar(d) { return `<div class="uset"><div class="tx"><b>${esc(d.t)} · ${esc(d.v)}</b>${d.s ? `<span>${esc(d.s)}</span>` : ""}</div>` +
+    `<div class="ubtns">${(d.acts || []).map(([l, to], i) => `<button class="ub${i ? " pri" : ""}"${uTo(to)}>${esc(l)}</button>`).join("")}</div></div>`; },
+  links(d) { return `<div class="ulinks">${(d.groups || []).map(([t, bs]) => `<div><h4>${esc(t)}</h4><div class="ubox">${bs.map(([l, to]) => { const [i, x] = splitLabel(l);
+    return `<button${uTo(to)}>${i ? ic(i) : ""}<span>${esc(x)}</span></button>`; }).join("")}</div></div>`).join("")}</div>`; },
   welcome(d) { return `<div class="uwel"><h3>${esc(d.title)}</h3><ol>${(d.items || []).map(([b, x]) => `<li><b>${esc(b)}</b> — ${esc(x)}</li>`).join("")}</ol>${d.note ? `<p>${esc(d.note)}</p>` : ""}` +
     `<div class="ubtns">${(d.acts || []).map(([l, to], i) => `<button class="ub${i ? "" : " pri"}" style="${i ? "" : "flex:1"}"${uTo(to)}>${esc(l)}</button>`).join("")}</div></div>`; },
 };

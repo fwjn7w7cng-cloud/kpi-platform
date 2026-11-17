@@ -60,11 +60,19 @@ class Live(unittest.TestCase):
         pts = RT.points(ctx, ctx.me["id"], TODAY.isoformat())
         free = next(c for c in pts if c not in RT.marks(ctx, ctx.me["id"], TODAY.isoformat()))
         self.app.press(ADMIN, f"lvr:{TODAY.isoformat()}:{free}")
-        self.assertEqual(RT.marks(self.app.ctx(ADMIN), ctx.me["id"], TODAY.isoformat())[free]["status"], "visited")
-        self.app.press(ADMIN, f"lvf:{TODAY.isoformat()}", form={"dir": "Город", "sold": "3", "visits": "5", "worked": "3", "coll": "30т", "km": "120"})
+        self.assertEqual(RT.marks(self.app.ctx(ADMIN), ctx.me["id"], TODAY.isoformat())[free]["status"], "sold")   # первое нажатие — «заказ»
+        self.assertIn("с заказом", blocks(self.app.press(ADMIN, "home"))["form"]["d"]["top"][1])                    # счёт по отметкам — сам
+        out = self.app.press(ADMIN, f"lvf:{TODAY.isoformat()}", form={"coll": "abc"})
+        self.assertIn("Не понял", out[0].text)
+        sv = next(x for x in RT._leads_of(ctx, ctx.me))
+        ctx.db.x("UPDATE employees SET tg_id = 777001 WHERE id = ?", sv["id"])
+        out = self.app.press(ADMIN, f"lvf:{TODAY.isoformat()}", form={"coll": "45 000", "km": "120", "note": "Стройдвор просит отсрочку"})
         ctx = self.app.ctx(ADMIN)
         rep = ctx.db.get(f"dayrep:{ctx.me['id']}:{TODAY.isoformat()}")
-        self.assertEqual(rep["coll"], "30т")
+        self.assertEqual(rep["coll"], "45 000")
+        self.assertEqual(rep["note"], "Стройдвор просит отсрочку")
+        lead = [r.text for r in out if r.to]
+        self.assertTrue(lead and "собрал 45 000" in lead[0] and "120 км" in lead[0] and "Стройдвор" in lead[0])
         self.assertTrue(RT.formed(ctx, ctx.me["id"], TODAY.isoformat()))
         self.assertTrue(ctx.db.one("SELECT amount FROM timesheet WHERE emp_id = ? AND kind = 'km' AND day = ?", ctx.me["id"], TODAY.isoformat()))
         p = blocks(self.app.press(ADMIN, "pay"))
@@ -88,6 +96,37 @@ class Live(unittest.TestCase):
         b = blocks(self.app.press(ADMIN, "fund"))
         self.assertIn("rows", b)
         self.assertEqual(len(b["rows"]["d"]["items"]), 5)
+
+    def test_home_not_heaped(self):
+        """Адам 17.11 «почему всё в кучу»: на живой главной — ни плиток меню, ни месяца, ни демо-надписи; три частых и «Все функции»."""
+        for role in ("rep", "owner", "head"):
+            out = self.app.press(ADMIN, f"sw:role:{role}")
+            r = next(x for x in out if x.view)
+            self.assertFalse([b for row in r.buttons for b in row if not b.to.startswith("bk:")], role)
+            b = blocks(out)
+            q = b["quick"]["d"]["items"]
+            self.assertLessEqual(len(q), 4)
+            self.assertEqual(q[-1][1], "all")
+            self.assertFalse(any(k == "note" and "выдуманы" in str(x) for k, x in r.view.blocks), role)
+        lk = blocks(self.app.press(ADMIN, "all"))["links"]["d"]["groups"]
+        self.assertTrue(sum(len(bs) for _, bs in lk) >= 5)
+        self.app.press(ADMIN, "sw:role:rep")
+        p = self.app.press(ADMIN, "pay")
+        mon = [b.to for r in p for row in (r.buttons or []) for b in row if b.to.startswith("mon:")]
+        self.assertTrue(mon and mon[0].endswith(":pay"))
+        back = self.app.press(ADMIN, mon[0])
+        self.assertIn("explain", blocks(back))                         # остались в «Зарплате», не выкинуло на главную
+        r = next(x for x in self.app.press(ADMIN, "home") if x.view)
+        self.assertTrue(r.buttons and r.buttons[0][0].to.startswith("mon:"))   # прошлый месяц — кнопка вернуться
+
+    def test_set_card(self):
+        self.app.press(ADMIN, "sw:role:owner")
+        ctx = self.app.ctx(ADMIN)
+        ctx.session["built"] = 1
+        ctx.save()
+        b = blocks(self.app.press(ADMIN, "home"))
+        self.assertIn("setbar", b)
+        self.assertEqual([a[1] for a in b["setbar"]["d"]["acts"]], ["sw:ed", "sw:req"])
 
     def test_billing_hidden_in_demo(self):
         from core.ui.screens import _menu_items

@@ -109,8 +109,8 @@ class Builder(unittest.TestCase):
         self.assertFalse(d["partner"])
         out = self.app.press(ADMIN, "swb:s:look", form={"funcs": ["kpi", "debts"], "counts": {"sales": 8}})
         self.assertTrue(self.app.ctx(ADMIN).session.get("built"))
-        btns = [b.to for r in out for row in (r.buttons or []) for b in row]
-        self.assertIn("sw:req", btns)
+        btns = [a[1] for r in out if r.view for k, b in r.view.blocks if k == "ui" and b[0] == "setbar" for a in b[1]["acts"]]
+        self.assertIn("sw:req", btns)                            # Адам 17.11: карточка набора сверху главной
         self.assertIn("sw:ed", btns)
         self.assertEqual(set(self.app.ctx(ADMIN).cfg.functions), {"debts", "kpi"})
 

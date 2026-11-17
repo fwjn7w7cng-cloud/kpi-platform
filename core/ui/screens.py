@@ -12,7 +12,7 @@ from core.config import INDUSTRIES
 from core.kpi.engine import MAIN, SELLERS
 from core.month import cycle
 from core.ui.kit import METRIC_HEAD, Button, Reply, fmt, metric_row, money, ok_row, pct, rows
-from core.ui.registry import MENU, menu, screen, text_input
+from core.ui.registry import MENU, SCREENS, menu, screen, text_input
 from core.ui.views import Card, Cell, Row, View, tone
 
 LEADERS = {"sv", "head", "owner", "admin"}
@@ -52,7 +52,16 @@ def home(ctx):
     v = View(ctx.cfg.name, f"{ctx.name()} · {role_t} · {month_title(ctx.month).lower()}")
     if orient.welcome_due(ctx):                       # Адам 17.11: приветствие — карточкой сверху главной, не отдельным экраном
         orient.welcome_card(v, ctx)
-    if not _live_home(ctx, v):                        # Адам 17.11: живые экраны ролей (core/ui/live.py)
+    if ctx.demo and ctx.session.get("built"):        # Адам 05.11 / 17.11: свой набор — маленькой карточкой сверху
+        _set_card(v, ctx)
+    lv = View("", "")
+    live = _live_home(ctx, lv)                        # Адам 17.11: живые экраны ролей (core/ui/live.py)
+    if live:
+        v.blocks.extend(lv.blocks)
+        q = quick_links(ctx)                          # Адам 17.11: «не в кучу» — три частых и «Все функции», без плиток
+        if q:
+            v.ui("quick", {"items": q}, fallback=["Ещё: " + " · ".join(l for l, _ in q)])
+    else:
         v.tiles(_home_tiles(ctx))
         lines = _home_lines(ctx)
         if lines:
@@ -66,23 +75,67 @@ def home(ctx):
     bl = home_line(ctx)
     if bl:
         v.note(bl)
+    if live:                                          # всё остальное — в «Все функции»; месяц — в «Зарплате» и «Фонде»
+        kb = [] if ctx.is_current() else [[Button(f"‹ Вернуться в {month_title(month_of(ctx.today)).split()[0].lower()}",
+                                                  f"mon:{month_of(ctx.today)}")]]
+        return Reply(view=v, buttons=kb)
     if ctx.demo:
         v.note(f"Демо · {INDUSTRIES[ctx.industry].lower()} · набор «{ctx.cfg.set_title}». Все люди и цифры выдуманы.")
-        from core.demo import is_partner
-        if is_partner(ctx):
-            v.note("🤝 Вы партнёр: «📘 Инструкция» — что нажимать, «🤝 Мои клиенты» — приглашения, анкеты и заявки, "
-                   "«🔄 Заново» — свежие цифры перед каждым показом.")
     # Что уже есть в нижнем меню, на главной не повторяем (переключатели демо, «Смотреть как», отзывы — тоже там).
     kb = rows(_dept_buttons(ctx), 2) + rows(_home_buttons(ctx), 2)
-    if ctx.demo and ctx.session.get("built"):        # Адам 05.11: посмотрел свой бот — теперь «Хочу так» под рукой
-        from core.ui import tariff as T
-        q = T.quote_of(ctx)
-        price = q["monthly_year"] if ctx.session.get("year") else q["monthly"]
-        v.note(f"🧩 Ваш набор: {money(price)} в месяц{' при оплате за год' if ctx.session.get('year') else ''}, "
-               f"подключение {money(q['setup'])}. Здесь включено только то, что вы выбрали; остальное — с замком 🔒.")
-        kb.insert(0, [Button("✏️ Изменить набор", "sw:ed"), Button("📨 Хочу так", "sw:req")])
     kb.append(_month_switch(ctx))
     return Reply(view=v, buttons=kb)
+
+
+def _set_card(v, ctx):
+    from core.ui import tariff as T
+    q = T.quote_of(ctx)
+    year = ctx.session.get("year")
+    price = q["monthly_year"] if year else q["monthly"]
+    v.ui("setbar", {"t": "🧩 Ваш набор", "v": f"{money(price)} в месяц" + (" при оплате за год" if year else ""),
+                    "s": f"подключение {money(q['setup'])} · чего нет в наборе — с замком 🔒",
+                    "acts": [["✏️ Изменить", "sw:ed"], ["📨 Хочу так", "sw:req"]]},
+         fallback=[f"🧩 Ваш набор: {money(price)} в месяц, подключение {money(q['setup'])}."])
+
+
+# Что показать в строке «быстро» под живой главной — по порядку, первые три доступные (Адам 17.11).
+QUICK_ORDER = ["debts", "fc", "rating", "appr", "pl", "cli", "tasks", "sk", "sol", "lg", "lgk", "wrc", "ts", "people", "hr",
+               "rv", "achb", "qz"]
+LIVE_SHOWN = {"call", "rt", "rtd", "dm", "me", "fund", "pay", "help", "fb", "fbl"}      # это уже есть на живой главной или в нижнем меню
+QUICK_N = 3
+
+
+def quick_links(ctx):
+    items = [(m, b) for m, b in _home_items(ctx) if m.to not in LIVE_SHOWN and not b.lock]
+    order = {to: i for i, to in enumerate(QUICK_ORDER)}
+    items.sort(key=lambda t: order.get(t[0].to, 100))
+    out = [[b.label, b.to] for _, b in items[:QUICK_N]]
+    return out + [["☰ Все функции", "all"]] if out or _all_items(ctx) else out
+
+
+def _all_items(ctx):
+    """Всё, что есть у зрителя, кроме нижнего меню: [(группа, [Button])] — для экрана «Все функции»."""
+    groups, other = {}, []
+    for m, b in _home_items(ctx):
+        g = next((g for g, _, tos in MENU_GROUPS if m.to in tos), None)
+        (groups.setdefault(g, []) if g else other).append(b)
+    out = [(t, groups[g]) for g, t, _ in MENU_GROUPS if groups.get(g)]
+    depts = _dept_buttons(ctx)                        # директору — и все отделы, закрытые с замком
+    if depts:
+        out.insert(0, ("🏢 Отделы", depts))
+    if other:
+        out.append(("Ещё", other))
+    return out
+
+
+@screen("all")
+def all_funcs(ctx):
+    gs = _all_items(ctx)
+    locked = any(b.lock for _, bs in gs for b in bs)
+    v = View("☰ Все функции", "всё, что есть в приложении" + (" · 🔒 — нет в наборе, нажмите — расскажем" if locked else ""))
+    v.ui("links", {"groups": [[t, [[b.label, b.to] for b in bs]] for t, bs in gs]},
+         fallback=[f"{t}: " + ", ".join(b.label for b in bs) for t, bs in gs])
+    return Reply(view=v)
 
 
 def _live_home(ctx, v):
@@ -266,6 +319,8 @@ def bottom_rows(ctx):
     fb = ("💬 Отзывы", "fbl") if ctx.role == "admin" else \
         ("🐞 Не работает", "fb") if ctx.role in ("rep", "newbie", "staff") else ("💬 Предложение", "fb")
     find = [("🔍 Найти", "find")] if items else []            # поиск всем (Адам 09.11); отдел не подключён — не нужен
+    if find:                                                    # Адам 17.11: всё остальное — одним списком
+        find = find + [("☰ Все функции", "all")]
     items = [("🏠 Главная", "home")] + [x for x in items if x != fb] + find + [fb]
     if ctx.demo and find:                             # Адам 17.11: демо — «Главная · Зарплата · Собрать», остальное в «Ещё»
         pay = ("💰 Фонд", "fund") if role in ("owner", "admin", "accountant", "head") and ctx.can("payroll") else ("💰 Зарплата", "pay")
@@ -339,21 +394,28 @@ def _home_lines(ctx):
     return out
 
 
-def _month_switch(ctx):
+def _month_switch(ctx, back=""):
+    """◀ прошлый месяц / следующий ▶. back — экран, куда вернуться (pay, fund); пусто — главная."""
+    tail = f":{back}" if back else ""
     prev = shift_month(ctx.month, -1)
-    b = [Button(f"◀ {month_title(prev).split()[0]}", f"mon:{prev}")]
+    b = [Button(f"◀ {month_title(prev).split()[0]}", f"mon:{prev}{tail}")]
     if not ctx.is_current():
         nxt = shift_month(ctx.month, 1)
-        b.append(Button(f"{month_title(nxt).split()[0]} ▶", f"mon:{nxt}"))
+        b.append(Button(f"{month_title(nxt).split()[0]} ▶", f"mon:{nxt}{tail}"))
     return b
 
 
+MONTH_BACK = {"pay", "fund"}
+
+
 @screen("mon")
-def set_month(ctx, month):
+def set_month(ctx, month, back=""):
     cur = month_of(ctx.today)
     ctx.session["month"] = month if month <= cur else cur
     ctx.month = ctx.session["month"]
     ctx._kpi, ctx._pay = {}, {}
+    if back in MONTH_BACK and back in SCREENS:
+        return SCREENS[back][0](ctx)
     return home(ctx)
 
 
@@ -847,7 +909,7 @@ LOCK_TEXT = {
     "call_today": "Список на сегодня: кому позвонить — заснувшие клиенты, должники, точки маршрута без заказа.",
     "formulas": "Свои показатели компании по формуле: средний чек, сбор к продажам — что угодно из готовых цифр.",
     "clients": "Кто из клиентов перестал брать, кто берёт меньше, кто растёт, какие бренды бросили — с карточкой клиента по коду.",
-    "route": "Маршрут на день по точкам и отчёт торгового вечером: продал, был без заказа, не застал — СВ видит всё сразу.",
+    "route": "Маршрут на день по точкам и отчёт торгового вечером: заказ, был без заказа, не застал — СВ видит всё сразу.",
     "quiz": "Тест по продукции раз в неделю и курс для новичка: уроки, вопросы, результаты у руководителя.",
     "plans": "Руководитель продаж готовит планы — директор утверждает — каждый получает свой план 1-го числа.",
     "stock": "Закупки: что закончилось и скоро закончится, что лежит; заказ поставщику сам из «нужно», согласование по сумме, Excel поставщику.",

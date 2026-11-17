@@ -48,6 +48,9 @@ def payslip(ctx, emp_id=None):
         kb.append([Button("📈 План", f"emp:{emp['id']}")])
     if _may_edit(ctx) and st != "approved" and (not ctx.me or emp["id"] != ctx.me["id"]):
         kb.append([Button("✏️ Премия / удержание", f"eda:{emp['id']}")])
+    if not emp_id:                                            # своя зарплата: месяц листается здесь (Адам 17.11 — не на главной)
+        from core.ui.screens import _month_switch
+        kb.append(_month_switch(ctx, "pay"))
     return Reply(view=v, buttons=kb)
 
 
@@ -90,6 +93,9 @@ def fund(ctx, kind=None, ident=None):
         if ctx.scope == "all":
             kb.append([Button("‹ Все отделы", "fund")])
     kb.append([Button("✏️ Правки", "edits")] if _may_edit(ctx) or ctx.role in ("owner", "admin") else [])
+    if not kind or ctx.scope != "all":
+        from core.ui.screens import _month_switch
+        kb.append(_month_switch(ctx, "fund"))
     return Reply(view=v, buttons=[r for r in kb if r])
 
 

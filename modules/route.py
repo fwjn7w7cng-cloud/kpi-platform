@@ -1,9 +1,9 @@
 """Модуль «Маршрут и отчёт за день».
 
 Торговый: точки маршрута на сегодня (или завтра) — клиент, город, когда брал, долг; по каждой точке
-отмечает ✅ продал (сумма заявки — по желанию) / 👋 был без заказа / ❌ не был (причина).
+отмечает ✅ заказ (сумма — по желанию) / 👋 был, без заказа / ❌ не был (причина).
 Вечером — «📋 Сформировать отчёт»: он уходит супервайзеру команды и руководителю продаж.
-СВ и руководитель: «📋 Отчёты дня» — по каждому торговому: сколько точек, где продал, кто не отчитался.
+СВ и руководитель: «📋 Отчёты дня» — по каждому торговому: сколько точек, где взяли заказ, кто не отчитался.
 За прошлые дни рядом видно, что подтвердила 1С (продажа в этот день в этой точке).
 
 Рассылки: утром торговому — сколько точек сегодня; вечером (schedule.evening) — напоминание, если отчёт не
@@ -20,7 +20,7 @@ from core.ui.screens import short
 from core.ui.views import Card, Cell, Row, View
 
 M = "route"
-ST = {"sold": "✅ продал", "visited": "👋 был", "missed": "❌ не был"}
+ST = {"sold": "✅ заказ", "visited": "👋 без заказа", "missed": "❌ не был"}
 REASONS = ["Закрыто", "Нет денег", "Не успел", "Отказ", "Нет на месте", "Другое"]
 
 menu("rt", "🚗 Маршрут", {"rep", "newbie"}, module=M, order=11)
@@ -102,7 +102,7 @@ def route(ctx, day=None, emp_id=None):
     v.table(["Точка", "Город", "Отметка"], rs) if rs else v.note("На этот день точек нет.")
     s = summary(ctx, emp["id"], day)
     if pts:
-        v.lines([f"✅ продал {s['sold']} · 👋 был {s['visited']} · ❌ не был {s['missed']} · не отмечено {s['none']}"
+        v.lines([f"✅ заказ {s['sold']} · 👋 без заказа {s['visited']} · ❌ не был {s['missed']} · не отмечено {s['none']}"
                  + (f" · заявок на {money(s['sum'])}" if s["sum"] else "")])
     if s["formed"]:
         v.note("📋 Отчёт за этот день сформирован" + (" ботом автоматически." if s["formed"]["auto"] else "."))
@@ -128,7 +128,7 @@ def route(ctx, day=None, emp_id=None):
 
 @screen("rtp", module=M)
 def point(ctx, day, code, act=None, value=None):
-    """Отметка точки — окно: продал / был / не был (и почему), «ОК» / «Отмена». «Продал» после «ОК» спросит сумму заявки."""
+    """Отметка точки — окно: заказ / был без заказа / не был (и почему), «ОК» / «Отмена». «Заказ» после «ОК» спросит сумму."""
     if not ctx.me or not _can_mark(ctx, ctx.me["id"], day) or code not in points(ctx, ctx.me["id"], day):
         return Reply(text="Отмечать можно свои точки за сегодня и вчера, пока отчёт не сформирован.")
     cl = _client(ctx, code)
@@ -161,7 +161,7 @@ def point(ctx, day, code, act=None, value=None):
     if act == "ok":
         v.note("Сначала отметьте, что было в точке.")
     kb = [[Button(f"{'☑' if d['st'] == k else '☐'} {t}", f"{pre}:s:{k}")] for k, t in
-          (("sold", "✅ Продал"), ("visited", "👋 Был, без заказа"), ("missed", "❌ Не был"))]
+          (("sold", "✅ Взял заказ"), ("visited", "👋 Был, без заказа"), ("missed", "❌ Не был"))]
     if d["st"] == "missed":
         kb += rows([Button(("● " if d["why"] == r else "") + r, f"{pre}:r:{i}") for i, r in enumerate(REASONS)], 3)
     kb.append(ok_row(pre))
@@ -215,7 +215,7 @@ def report_view(ctx, emp, day):
     d = date.fromisoformat(day)
     s = summary(ctx, emp["id"], day)
     v = View(f"📋 Отчёт за день · {short(emp['fio'])}", day_title(d))
-    v.tiles([("Точек", str(s["points"]), None), ("✅ Продал", str(s["sold"]), "good" if s["sold"] else None),
+    v.tiles([("Точек", str(s["points"]), None), ("✅ С заказом", str(s["sold"]), "good" if s["sold"] else None),
              ("❌ Не был", str(s["missed"]), "bad" if s["missed"] else None), ("Заявки", money(s["sum"]), None)])
     mk = marks(ctx, emp["id"], day)
     confirmed = sold_1c(ctx, emp["id"], day) if d < ctx.today else set()
@@ -275,10 +275,10 @@ def day_reports(ctx, day=None):
                        Cell(str(s["missed"]), "bad" if s["missed"] else None),
                        Cell("✓" if s["formed"] else "—", "good" if s["formed"] else "bad")],
                       sub=f"не отмечено {s['none']}" if s["none"] else ""))
-    v.tiles([("Точек", str(tot["points"]), None), ("Продал", str(tot["sold"]), None),
+    v.tiles([("Точек", str(tot["points"]), None), ("С заказом", str(tot["sold"]), None),
              ("Не был", str(tot["missed"]), "bad" if tot["missed"] else None),
              ("Отчётов", f"{sum(1 for i in ids if formed(ctx, i, day))} из {len(rs)}", None)])
-    v.table(["Менеджер", "Точек", "Продал", "Не был", "Отчёт"], rs) if rs else v.note("В этот день маршрутов нет.")
+    v.table(["Торговый", "Точек", "С заказом", "Не был", "Отчёт"], rs) if rs else v.note("В этот день маршрутов нет.")
     kb = rows([Button(short(k.employees[i]["fio"]), f"rtv:{i}:{day}") for i in ids if points(ctx, i, day)], 3)
     nav = [Button("◀", f"rtd:{(d - timedelta(days=1)).isoformat()}")]
     if d < ctx.today:

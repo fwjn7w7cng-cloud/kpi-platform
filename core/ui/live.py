@@ -86,8 +86,8 @@ def feed(ctx, limit=6):
             ms = db.q("SELECT status, amount FROM visit_marks WHERE day = ? AND emp_id = ?", r["day"], r["emp_id"])
             sold = sum(1 for x in ms if x["status"] == "sold")
             total = sum(x["amount"] or 0 for x in ms)
-            ev.append((r["ts"], "📋", f"{names.get(r['emp_id'], '?')} сдал отчёт дня: продаж {sold}" +
-                       (f", заявки на {money(total)}" if total else "")))
+            ev.append((r["ts"], "📋", f"{names.get(r['emp_id'], '?')} сдал отчёт дня: {_n(sold, 'заказ', 'заказа', 'заказов')}" +
+                       (f" на {money(total)}" if total else "")))
     if ctx.can("logistics"):
         from core.calendar import month_of
         allm = db.get(f"dm:{month_of(today)}") or {}
@@ -106,7 +106,7 @@ def feed(ctx, limit=6):
             for h in (json.loads(o["extra"] or "{}").get("hist") or [])[-1:]:
                 ts = _hist_ts(h[0], today)
                 if ts:
-                    ev.append((ts, "📦", f"Заказ «{o['supplier']}»: {h[2]}"))
+                    ev.append((ts, "📦", f"Заказ поставщику {o['supplier']}: {h[2]}"))
     if ctx.can("debts"):
         k = ctx.kpi()
         worst = []
@@ -124,6 +124,13 @@ def feed(ctx, limit=6):
 
 REPORTS = {"sales": "Продажи", "debts": "Дебиторка", "payments": "Оплаты", "visits": "Маршруты", "stock": "Остатки",
            "trips": "Рейсы водителей", "returns": "Возвраты", "item_sales": "Продажи по товарам"}
+
+
+def _n(k, one, few, many):
+    """«1 заказ», «3 заказа», «7 заказов»."""
+    k = int(k)
+    w = one if k % 10 == 1 and k % 100 != 11 else few if 2 <= k % 10 <= 4 and not 12 <= k % 100 <= 14 else many
+    return f"{k} {w}"
 
 
 def _hist_ts(s, today):
@@ -156,8 +163,8 @@ def decisions(ctx):
                 o = SM._order(ctx, oid)
                 if not o or not SM.can_approve(ctx, o):
                     continue
-                out.append({"t": f"Заказ поставщику «{o['supplier']}» на {money(SM.total(s, o))}",
-                            "why": f"{len(o['items'])} позиций · {o['author']}",
+                out.append({"t": f"Заказ поставщику {o['supplier']} на {money(SM.total(s, o))}",
+                            "why": f"{_n(len(o['items']), 'позиция', 'позиции', 'позиций')} · {o['author']}",
                             "ok": ["✓ Согласовать", f"lvd:o:{o['id']}"], "more": [["Открыть", f"sko:{o['id']}"]]})
         except Exception:                                          # склад без остатков — решений по заказам нет
             pass
@@ -185,7 +192,7 @@ def decide(ctx, kind, ident, ok=None):
         o = SM._order(ctx, int(ident))
         if o and o["status"] == "wait" and SM.can_approve(ctx, o):
             SM.order_approve(ctx, int(ident))
-            done.insert(0, [f"Заказ «{o['supplier']}»", f"{len(o['items'])} позиций", "✓ Согласован — закупщику ушло уведомление"])
+            done.insert(0, [f"Заказ поставщику {o['supplier']}", _n(len(o['items']), 'позиция', 'позиции', 'позиций'), "✓ Согласован — закупщику ушло уведомление"])
     ctx.session["lv_done"] = done[:4]
     ctx.save()
     from core.ui.screens import home
@@ -294,7 +301,7 @@ def head_home(ctx, v):
             sm = RT.summary(ctx, e["id"], day)
             if not sm["points"]:
                 continue
-            items.append({"t": short(e["fio"]), "s": f"точек {sm['points']} · продал {sm.get('sold', 0)} · был {sm.get('visited', 0)}",
+            items.append({"t": short(e["fio"]), "s": f"был в {sm.get('sold', 0) + sm.get('visited', 0)} из {sm['points']} · с заказом {sm.get('sold', 0)}",
                           "chip": ["сдал", f"rtv:{e['id']}:{day}", "good"] if sm["formed"] else ["ещё нет", "", "warn"]})
         if items:
             n = sum(1 for x in items if x["chip"][0] == "сдал")
@@ -304,8 +311,9 @@ def head_home(ctx, v):
 
 # ---------- торговый ----------
 
-ST_NEXT = {None: "visited", "visited": "sold", "sold": "missed", "missed": None}
-ST_CHIP = {None: ("отметить", ""), "visited": ("был", "warn"), "sold": ("продал", "good"), "missed": ("не был", "bad")}
+# Нажатие по точке: отметить → заказ → был без заказа → не был → снова пусто (Адам 17.11: слова понятные без пояснений).
+ST_NEXT = {None: "sold", "sold": "visited", "visited": "missed", "missed": None}
+ST_CHIP = {None: ("отметить", ""), "sold": ("заказ", "good"), "visited": ("без заказа", "warn"), "missed": ("не был", "bad")}
 
 
 def rep_home(ctx, v):
@@ -336,7 +344,7 @@ def rep_home(ctx, v):
                 lab, col = ST_CHIP.get(st, ("отметить", ""))
                 items.append({"t": cl["name"], "s": cl["town"] or "", "chip": [lab, "" if formed else f"lvr:{day}:{c}", col]})
             done = sum(1 for c in pts if (mk.get(c) or {}).get("status"))
-            v.ui("rows", {"items": items, "right": f"{done} из {len(pts)}" + ("" if formed else " · нажмите")},
+            v.ui("rows", {"items": items, "right": f"отмечено {done} из {len(pts)}"},
                  "Маршрут сегодня")
         rep_form(ctx, v, day)
     if ctx.can("call_today"):
@@ -345,27 +353,39 @@ def rep_home(ctx, v):
             v.ui("rows", {"items": calls}, "Кому позвонить сегодня")
 
 
-FIELDS = [("dir", "Направление", "Город, Аргун", False, True), ("sold", "Продаж", "0", True, False),
-          ("visits", "Посетил", "0", True, False), ("worked", "Сработал", "0", True, False),
-          ("coll", "Сбор, ₽", "30т", True, False), ("km", "Пробег, км", "0", True, False)]
+# Отчёт дня (Адам 17.11: «своими словами, без чужих сокращений»): что бот знает по отметкам — считает сам, торговый вписывает только то,
+# чего бот знать не может. (ключ, подпись, подсказка, число, во всю ширину)
+FIELDS = [("coll", "💵 Собрал денег, ₽", "0", True, False), ("km", "🚗 Проехал, км", "0", True, False),
+          ("note", "💬 Что важно знать руководителю", "Например: «Стройдвор» просит отсрочку до пятницы", False, True)]
+
+
+def _day_counts(sm):
+    """«был в 9 из 12 · с заказом 6 · без заказа 3 · не был 1 · не отмечено 2» — по отметкам маршрута."""
+    was = sm.get("sold", 0) + sm.get("visited", 0)
+    out = [f"был в {was} из {sm['points']}", f"с заказом {sm.get('sold', 0)}", f"без заказа {sm.get('visited', 0)}"]
+    if sm.get("missed"):
+        out.append(f"не был {sm['missed']}")
+    if sm.get("none"):
+        out.append(f"не отмечено {sm['none']}")
+    return " · ".join(out)
 
 
 def rep_form(ctx, v, day):
-    """Отчёт дня одной формой: шесть строк, как пишут руководителю в чат; «30т» = 30 000."""
+    """Отчёт дня одной формой: сверху — что бот посчитал сам, ниже — три строки руками."""
     key = f"dayrep:{ctx.me['id']}:{day}"
     saved = ctx.db.get(key) or {}
     from modules import route as RT
     sm = RT.summary(ctx, ctx.me["id"], day)
-    pre = {"sold": sm.get("sold") or "", "visits": (sm.get("sold", 0) + sm.get("visited", 0)) or ""}
     done = f"✓ Отправлен руководителю в {saved['ts']}" if saved.get("ts") else ""
-    v.ui("form", {"fields": [{"k": k, "l": l, "ph": ph, "num": n, "money": k == "coll", "v": saved.get(k, pre.get(k, ""))}
-                             for k, l, ph, n, _w in FIELDS],
-                  "send": ["Отправить отчёт", f"lvf:{day}"], "done": done, "right": "отправлен" if done else "до вечера",
-                  "hint": "Можно коротко: «30т» — это 30 000. Продаж и посещения бот уже посчитал по отметкам."}, "Отчёт за день")
+    v.ui("form", {"top": ["Бот посчитал по отметкам", _day_counts(sm)],
+                  "fields": [{"k": k, "l": l, "ph": ph, "num": n, "money": k == "coll", "area": k == "note", "w": w,
+                              "v": saved.get(k, "")} for k, l, ph, n, w in FIELDS],
+                  "send": ["Отправить отчёт", f"lvf:{day}"], "done": done, "right": "отправлен" if done else "до вечера"},
+         "Отчёт за день", fallback=[f"Отчёт за день: {_day_counts(sm)}"])
 
 
 def _money_in(x):
-    s = str(x or "").lower().replace(" ", "").replace("\xa0", "").replace(",", ".").replace("₽", "")
+    s = str(x or "").lower().replace(" ", "").replace("\xa0", "").replace(",", ".").replace("₽", "").replace("км", "").replace("руб", "")
     mult = 1000 if s.endswith(("т", "к", "k")) else 1
     s = s.rstrip("ткk")
     try:
@@ -380,39 +400,44 @@ def send_form(ctx, day):
         return Reply(text="Отчёт дня сдаёт торговый.")
     form = getattr(ctx, "form", None) or {}
     from modules import route as RT
-    out, bad = {}, []
+    from core.ui.screens import home
+    out, nums, bad = {}, {}, []
     for k, l, _ph, n, _w in FIELDS:
-        val = str(form.get(k, "")).strip()[:60]
+        val = str(form.get(k, "")).strip()[:300 if k == "note" else 30]
         if n and val:
             num = _money_in(val)
-            if num is None:
-                bad.append(l)
+            if num is None or num < 0:
+                bad.append(l.split(" ", 1)[1].split(",")[0])
                 continue
-            out[k] = val
-            if k == "km" and num and RT._can_mark(ctx, ctx.me["id"], day):
-                ctx.db.x("DELETE FROM timesheet WHERE day = ? AND emp_id = ? AND kind = 'km'", day, ctx.me["id"])
-                ctx.db.add_timesheet(day, ctx.me["id"], "km", amount=num, who=ctx.author())
-        else:
-            out[k] = val
-    from core.ui.screens import home
+            nums[k] = num
+        out[k] = val
     if bad:
-        res = home(ctx)
-        return [Reply(text=f"Не понял: {', '.join(bad)}. Напишите числом, например 6 или 30т."), res]
-    if not out.get("sold") and not out.get("visits"):
-        return [Reply(text="Заполните хотя бы «Продаж» и «Посетил»."), home(ctx)]
+        return [Reply(text=f"Не понял: {', '.join(bad)}. Напишите просто числом, например 45000."), home(ctx)]
+    sm = RT.summary(ctx, ctx.me["id"], day)
+    if not (sm.get("sold") or sm.get("visited") or sm.get("missed")) and not any(out.values()):
+        return [Reply(text="Отметьте точки в маршруте или впишите, сколько собрали и проехали."), home(ctx)]
+    if nums.get("km") and RT._can_mark(ctx, ctx.me["id"], day):
+        ctx.db.x("DELETE FROM timesheet WHERE day = ? AND emp_id = ? AND kind = 'km'", day, ctx.me["id"])
+        ctx.db.add_timesheet(day, ctx.me["id"], "km", amount=nums["km"], who=ctx.author())
     out["ts"] = datetime.now().strftime("%H:%M")
     ctx.db.put(f"dayrep:{ctx.me['id']}:{day}", out)
     if not RT.formed(ctx, ctx.me["id"], day):
         ctx.db.x("INSERT OR IGNORE INTO visit_reports (day, emp_id, ts, auto) VALUES (?,?,?,0)", day, ctx.me["id"],
                  datetime.now().isoformat(timespec="seconds"))
-    text = (f"📋 Отчёт дня · {ctx.me['fio']}\n" + "\n".join(f"{l}: {out.get(k) or '—'}" for k, l, *_ in FIELDS))
+    was = sm.get("sold", 0) + sm.get("visited", 0)
+    line = f"был в {was} из {sm['points']} точек, {_n(sm.get('sold', 0), 'заказ', 'заказа', 'заказов')}"
+    if "coll" in nums:
+        line += f", собрал {money(nums['coll'])}"
+    if "km" in nums:
+        line += f", {nums['km']:g} км"
+    text = f"📋 {short(ctx.me['fio'])}: {line}" + (f"\n💬 {out['note']}" if out.get("note") else "")
     msgs = [Reply(text=text, to=x["tg_id"]) for x in RT._leads_of(ctx, ctx.me) if x.get("tg_id")]
     return msgs + [home(ctx)]
 
 
 @screen("lvr")
 def mark_point(ctx, day, code):
-    """Отметка точки одним нажатием: отметить → был → продал → не был → снова пусто. Сумму заявки — в отчёте дня."""
+    """Отметка точки одним нажатием: отметить → заказ → без заказа → не был → снова пусто."""
     from modules import route as RT
     if not ctx.me or not RT._can_mark(ctx, ctx.me["id"], day) or code not in RT.points(ctx, ctx.me["id"], day):
         from core.ui.screens import home
@@ -483,8 +508,7 @@ def staff_home(ctx, v):
     if ctx.duty == "driver" and ctx.can("logistics"):
         return driver_home(ctx, v, p)
     hero(v, "Зарплата сейчас" if p else "Рабочих дней", money(p.total) if p else f"{ctx.pay().worked_days(e):g}",
-         f"отработано {p.days:g} из {p.days_total} дн." if p else "", ident="staff",
-         pairs=[("Рабочих дней", f"{p.days:g} из {p.days_total}", "")] if p else [])
+         f"отработано {p.days:g} из {p.days_total} дн." if p else "", ident="staff")
     if ctx.dept_kind in ("warehouse", "purchasing") and (ctx.can("stock")):
         try:
             from modules import stock as SM
@@ -499,7 +523,9 @@ def staff_home(ctx, v):
         items = []
         for o in ctx.db.q("SELECT id, supplier, items, sent_ts FROM stock_orders WHERE status = 'sent' ORDER BY id DESC LIMIT 4"):
             n = len(json.loads(o["items"] or "[]"))
-            items.append({"t": f"«{o['supplier']}»", "s": f"{n} позиций · отправлен {o['sent_ts'] or ''}", "chip": ["принять", f"wrc:{o['id']}", "warn"]})
+            sent = str(o["sent_ts"] or "")
+            sent = f" · отправлен {sent[8:10]}.{sent[5:7]}" if len(sent) >= 10 else ""
+            items.append({"t": o["supplier"], "s": f"{_n(n, 'позиция', 'позиции', 'позиций')}{sent}", "chip": ["принять", f"wrc:{o['id']}", "warn"]})
         v.ui("rows", {"items": items, "empty": "Поставок в пути нет"}, "Приёмка")
 
 
@@ -519,7 +545,7 @@ def driver_home(ctx, v, p):
     items = []
     for (dd, n), r in sorted(month_trips.items()):
         if dd == last:
-            items.append({"t": f"Рейс №{n}", "s": f"{len(r['stops'])} точек · {round(r['kg'])} кг", "v": f"{round(r['km'])} км"})
+            items.append({"t": f"Рейс №{n}", "s": f"{_n(len(r['stops']), 'точка', 'точки', 'точек')} · {round(r['kg'])} кг", "v": f"{round(r['km'])} км"})
     if items:
         v.ui("rows", {"items": items}, f"Рейсы по 1С · {date.fromisoformat(last).day} {MONTHS_GEN[date.fromisoformat(last).month - 1]}")
     if p and p.rows:
