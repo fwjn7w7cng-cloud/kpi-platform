@@ -77,8 +77,8 @@ def quote_view(ctx, q, title, sub):
              "Платите только за функции; настройки внутри функции — бесплатно. Люди считаются в подключённых отделах, "
              "директор и администратор — бесплатно.",
              f"Оплата за год — минус {P.fmt(pr['disc_year'])}%: {money(q['monthly_year'])} в месяц, {money(q['year_total'])} за год.",
-             "Функцию можно добавить потом — доплата только за неё." if not q["all_depts"] else
-             f"Все четыре отдела — скидка {P.fmt(pr['disc_all'])}% уже учтена."]
+             f"Все четыре отдела — скидка {P.fmt(pr['disc_all'])}% уже учтена." if q["discount"] else
+             "Функцию можно добавить потом — доплата только за неё."]
     v.lines([x for x in lines if x], title="Условия")
     return v
 
@@ -236,8 +236,8 @@ def packages_window(ctx, act=None, value=None):
                                    "Директор и администратор — бесплатно.")])
     func_rows("max", "⭐ ")
     kb.append([Button(f"{'☑' if d['year'] else '☐'} 📅 Оплата за год — минус {P.fmt(pr['disc_year'])}%", "swe:y",
-                      info=f"Платите сразу за 12 месяцев — скидка {P.fmt(pr['disc_year'])} %. Все четыре отдела — ещё "
-                           f"{P.fmt(pr['disc_all'])} % на функции и людей.")])
+                      info=f"Платите сразу за 12 месяцев — скидка {P.fmt(pr['disc_year'])} %." +
+                           (f" Все четыре отдела — ещё {P.fmt(pr['disc_all'])} % на функции и людей." if pr["disc_all"] else ""))])
     kb.append(ok_row("swe"))
     return Reply(view=v, buttons=kb)
 
