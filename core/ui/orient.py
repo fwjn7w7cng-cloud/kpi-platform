@@ -41,7 +41,12 @@ def demo_bar(ctx):
     cur = f"sw:as:{ctx.session['as']}" if ctx.session.get("as") else f"sw:role:{ctx.role}"
     if ctx.me and ctx.role in ("staff", "head") and not ctx.session.get("as"):
         cur = f"sw:pos:{ctx.me['position']}"
-    return {"role": role_t, "cur": cur, "roles": roles, "people": people, "more": "sw:who",
+    short_t = {"Торговый представитель": "Торговый", "Руководитель продаж": "Рук. продаж", "Менеджер по закупкам": "Закупщик",
+               "Диспетчер логистики": "Диспетчер", "Специалист по кадрам": "Кадры", "Начальник логистики": "Нач. логистики",
+               "Заведующий складом": "Зав. складом", "Начальник закупок": "Нач. закупок"}
+    base_t = ctx.position_name if ctx.role in ("staff", "head") and ctx.position_name else \
+        ctx.cfg.role_title(ctx.role) if ctx.role not in ("guest", "admin") else "Администратор"
+    return {"role": role_t, "short": short_t.get(base_t, base_t), "cur": cur, "roles": roles, "people": people, "more": "sw:who",
             "industry": INDUSTRIES[ctx.industry], "industries": [[t, f"sw:ind:{k}"] for k, t in INDUSTRIES.items()],
             "build": "sw:ed", "find": "find"}
 
@@ -60,15 +65,30 @@ def welcome_due(ctx):
     return bool(ctx.demo and ctx.app.demo_gate and ctx.user_id not in ctx.app.admins and not ctx.session.get("wel"))
 
 
+def welcome_card(v, ctx):
+    """Адам 17.11: приветствие — карточкой сверху главной (как в прототипе), а не отдельным экраном."""
+    v.ui("welcome", {"title": "👋 Это демо Алапы",
+                     "items": [["Посмотрите глазами людей", "кнопка справа вверху: директор, торговый, кладовщик, водитель"],
+                               ["Соберите свой набор", "вкладка «Собрать», цена считается сразу"],
+                               ["Понравилось — «Хочу так»", "мы позвоним и подключим"]],
+                     "note": f"Фирма «{ctx.cfg.name}» и цифры выдуманные — нажимайте всё, ничего не сломается.",
+                     "acts": [["Понятно", "wel:ok"], ["Сразу собрать", "wel:b"]]},
+         fallback=["👋 Это демо Алапы: посмотрите глазами людей, соберите свой набор, понравилось — «Хочу так»."])
+
+
 @screen("wel")
 def welcome(ctx, act=None):
     from core.ui.screens import home
     if not ctx.demo:
         return home(ctx)
     ctx.session["wel"] = 1
-    if act == "go":
-        ctx.session["role"], ctx.session["as"] = "owner", None
+    if act in ("go", "ok", "b"):
+        if act == "go":
+            ctx.session["role"], ctx.session["as"] = "owner", None
         ctx.save()
+        if act == "b":
+            from core.ui import builder
+            return builder.page(ctx.app.ctx(ctx.user_id))
         return home(ctx.app.ctx(ctx.user_id))
     ctx.save()
     v = View("👋 Это демо «Алапы»", "приложение для зарплаты и показателей оптовой фирмы")

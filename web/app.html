@@ -54,6 +54,7 @@ header { display: flex; align-items: center; gap: 8px; padding-block: 10px 8px;
 .htitle b { display: block; font-family: var(--display); font-weight: 700; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .htitle span { display: block; color: var(--ink-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tools { margin-right: 6px; background: var(--sunk); color: var(--ink); }
+.role { max-width: 46%; overflow: hidden; text-overflow: ellipsis; }
 .role { border: 0; background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 13px; padding: 8px 12px;
   border-radius: 999px; cursor: pointer; white-space: nowrap; flex: none; }
 main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
@@ -158,6 +159,75 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
   border-radius: 20px; padding: 7px 11px; font-size: 13.5px; cursor: pointer; } .chips2 button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .sheet h3 { font-size: 13px; color: var(--ink-2); margin: 8px 0 2px; text-transform: uppercase; letter-spacing: .05em; }
 .lt.hot { background: var(--accent); color: #fff; } .lt.hot .ic { background: rgba(255,255,255,.18); }
+/* ===== живые блоки (Адам 17.11, прототип «Демо Алапы»): витрина, лента, решения, плитки, отметки, строки, форма ===== */
+.uh { background: var(--uhero, #111317); color: #fff; border-radius: 22px; padding: 18px; display: flex; flex-direction: column; gap: 14px; position: relative; overflow: hidden; }
+.uh::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--accent); }
+.uh .r { display: flex; align-items: center; gap: 12px; } .uh .r > div { flex: 1; min-width: 0; }
+.uh small { color: #A5ABB6; font-size: 12.5px; display: block; }
+.uh .big { font-family: var(--display); font-weight: 800; font-size: 40px; line-height: 1.02; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.uh .big.md { font-size: 30px; }
+.uh .pr { display: flex; gap: 22px; flex-wrap: wrap; border-top: 1px solid #2A2E36; padding-top: 12px; }
+.uh .pr b { display: block; font-family: var(--display); font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.uh .pr b.bad { color: #FF8A8F; } .uh .pr b.good { color: #7FE0A6; }
+.uh .acts { display: flex; gap: 8px; }
+.uh .acts button { flex: 1; border: 0; border-radius: 12px; padding: 12px; font-weight: 700; font-size: 15px; background: var(--accent); color: #fff; cursor: pointer; }
+.uring { width: 92px; height: 92px; flex: none; }
+.uring circle { fill: none; stroke-width: 9; } .uring .bg { stroke: #2A2E36; }
+.uring .fg { stroke: #fff; stroke-linecap: round; transition: stroke-dashoffset 1s cubic-bezier(.2,.8,.2,1); }
+.uring .nd { stroke: var(--accent); stroke-width: 3.5; stroke-linecap: round; }
+.ubox { background: var(--surface); border-radius: 18px; box-shadow: var(--edge); padding: 4px 14px; display: flex; flex-direction: column; }
+.uh2 { font-family: var(--display); font-weight: 700; font-size: 16px; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin: 4px 0 -6px; }
+.uh2 small { font-family: var(--body); font-weight: 500; font-size: 12.5px; color: var(--ink-2); }
+.ufi { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13.5px; align-items: flex-start; }
+.ufi:first-child { border-top: 0; } .ufi .t { color: var(--ink-2); font-size: 12px; width: 52px; flex: none; padding-top: 1px; font-variant-numeric: tabular-nums; }
+.ulive { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--good); font-weight: 600; }
+.ulive::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
+@media (prefers-reduced-motion: no-preference) { .ulive::before { animation: upulse 1.6s infinite; } }
+@keyframes upulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 50%, transparent); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.udec { background: var(--surface); border-radius: 18px; box-shadow: var(--edge); padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.udec b { font-weight: 600; } .udec p { margin: 0; font-size: 13px; color: var(--ink-2); }
+.ubtns { display: flex; gap: 8px; flex-wrap: wrap; }
+.ub { border: 0; border-radius: 12px; padding: 10px 14px; font-weight: 600; font-size: 14px; background: var(--sunk); color: var(--ink); cursor: pointer; }
+.ub.ok { background: var(--good-soft); color: var(--good); flex: 1; } .ub.pri { background: var(--accent); color: var(--onacc); }
+.ustamp { font-size: 13px; font-weight: 600; color: var(--good); }
+.utiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.utile { border: 0; text-align: left; background: var(--surface); box-shadow: var(--edge); border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; cursor: pointer; color: var(--ink); }
+.utile .ic { font-size: 22px; height: 26px; } .utile .ic .si { width: 24px; height: 24px; }
+.utile b { font-family: var(--display); font-size: 15px; } .utile .v { font-family: var(--display); font-weight: 700; font-size: 20px; font-variant-numeric: tabular-nums; }
+.utile .s { font-size: 12px; color: var(--ink-2); }
+.urow { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.urow:first-child { border-top: 0; } .urow .tx { flex: 1; min-width: 0; } .urow .tx b { display: block; font-weight: 600; font-size: 14px; }
+.urow .tx span { display: block; font-size: 12.5px; color: var(--ink-2); }
+.urow .val { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.uchip { border: 0; border-radius: 999px; padding: 7px 12px; font-size: 12.5px; font-weight: 600; background: var(--sunk); color: var(--ink-2); white-space: nowrap; cursor: pointer; flex: none; }
+.uchip.good { background: var(--good-soft); color: var(--good); } .uchip.warn { background: var(--warn-soft); color: var(--warn); } .uchip.bad { background: var(--bad-soft); color: var(--bad); }
+.uchip.ink { background: var(--ink); color: var(--bg); }
+.ubar { height: 6px; border-radius: 3px; background: var(--sunk); overflow: hidden; flex-basis: 100%; } .ubar i { display: block; height: 100%; border-radius: 3px; background: var(--ink); }
+.ubar.good i { background: var(--good); } .ubar.warn i { background: var(--warn); } .ubar.bad i { background: var(--bad); }
+.upl2 { border-top: 1px solid var(--line); } .upl2:first-child { border-top: 0; }
+.upl2 > button { width: 100%; border: 0; background: none; padding: 11px 0; display: flex; gap: 10px; align-items: baseline; text-align: left; cursor: pointer; color: var(--ink); }
+.upl2 .nm { flex: 1; font-size: 14px; min-width: 0; } .upl2 .sm { font-weight: 700; font-variant-numeric: tabular-nums; } .upl2 .sm.neg { color: var(--bad); }
+.upl2 .ar { color: var(--ink-2); font-size: 12px; width: 12px; } .upl2 .why { font-size: 12.5px; color: var(--ink-2); padding: 0 0 10px; }
+.utot { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0 8px; border-top: 2px solid var(--ink); font-family: var(--display); }
+.utot b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.umx { width: 100%; border-collapse: separate; border-spacing: 4px 6px; margin: 0 -4px; font-size: 13px; table-layout: fixed; }
+.umx col.n { width: 34%; } .umx th { font-weight: 500; color: var(--ink-2); font-size: 11.5px; text-align: center; padding: 0 2px; }
+.umx th:first-child { text-align: left; } .umx td { text-align: center; padding: 0; }
+.umx td:first-child { text-align: left; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.umx .c { display: block; border-radius: 8px; padding: 7px 0; font-weight: 600; font-variant-numeric: tabular-nums; background: var(--sunk); }
+.umx .c.good { background: var(--good-soft); color: var(--good); } .umx .c.warn { background: var(--warn-soft); color: var(--warn); } .umx .c.bad { background: var(--bad-soft); color: var(--bad); }
+.umx tr.r { cursor: pointer; } .umx tr.d td { white-space: normal; overflow: visible; font-weight: 400; }
+.updet { background: var(--sunk); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; text-align: left; font-size: 13px; }
+.ufld { display: grid; grid-template-columns: 1fr 120px; align-items: center; gap: 10px; font-size: 14px; padding: 6px 0; }
+.ufld input, .ufld textarea { width: 100%; border: 0; box-shadow: 0 0 0 1px var(--line); background: var(--sunk); border-radius: 10px; padding: 9px 10px; font: inherit; font-weight: 600; color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.ufld.w { grid-template-columns: 1fr; } .ufld.w input, .ufld textarea { text-align: left; font-weight: 500; }
+.ufld em { grid-column: 2; font-style: normal; font-size: 11.5px; color: var(--good); text-align: right; margin-top: -4px; }
+.uwel { background: var(--surface); border-radius: 20px; box-shadow: 0 0 0 1.5px var(--accent); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.uwel h3 { margin: 0; font-family: var(--display); font-size: 19px; } .uwel ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--ink-2); }
+.uwel ol b { color: var(--ink); } .uwel p { margin: 0; font-size: 13px; color: var(--ink-2); }
+.roles2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.roles2 button { border: 0; border-radius: 14px; padding: 12px; background: var(--sunk); text-align: left; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--ink); }
+.roles2 button.on { background: var(--ink); color: var(--bg); }
 .launch { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .lt { border: 0; background: var(--surface); border-radius: 18px; padding: 14px 8px 12px; box-shadow: var(--edge); cursor: pointer;
   display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 0; }
@@ -577,7 +647,7 @@ function skinSheet() {
     `<p class="note">Выбор сохраняется на этом телефоне. Кнопки, цифры и расчёты во всех стилях одинаковые.</p>`);
 }
 setSkin(skinNow());
-let S = {tabs: [], extra: [], tools: [], cur: "home", back: null}, toastT, busy = false;
+let S = {tabs: [], extra: [], tools: [], cur: "home", back: null, rings: {}, sc: {}, here: "", title: "", nav: ""}, toastT, busy = false;
 
 function toast(t) { const el = $("toast"); el.textContent = t; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => el.hidden = true, 2600); }
 function splitLabel(l) { const m = String(l).match(/^(\S+)\s+(.*)$/); return m && !/[\p{L}\p{N}]/u.test(m[1]) ? [m[1], m[2]] : ["", l]; }
@@ -629,10 +699,56 @@ function block(b) {
     case "lines": return T + `<div class="lines">${b.items.map(l => `<p>${esc(l)}</p>`).join("")}</div>`;
     case "note": return `<div class="note">${esc(b.text)}</div>`;
     case "builder": BLDD = b.data; return `<div class="bld" id="bld"></div>`;
+    case "ui": return UI[b.t] ? UI[b.t](b.d || {}, b.title) : "";
   }
   return "";
 }
 
+// ===== живые блоки (Адам 17.11): сервер присылает данные — здесь их вид. Нажатия — обычные data-to (сервер), раскрытие — здесь же.
+const uRing = (p, need, id) => {
+  const r = 38, C = 2 * Math.PI * r, off = C * (1 - Math.max(0, Math.min(1, p))), first = !S.rings[id];
+  let nd = "";
+  if (need != null) { const a = need * 2 * Math.PI - Math.PI / 2;
+    nd = `<line class="nd" x1="${46 + (r - 9) * Math.cos(a)}" y1="${46 + (r - 9) * Math.sin(a)}" x2="${46 + (r + 9) * Math.cos(a)}" y2="${46 + (r + 9) * Math.sin(a)}"/>`; }
+  return `<svg class="uring" viewBox="0 0 92 92" aria-hidden="true"><circle class="bg" cx="46" cy="46" r="${r}"/><circle class="fg" data-ring="${esc(id)}" cx="46" cy="46" r="${r}" stroke-dasharray="${C}" stroke-dashoffset="${first ? C : off}" data-off="${off}" transform="rotate(-90 46 46)"/>${nd}</svg>`;
+};
+const uHead = (title, right) => title ? `<div class="uh2">${esc(title)}${right || ""}</div>` : "";
+const uTo = to => to ? ` data-to="${esc(to)}"` : "";
+let UID = 0;
+const UI = {
+  hero(d) { return `<div class="uh"><div class="r"><div><small>${esc(d.label)}</small><div class="big${d.md ? " md" : ""}">${esc(d.big)}</div>${d.sub ? `<small>${esc(d.sub)}</small>` : ""}</div>${d.p != null ? uRing(d.p, d.need, d.id || d.label) : ""}</div>` +
+    (d.pairs && d.pairs.length ? `<div class="pr">${d.pairs.map(([l, v, c]) => `<div><small>${esc(l)}</small><b class="${c || ""}">${esc(v)}</b></div>`).join("")}</div>` : "") +
+    (d.acts && d.acts.length ? `<div class="acts">${d.acts.map(([l, to]) => `<button${uTo(to)}>${esc(l)}</button>`).join("")}</div>` : "") + `</div>`; },
+  feed(d, t) { return uHead(t, d.live ? `<span class="ulive">${esc(d.live)}</span>` : "") +
+    `<div class="ubox">${(d.items || []).map(([tm, i, x]) => `<div class="ufi"><span class="t">${esc(tm)}</span><span>${esc(i)} ${esc(x)}</span></div>`).join("") || `<div class="ufi"><span>Пока тихо — события появятся с первыми отчётами.</span></div>`}</div>`; },
+  decide(d, t) { const its = d.items || []; return uHead(t, `<small>${its.filter(x => !x.done).length} из ${its.length}</small>`) + its.map(x =>
+    `<div class="udec"><b>${esc(x.t)}</b>${x.why ? `<p>${esc(x.why)}</p>` : ""}${x.done ? `<span class="ustamp">${esc(x.done)}</span>` :
+      `<div class="ubtns">${x.ok ? `<button class="ub ok"${uTo(x.ok[1])}>${esc(x.ok[0])}</button>` : ""}${x.no ? `<button class="ub"${uTo(x.no[1])}>${esc(x.no[0])}</button>` : ""}${(x.more || []).map(([l, to]) => `<button class="ub"${uTo(to)}>${esc(l)}</button>`).join("")}</div>`}</div>`).join("") ||
+    `<div class="udec"><span class="ustamp">✓ Всё решено</span></div>`; },
+  tiles(d, t) { return uHead(t) + `<div class="utiles">${(d.items || []).map(([i, ti, v, s, to]) =>
+    `<button class="utile"${uTo(to)}><span class="ic">${ic(i)}</span><b>${esc(ti)}</b><span class="v">${esc(v)}</span><span class="s">${esc(s)}</span></button>`).join("")}</div>`; },
+  rows(d, t) { return uHead(t, d.right ? `<small>${esc(d.right)}</small>` : "") + `<div class="ubox">${(d.items || []).map(x =>
+    `<div class="urow" style="${x.bar ? "flex-wrap:wrap" : ""}"><div class="tx"><b>${esc(x.t)}</b>${x.s ? `<span>${esc(x.s)}</span>` : ""}</div>${x.v ? `<span class="val">${esc(x.v)}</span>` : ""}` +
+    (x.chip ? (x.chip[1] ? `<button class="uchip ${x.chip[2] || ""}"${uTo(x.chip[1])}>${esc(x.chip[0])}</button>` : `<span class="uchip ${x.chip[2] || ""}">${esc(x.chip[0])}</span>`) : "") +
+    (x.bar ? `<div class="ubar ${x.bar[1] || ""}"><i style="width:${Math.max(2, Math.min(100, x.bar[0] * 100)).toFixed(1)}%"></i></div>` : "") + `</div>`).join("") ||
+    `<div class="urow"><div class="tx"><span>${esc(d.empty || "Пусто")}</span></div></div>`}${d.foot ? `<div class="urow">${(d.foot || []).map(([l, to]) => `<button class="ub pri" style="flex:1"${uTo(to)}>${esc(l)}</button>`).join("")}</div>` : ""}</div>`; },
+  explain(d, t) { return uHead(t) + `<div class="ubox">${(d.items || []).map(([n, v, why, neg]) => { const id = "x" + (++UID);
+    return `<div class="upl2"><button data-tog="${id}"><span class="nm">${esc(n)}</span><span class="sm${neg ? " neg" : ""}">${esc(v)}</span><span class="ar">${why ? "▾" : ""}</span></button>${why ? `<div class="why" id="${id}" hidden>${esc(why)}</div>` : ""}</div>`; }).join("")}` +
+    (d.total ? `<div class="utot"><span>${esc(d.total[0])}</span><b>${esc(d.total[1])}</b></div>` : "") + `</div>`; },
+  team(d, t) { return uHead(t, d.right ? `<small>${esc(d.right)}</small>` : "") + `<div class="ubox" style="padding:8px 14px"><table class="umx"><colgroup><col class="n">${(d.head || []).slice(1).map(() => "<col>").join("")}</colgroup>` +
+    `<thead><tr>${(d.head || []).map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${(d.rows || []).map(r => { const id = "m" + (++UID);
+      return `<tr class="r" data-tog="${id}"><td>${esc(r.n)}</td>${r.cells.map(([x, c]) => `<td><span class="c ${c || ""}">${esc(x)}</span></td>`).join("")}</tr>` +
+        `<tr class="d" id="${id}" hidden><td colspan="${r.cells.length + 1}"><div class="updet">${r.det ? `<div>${esc(r.det)}</div>` : ""}${(r.acts || []).length ? `<div class="ubtns">${r.acts.map(([l, to], i) => `<button class="ub${i ? "" : " ok"}"${uTo(to)}>${esc(l)}</button>`).join("")}</div>` : ""}</div></td></tr>`; }).join("")}</tbody></table>` +
+    (d.note ? `<p class="muted" style="margin:4px 0 8px;font-size:12.5px;color:var(--ink-2)">${esc(d.note)}</p>` : "") + `</div>`; },
+  form(d, t) { const fid = "f" + (++UID);
+    return uHead(t, d.right ? `<small>${esc(d.right)}</small>` : "") + `<div class="ubox" data-form="${fid}" style="padding:8px 14px">${(d.fields || []).map(f =>
+      `<label class="ufld${f.w ? " w" : ""}"><span>${esc(f.l)}</span>${f.area ? `<textarea name="${esc(f.k)}" placeholder="${esc(f.ph || "")}"${d.done ? " disabled" : ""}>${esc(f.v || "")}</textarea>` :
+        `<input name="${esc(f.k)}" value="${esc(f.v ?? "")}" placeholder="${esc(f.ph || "")}" inputmode="${f.num ? "decimal" : "text"}"${f.money ? ' data-money="1"' : ""}${d.done ? " disabled" : ""}>`}</label>`).join("")}` +
+      (d.done ? `<div class="urow"><span class="ustamp">${esc(d.done)}</span></div>` : `<div class="urow" style="flex-wrap:wrap"><button class="ub pri" style="flex:1" data-send="${fid}" data-sto="${esc(d.send[1])}">${esc(d.send[0])}</button>${d.hint ? `<span style="flex-basis:100%;font-size:12.5px;color:var(--ink-2)">${esc(d.hint)}</span>` : ""}</div>`) + `</div>`; },
+  welcome(d) { return `<div class="uwel"><h3>${esc(d.title)}</h3><ol>${(d.items || []).map(([b, x]) => `<li><b>${esc(b)}</b> — ${esc(x)}</li>`).join("")}</ol>${d.note ? `<p>${esc(d.note)}</p>` : ""}` +
+    `<div class="ubtns">${(d.acts || []).map(([l, to], i) => `<button class="ub${i ? "" : " pri"}" style="${i ? "" : "flex:1"}"${uTo(to)}>${esc(l)}</button>`).join("")}</div></div>`; },
+};
+const uMoney = v => { const s = String(v).toLowerCase().replace(/\s/g, "").replace(",", "."); const m = s.match(/^(\d+(?:\.\d+)?)(т|к|k)?$/); return m ? +m[1] * (m[2] ? 1000 : 1) : null; };
 function buttons(rows, home, sum) {
   if (!rows || !rows.length) return "";
   const flat = rows.flat().filter(([, to]) => !to.startsWith("bk:"));
@@ -670,7 +786,10 @@ function buttons(rows, home, sum) {
 }
 function msgHtml(m, home, first) {
   const parts = [];
-  if (m.view) {
+  const live = m.view && (m.view.blocks || []).length && m.view.blocks[0].k === "ui" && ["hero", "welcome"].includes(m.view.blocks[0].t);
+  if (live) {                                              // живой экран (Адам 17.11): витрина сама — заголовок не нужен
+    m.view.blocks.forEach(b => parts.push(block(b)));
+  } else if (m.view) {
     const h = home && first ? hero(m.view) : null;
     if (h) {
       parts.push(h);
@@ -919,21 +1038,28 @@ function show(d) {
   // то же окно выбора (отметили галочку) — страница остаётся на месте, не уезжает наверх
   const isB = msgs.some(m => m.view && (m.view.blocks || []).some(b => b.k === "builder"));
   if (!isB) { BUI = null; BS = null; }
-  const win = winOf(msgs), same = (win && win === S.win) || (isB && S.wasB);
+  const win = winOf(msgs);
+  // Адам 17.11: экран не прыгает — тот же экран (отметили, утвердили) остаётся на месте; «‹ Назад» возвращает туда, где были
+  const who = (d.who || "") + "|" + (d.role || ""), title = who + "|" + ((msgs.find(m => m.view) || {}).view?.title || ""), here = d.here ? who + "|" + d.here : "";
+  const same = (win && win === S.win) || (isB && S.wasB) || (here && here === S.here) || (title && title === S.title && !d.home === !S.home);
   S.wasB = isB;
-  const keep = same ? $("main").scrollTop : 0, keepW = same ? window.scrollY : 0;
+  if (S.here) S.sc[S.here] = $("main").scrollTop;
+  const keep = same ? $("main").scrollTop : S.nav === "back" ? (S.sc[here] || 0) : 0, keepW = same ? window.scrollY : 0;
   $("main").innerHTML = `<div class="screen">${parts.join("")}</div>`;
   if (BLDD) { const x = BLDD; BLDD = null; bldInit(x); }
   $("main").scrollTop = keep;
   if (same) window.scrollTo(0, keepW);
+  S.here = here; S.title = title; S.home = !!d.home; S.nav = "";
+  requestAnimationFrame(() => document.querySelectorAll("[data-ring]").forEach(c => { S.rings[c.dataset.ring] = 1; c.style.strokeDashoffset = c.dataset.off; }));
   S.win = win;
   if (d.home) S.cur = "home";
-  S.back = backOf(msgs);
+  S.back = d.home ? null : backOf(msgs);                  // на главной стрелки нет — это начало
   $("back").hidden = !S.back;
   if (d.company) $("htitle").textContent = d.company;
   $("hsub").textContent = [d.who, d.role].filter(Boolean).join(" · ");
   dbar();
-  const rb = $("role"); rb.hidden = !S.extra.length || !!S.demo; rb.textContent = "🎭 " + (d.role || "Демо");
+  // Адам 17.11: в демо роль — кнопкой в шапке, листом снизу (роли, люди, отрасль); полоса под шапкой больше не нужна
+  const rb = $("role"); rb.hidden = !S.extra.length && !S.demo; rb.textContent = S.demo ? `👤 ${S.demo.short || S.demo.role} ▾` : "🎭 " + (d.role || "Демо");
   const tb = $("tools"); tb.hidden = !S.tools.length;
   tb.textContent = S.tools.length ? (S.tools.some(([, to]) => to === "adm") ? "🛠 Пульт" : "🤝 Партнёр") : "";
   tabs();
@@ -1020,7 +1146,7 @@ function go(to, top) { if (top) S.cur = to; call("press", {to, top: !!top}); }
 function sheet(html) { $("sheetBody").innerHTML = html; $("sheet").hidden = false; }
 // Полоса демо (Адам 09.11): «Смотрю как» и отрасль — листом, одно нажатие — экран перестроился; «Собрать» и поиск — сразу.
 function dbar() {
-  const el = $("dbar"), b = S.demo; el.hidden = !b; if (!b) return;
+  const el = $("dbar"), b = S.demo; el.hidden = true; if (!b) return;
   el.innerHTML = `<div class="sc"><button data-d="role" title="Чьими глазами смотрим">👤 <b>${esc(b.role)}</b> ▾</button><button data-d="ind" title="Отрасль демо-фирмы">🏭 ${esc(b.industry)} ▾</button></div>` +
     `<button class="go" data-tab="${esc(b.build)}">🧩 Собрать</button><button class="sq" data-tab="${esc(b.find)}" aria-label="Найти">🔍</button>`;
 }
@@ -1041,16 +1167,36 @@ $("sheet").addEventListener("click", e => {
 });
 $("skinBtn").innerHTML = svgOf("palette");
 $("skinBtn").addEventListener("click", skinSheet);
-$("role").addEventListener("click", () => sheet(`<h2>Демо</h2>${S.extra.map(([l, to]) => `<button class="act" data-tab="${esc(to)}">${esc(l)}</button>`).join("")}`));
+$("role").addEventListener("click", () => {
+  const b = S.demo;
+  if (!b) { sheet(`<h2>Демо</h2>${S.extra.map(([l, to]) => `<button class="act" data-tab="${esc(to)}">${esc(l)}</button>`).join("")}`); return; }
+  const chip = ([l, to]) => `<button data-tab="${esc(to)}"${to === b.cur ? ' class="on"' : ""}>${esc(l)}</button>`;
+  sheet(`<h2>Чьими глазами смотреть</h2><p class="bhint">У каждого — свой экран и своя зарплата.</p><div class="roles2">${b.roles.map(chip).join("")}</div>` +
+    `<h3>Или конкретный человек</h3><div class="chips2">${b.people.map(chip).join("")}<button data-tab="${esc(b.more)}">Все люди ›</button></div>` +
+    `<h3>Отрасль · ${esc(b.industry)}</h3><div class="chips2">${b.industries.map(chip).join("")}</div>` +
+    (S.extra.length ? `<h3>Ещё</h3><div class="chips2">${S.extra.map(chip).join("")}</div>` : ""));
+});
 $("tools").addEventListener("click", () => S.tools.length === 1 ? go(S.tools[0][1], true) :
   sheet(`<h2>Для партнёра</h2>${S.tools.map(([l, to]) => `<button class="act" data-tab="${esc(to)}">${esc(l)}</button>`).join("")}`));
-$("back").addEventListener("click", () => { if (S.back) go(S.back); });
+$("back").addEventListener("click", () => { if (S.back) { S.nav = "back"; go(S.back); } });
 $("htitle").addEventListener("click", () => go("home", true));
 $("main").addEventListener("click", e => {
   const i = e.target.closest("[data-info]");               // ⓘ — пояснение, кнопку не нажимает
   if (i) { e.stopPropagation(); sheet(`<h2>${esc(i.dataset.title || "Что это")}</h2><p class="infotx">${esc(i.dataset.info)}</p><button class="act">Понятно</button>`); return; }
   const f = e.target.closest("[data-file]"); if (f) { openFile(f.dataset.file, f.dataset.name); return; }
+  const tg = e.target.closest("[data-tog]");               // раскрыть строку — без запроса к серверу
+  if (tg && !e.target.closest("[data-to]")) { const el = $(tg.dataset.tog); if (el) { el.hidden = !el.hidden; const ar = tg.querySelector(".ar"); if (ar && ar.textContent) ar.textContent = el.hidden ? "▾" : "▴"; } return; }
+  const sd = e.target.closest("[data-send]");              // форма на одном экране: все поля разом
+  if (sd) { const box = document.querySelector(`[data-form="${sd.dataset.send}"]`), form = {};
+    box.querySelectorAll("input, textarea").forEach(i => { form[i.name] = i.value.trim(); });
+    call("press", {to: sd.dataset.sto, form}); return; }
   const b = e.target.closest("[data-to]"); if (b) go(b.dataset.to);
+});
+$("main").addEventListener("input", e => {                // «30т» — сразу видно, что это 30 000
+  const i = e.target; if (!i.dataset || !i.dataset.money) return;
+  const lab = i.closest("label"); let em = lab.querySelector("em"); const n = uMoney(i.value);
+  if (n != null && /[тkк]/i.test(i.value)) { if (!em) { em = document.createElement("em"); lab.appendChild(em); } em.textContent = "= " + Math.round(n).toLocaleString("ru-RU") + " ₽"; }
+  else if (em) em.remove();
 });
 // Файл (PDF, Excel, Word) — в окне поверх приложения: «✕ Закрыть» возвращает назад, «📤 Поделиться» — меню телефона
 // (сохранить в «Файлы», отправить в мессенджер, напечатать). Раньше файл открывался вместо приложения и на iPhone

@@ -29,14 +29,20 @@ def payslip(ctx, emp_id=None):
     st = cycle.status(ctx.db, ctx.month)
     v = View(f"💰 {emp['fio']}", f"{pos['name'] if pos else ''} · {month_title(ctx.month).lower()} · "
                                 f"{'утверждено' if st == 'approved' else 'предварительно'}")
-    v.tiles([("К выплате", money(slip.total), "good" if slip.total else None),
-             ("Отработано", f"{slip.days:g} из {slip.days_total} дн.", None)])
-    v.table(["Строка", "Сумма"], [Row([r[0], Cell(money(r[1], ""), "bad" if r[1] < 0 else None)], sub=r[2])
-                                  for r in slip.rows])
+    from core.ui import live                                  # Адам 17.11: зарплата строками, нажал — объяснение
+    own = bool(ctx.me and emp["id"] == ctx.me["id"])
+    live.hero(v, f"{'Моя зарплата' if own else short(emp['fio'])} · {month_title(ctx.month).lower()}" +
+              (", утверждено" if st == "approved" else ", на сегодня"), money(slip.total),
+              f"{pos['name'] + ' · ' if pos and not own else ''}отработано {slip.days:g} из {slip.days_total} дн. · нажмите на строку — объясню",
+              ident="pay")
+    if slip.rows:
+        live.explain(v, slip)
     if not slip.rows:
         v.note("Для этой должности зарплата в боте не считается.")
     elif st != "approved":
         v.note("Расчёт предварительный: обновляется с каждым отчётом. Официальная сумма — после утверждения месяца.")
+    if own and slip.rows and st != "approved":
+        live.disagree(v, ctx, emp, sent=bool(ctx.session.get(f"lvq:{ctx.month}")))
     kb = []
     if emp["role"] in SELLERS:
         kb.append([Button("📈 План", f"emp:{emp['id']}")])
@@ -62,19 +68,25 @@ def fund(ctx, kind=None, ident=None):
     title = {"t": next((t.name for t in ctx.cfg.teams if t.id == ident), ""),
              "dept": (ctx.cfg.dept(ident).name if ident and ctx.cfg.dept(ident) else "")}.get(kind, "вся компания")
     v = View("💰 Фонд зарплаты", f"{title} · {month_title(ctx.month).lower()}")
-    v.tiles([("Итого", money(total), None), ("Человек", str(len(es)), None)])
+    from core.ui import live                                  # Адам 17.11: живой экран
+    st = cycle.status(ctx.db, ctx.month)
+    live.hero(v, f"Фонд зарплаты · {title} · {month_title(ctx.month).lower()}", money(total),
+              f"{len(es)} чел. · " + {"approved": "месяц утверждён", "review": "месяц на согласовании"}.get(st, "месяц открыт, цифры обновляются"),
+              ident="fund")
     if not kind and ctx.scope == "all":
-        rs = []
-        for d in ctx.cfg.departments:
-            part = [e for e in es if e["dept"] == d.id]
-            if part:
-                rs.append(Row([d.name, str(len(part)), money(sum(p.calc(e).total for e in part), "")]))
-        v.table(["Отдел", "Чел.", "Сумма"], rs)
-        kb = rows([Button(d.name, f"fund:dept:{d.id}") for d in ctx.cfg.departments], 2)
+        parts = [(d, [e for e in es if e["dept"] == d.id]) for d in ctx.cfg.departments]
+        parts = [(d, ps, sum(p.calc(e).total for e in ps)) for d, ps in parts if ps]
+        mx = max([x[2] for x in parts] or [1]) or 1
+        v.ui("rows", {"items": [{"t": d.name, "s": f"{len(ps)} чел.", "v": money(s), "bar": [s / mx, ""], "chip": ["›", f"fund:dept:{d.id}", ""]}
+                                for d, ps, s in parts]}, "По отделам",
+             fallback=[f"{d.name}: {money(s)} · {len(ps)} чел." for d, ps, s in parts])
+        kb = []
     else:
         es.sort(key=lambda e: -p.calc(e).total)
-        v.table(["Сотрудник", "Сумма"], [Row([e["fio"], money(p.calc(e).total, "")]) for e in es])
-        kb = rows([Button(short(e["fio"]), f"pay:{e['id']}") for e in es], 3)
+        v.ui("rows", {"items": [{"t": e["fio"], "s": (ctx.cfg.position(e["position"]) or {}).get("name", ""), "v": money(p.calc(e).total),
+                                 "chip": ["›", f"pay:{e['id']}", ""]} for e in es]}, "Люди",
+             fallback=[f"{e['fio']}: {money(p.calc(e).total)}" for e in es])
+        kb = []
         if ctx.scope == "all":
             kb.append([Button("‹ Все отделы", "fund")])
     kb.append([Button("✏️ Правки", "edits")] if _may_edit(ctx) or ctx.role in ("owner", "admin") else [])

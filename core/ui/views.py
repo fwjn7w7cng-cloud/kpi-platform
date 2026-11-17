@@ -110,6 +110,13 @@ class View:
         self.blocks.append(("builder", data))
         return self
 
+    def ui(self, kind, data, title="", fallback=()):
+        """Живой блок приложения (Адам 17.11, прототип «Демо Алапы»): витрина, лента, решения, плитки, отметки, строки с объяснением,
+        форма на одном экране — приложение рисует его само (core/ui/web.view_json → app.html UI). В картинке, тексте и PDF вместо
+        него — строки fallback (Telegram и печать не ломаются)."""
+        self.blocks.append(("ui", (kind, data, title, [str(x) for x in fallback if x])))
+        return self
+
     def note(self, text, where="all"):
         """where: all — везде, img — только на картинке, txt — только в тексте."""
         if text:
@@ -144,13 +151,23 @@ MONO_TEXT = False     # текстовый вид — всегда карточ�
 TEXT_LIMIT = 3500     # символов в одном текстовом сообщении (у Telegram предел 4096)
 
 
+def _plain_blocks(blocks):
+    """Живые блоки приложения («ui») для картинки и текста — простыми строками."""
+    for kind, b in blocks:
+        if kind == "ui":
+            if b[3]:
+                yield "lines", (b[2], b[3])
+            continue
+        yield kind, b
+
+
 def _text_groups(v):
     """Текстовый вид теми же группами, что и картинки: [(с заголовком?, заголовок, заголовок-продолжение, строки, pre-шапка)]."""
     gs, tiles_at = [], set()
 
     def cont(t):
         return t.rstrip(":") + " (продолжение)" + (":" if t.endswith(":") else "")
-    for kind, b in v.blocks:
+    for kind, b in _plain_blocks(v.blocks):
         if kind == "tiles":
             parts = [f"{escape(lab)}: <b>{escape(val)}</b>" + (" " + DOT[c] if c in DOT else "") for lab, val, c in b]
             plain = " · ".join(f"{lab}: {val}" for lab, val, _ in b)
@@ -507,7 +524,7 @@ def _groups(v):
 
     def cont(t):
         return t if t.endswith("(продолжение)") else t.rstrip(":") + " (продолжение)" + (":" if t.endswith(":") else "")
-    for kind, b in v.blocks:
+    for kind, b in _plain_blocks(v.blocks):
         if kind == "tiles":
             gs.append(([], [("gap", 18), ("tiles", b)], []))
         elif kind == "table":

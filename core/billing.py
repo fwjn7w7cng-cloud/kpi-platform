@@ -30,7 +30,9 @@ PAY_DAYS = 5                 # на оплату первого счёта
 STEPS = (("remind", 1), ("view", 5), ("off", 10))
 HOLD_DAYS = 7                # «⏳ Отсрочка» — на столько дней от сегодня     # после срока оплаты: напоминание, только смотреть, отключение
 
-menu("bl", "📄 Правила и оплата", {"owner", "admin"}, order=85)
+# Адам 17.11: в демо «Правила и оплата» не показываем — код, экраны и тексты остаются; вернуть — DEMO_SHOW = True.
+DEMO_SHOW = False
+menu("bl", "📄 Правила и оплата", {"owner", "admin"}, order=85, when=lambda c: DEMO_SHOW or not c.demo)
 
 
 # ---------- состояние ----------
@@ -333,7 +335,7 @@ def status(ctx, st):
 
 def home_line(ctx):
     """Плашка на главной у директора и админа: бесплатные дни, скорый счёт, неоплата."""
-    if ctx.role not in ("owner", "admin"):
+    if ctx.role not in ("owner", "admin") or (ctx.demo and not DEMO_SHOW):
         return ""
     st = state(ctx)
     fp = first_paid(ctx, st)

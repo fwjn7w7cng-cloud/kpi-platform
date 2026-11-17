@@ -199,7 +199,7 @@ class WebApi:
                 (tools if to in TOOLS else extra if to.startswith("sw:") else tabs).append([label, to])
         msgs = [reply_json(r, self._files(uid)) for r in mine]
         first = msgs[0].get("view") if msgs else None
-        home = sid in HOME_SIDS or (sid in ("sw", "swb") and first and first.get("title") == ctx.cfg.name)
+        home = sid in HOME_SIDS or (not self.panel and first and first.get("title") == ctx.cfg.name)   # главная — по заголовку (её возвращают и действия lv…)
         who = ctx.me["fio"] if ctx.me and allowed else ""
         role_t = "" if not allowed else (ctx.position_name if ctx.role in ("staff", "head") and ctx.position_name else
                                          ctx.cfg.role_title(ctx.role) if ctx.role not in ("guest", "admin") else
@@ -209,7 +209,7 @@ class WebApi:
             from core.ui import orient
             bar = orient.demo_bar(ctx)
         return {"ver": self.ver, "msgs": msgs, "inbox": self._inbox(uid), "home": bool(home), "tabs": tabs, "extra": extra, "tools": tools,
-                "bar": bar,
+                "bar": bar, "here": ((ctx.session.get("trail") or ["home"])[-1] if not home else "home"),
                 "company": PANEL_NAME if self.panel else ctx.cfg.name, "who": who, "role": role_t, "guest": not allowed or ctx.role == "guest",
                 "push": None if self.app.demo or not allowed or ctx.role == "guest" else push.has(self._office(), uid)}
 

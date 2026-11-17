@@ -46,16 +46,17 @@ def home(ctx):
     if ctx.me and ctx.role not in ("owner", "admin") and not ctx.cfg.dept_on(ctx.me["dept"]):
         return _dept_off(ctx)
     from core.ui import orient
-    if orient.welcome_due(ctx):                       # Адам 09.11: гостю демо — что это и что делать, один раз
-        return orient.welcome(ctx)
     role_t = ctx.cfg.role_title(ctx.role) if ctx.role in R.ROLES else "Администратор"
     if ctx.role in ("staff", "head") and ctx.position_name:
         role_t = ctx.position_name
     v = View(ctx.cfg.name, f"{ctx.name()} · {role_t} · {month_title(ctx.month).lower()}")
-    v.tiles(_home_tiles(ctx))
-    lines = _home_lines(ctx)
-    if lines:
-        v.lines(lines)
+    if orient.welcome_due(ctx):                       # Адам 17.11: приветствие — карточкой сверху главной, не отдельным экраном
+        orient.welcome_card(v, ctx)
+    if not _live_home(ctx, v):                        # Адам 17.11: живые экраны ролей (core/ui/live.py)
+        v.tiles(_home_tiles(ctx))
+        lines = _home_lines(ctx)
+        if lines:
+            v.lines(lines)
     from core.calendar import in_ramadan, ramadan
     if in_ramadan(ctx.db, ctx.today):
         r = ramadan(ctx.db)
@@ -80,10 +81,30 @@ def home(ctx):
         v.note(f"🧩 Ваш набор: {money(price)} в месяц{' при оплате за год' if ctx.session.get('year') else ''}, "
                f"подключение {money(q['setup'])}. Здесь включено только то, что вы выбрали; остальное — с замком 🔒.")
         kb.insert(0, [Button("✏️ Изменить набор", "sw:ed"), Button("📨 Хочу так", "sw:req")])
-    if ctx.demo:                                     # Адам 09.11: три действия клиента — первым рядом
-        kb.insert(1 if ctx.session.get("built") else 0, orient.home_row(ctx))
     kb.append(_month_switch(ctx))
     return Reply(view=v, buttons=kb)
+
+
+def _live_home(ctx, v):
+    """Главная по роли — живыми блоками. False — роль без живого экрана (старый вид)."""
+    from core.ui import live
+    try:
+        if ctx.role in ("owner", "admin", "accountant") and ctx.scope == "all":
+            live.owner_home(ctx, v)
+        elif ctx.role in ("head", "sv") and ctx.dept_kind == "sales":
+            live.head_home(ctx, v)
+        elif ctx.role in SELLERS and ctx.me:
+            live.rep_home(ctx, v)
+        elif ctx.me and ctx.role in ("staff", "head"):
+            live.staff_home(ctx, v)
+        else:
+            return False
+    except Exception:                                 # живой экран не собрался — показываем прежний, а не ошибку
+        import logging
+        logging.getLogger(__name__).exception("live home")
+        v.blocks.clear()
+        return False
+    return True
 
 
 DEPT_ICON = {"sales": "🏢", "warehouse": "📦", "logistics": "🚚", "purchasing": "🛒", "office": "🏛"}
@@ -246,12 +267,16 @@ def bottom_rows(ctx):
         ("🐞 Не работает", "fb") if ctx.role in ("rep", "newbie", "staff") else ("💬 Предложение", "fb")
     find = [("🔍 Найти", "find")] if items else []            # поиск всем (Адам 09.11); отдел не подключён — не нужен
     items = [("🏠 Главная", "home")] + [x for x in items if x != fb] + find + [fb]
+    if ctx.demo and find:                             # Адам 17.11: демо — «Главная · Зарплата · Собрать», остальное в «Ещё»
+        pay = ("💰 Фонд", "fund") if role in ("owner", "admin", "accountant", "head") and ctx.can("payroll") else ("💰 Зарплата", "pay")
+        rest = [x for x in items[1:] if x[1] not in (pay[1], "pay", "fund")]
+        items = [items[0], pay, ("🧩 Собрать", "swb")] + rest
     out = [items[i:i + 3] for i in range(0, len(items), 3)]
     if ctx.demo:
-        out.append([("🎭 Роль", "sw:role"), ("🏭 Отрасль", "swi"), ("🧩 Собрать", "sw:ed")])
         from core.demo import is_partner
         if is_partner(ctx):
             out.append([("🤝 Мои клиенты", "ptn"), ("📘 Инструкция", "ptm"), ("🔄 Заново", "sw:reset")])
+        out.append([("🏭 Отрасль", "swi"), ("🔄 Начать заново", "sw:reset")] if not is_partner(ctx) else [("🏭 Отрасль", "swi")])
     return out
 
 

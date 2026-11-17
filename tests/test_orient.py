@@ -35,17 +35,14 @@ class Orient(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_welcome_once_then_home(self):
+        def wel(out):                                                    # Адам 17.11: приветствие — карточкой на главной
+            return any(r.view and any(k == "ui" and b[0] == "welcome" for k, b in r.view.blocks) for r in out)
         first = [r for r in self.app.start(CLIENT, arg=self.code) if not r.to]
-        self.assertTrue(any(r.view and "демо" in r.view.title.lower() for r in first))
-        self.assertIn("👔 Начать с директора", labels(first))
-        out = self.app.press(CLIENT, "wel:go")
-        self.assertEqual(self.app.ctx(CLIENT).role, "owner")
-        ls = labels(out)
-        self.assertEqual(ls[:3], ["🧩 Собрать свой бот", "👀 Посмотреть по ролям", "📘 Что умеет"])
-        again = self.app.press(CLIENT, "home")
-        self.assertNotIn("👔 Начать с директора", labels(again))        # второй раз не показываем
+        self.assertTrue(wel(first))
+        self.app.press(CLIENT, "wel:ok")
+        self.assertFalse(wel(self.app.press(CLIENT, "home")))           # второй раз не показываем
         self.app.press(CLIENT, "sw:reset")                               # «Заново» — приветствие снова
-        self.assertIn("👔 Начать с директора", labels(self.app.press(CLIENT, "home")))
+        self.assertTrue(wel(self.app.press(CLIENT, "home")))
 
     def test_admin_no_welcome_and_bar(self):
         out = self.app.press(ADMIN, "home")

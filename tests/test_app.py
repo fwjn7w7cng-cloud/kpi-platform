@@ -8,6 +8,7 @@ from pathlib import Path
 
 from core.app import App
 from core.jobs import schedule
+from core.ui import screens
 from tools import crawl
 
 TODAY = date(2026, 10, 27)
@@ -65,8 +66,9 @@ class Demo(unittest.TestCase):
         tos = [b.to for b in menu]
         self.assertIn("deptv:warehouse", tos)                    # все отделы — отдельными кнопками
         self.assertIn("sales", tos)
-        first = [b.to for r in self.app.start(15) for b in r.all_buttons()][:3]
-        self.assertEqual(first, ["sw:ed", "sw:role", "help"])   # Адам 09.11: три действия клиента — первым рядом
+        self.app.start(15)
+        tabs = [to for row in screens.bottom_rows(self.app.ctx(15)) for _, to in row][:3]
+        self.assertEqual(tabs, ["home", "fund", "swb"])          # Адам 17.11: демо — «Главная · Фонд/Зарплата · Собрать»
 
     def test_menu_commands(self):
         cmds = [c for c, _, _ in self.app.commands()]
