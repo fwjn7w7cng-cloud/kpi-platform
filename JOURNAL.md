@@ -3,6 +3,13 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-17 23:24 (Альфред) — демо обновлено до ce17154 (пульт) и поставлен дежурный
+git reset → ce17154 (core/control.py, core/pult.py, core/billing.py, core/app.py, core/transport/web.py, core/ui, web/app.html, deploy/duty, тесты), chown alapa, restart kpi-web@demo → active, NRestarts 0, ошибок 0;
+web/site → /var/www/kpi/site. demo.alapa.pro и admin.alapa.pro → 200. tests.test_control, tests.test_live и tests.test_partner (unittest от alapa) — 37 тестов, ок.
+Дежурный (с «да» Адама, по deploy/duty/README.txt): /usr/local/sbin/alapa-duty.sh, alapa-duty.path/.service в /etc/systemd/system, папки data/_duty (alapa) и /etc/caddy/clients;
+в Caddyfile после (secure) — `import /etc/caddy/clients/*.caddy` (копия до правки: Caddyfile.bak-2026-11-17-2323-duty). caddy validate — ок, reload; alapa-duty.path — active, enabled.
+Все сайты после reload → 200 (alapa.pro, demo, admin, teplocom, botter, fit). Записок в _duty пока нет — дежурный ещё ни разу не срабатывал. Сам экран пульта глазами не смотрел.
+
 ## 2026-11-17 22:50 (Джарвис) — пульт: функции клиентов, скидки, каталог, доступы, акция, новое приложение + дежурный
 Адам: «всё управление через пульт». `core/pult.py`: вкладки Сводка · Клиенты · Функции · Доступы · Ещё; функции клиента переключателями,
 скидки со сроком/бессрочно (в счёте сами), каталог с ценами (сразу у всех клиентов), скидка партнёра, акция для новых, «＋ Новое приложение».
