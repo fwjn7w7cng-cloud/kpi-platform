@@ -1172,7 +1172,10 @@ async function uploadFiles(files) {
   } catch (e) { toast("Не получилось отправить файл. Проверьте интернет и попробуйте ещё раз."); }
   finally { busy = false; $("busy").hidden = true; }
 }
-function go(to, top) { if (top) S.cur = to; call("press", {to, top: !!top}); }
+function go(to, top) {
+  if (to && to.startsWith("url:")) { const u = to.slice(4); if (/^https:\/\//.test(u)) { const w = window.open(u, "_blank", "noopener"); if (!w) location.href = u; } return; }   // кнопка-ссылка: в браузер
+  if (top) S.cur = to; call("press", {to, top: !!top});
+}
 function sheet(html) { $("sheetBody").innerHTML = html; $("sheet").hidden = false; }
 // Полоса демо (Адам 09.11): «Смотрю как» и отрасль — листом, одно нажатие — экран перестроился; «Собрать» и поиск — сразу.
 function dbar() {

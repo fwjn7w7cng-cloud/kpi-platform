@@ -181,6 +181,9 @@ class Pult(Control):
         from core import billing as B
         self.assertIn("logistics", B.funcs(cl))
         self.assertTrue(B.state(cl).get("people"))
+        from core.ui.web import reply_json                                  # «Открыть его приложение» — ссылкой в браузер (Адам 18.11)
+        btns = [b for r in self.demo.press(1, "mcc:stroytorg") for row in reply_json(r).get("buttons") or [] for b in row]
+        self.assertTrue(any(b[1].startswith("url:https://stroytorg.") for b in btns))
         bad = self.demo.press(1, "mns", form={"name": ""})
         self.assertIn("название", text_of(bad[0]))
 

@@ -3,6 +3,10 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-18 00:40 (Джарвис) — «Открыть его приложение» в пульте вела на «Сводку»
+Кнопки-ссылки (Button(url=…)) веб-приложение не понимало — отдавало пустой адрес, нажатие = главная. Теперь `url:https://…` → браузер
+(`web._ext`, `go()` в app.html). Проба (proba.alapa.pro) создана из пульта, дежурный отработал; открыть её — после выкатки. Потом «Пробу» убрать.
+
 ## 2026-11-17 23:24 (Альфред) — демо обновлено до ce17154 (пульт) и поставлен дежурный
 git reset → ce17154 (core/control.py, core/pult.py, core/billing.py, core/app.py, core/transport/web.py, core/ui, web/app.html, deploy/duty, тесты), chown alapa, restart kpi-web@demo → active, NRestarts 0, ошибок 0;
 web/site → /var/www/kpi/site. demo.alapa.pro и admin.alapa.pro → 200. tests.test_control, tests.test_live и tests.test_partner (unittest от alapa) — 37 тестов, ок.

@@ -63,6 +63,13 @@ def view_json(v):
     return {"title": v.title, "sub": v.subtitle, "blocks": out}
 
 
+def _ext(b):
+    """Кнопка-ссылка (Button(url=…)) → «url:https://…»: приложение открывает её в браузере (Адам 18.11: «Открыть его приложение»
+    в пульте вела на «Сводку»). Только https — другие ссылки не пропускаем."""
+    u = getattr(b, "url", "") or ""
+    return f"url:{u}" if u.startswith("https://") else ""
+
+
 def reply_json(r, files=None):
     """files — словарь, куда сложить вложения: {id: (имя, байты)}; в ответ попадают ссылки на них."""
     d = {}
@@ -84,7 +91,8 @@ def reply_json(r, files=None):
                 d["files"].append([name, f"/api/file/{fid}"])
     if r.upload:
         d["upload"] = 1
-    rows = [[[b.label, b.to] + ([b.info] if getattr(b, "info", "") else []) for b in row if b.to != "home"] for row in r.buttons]
+    rows = [[[b.label, b.to or _ext(b)] + ([b.info] if getattr(b, "info", "") else []) for b in row if b.to != "home" and (b.to or _ext(b))]
+            for row in r.buttons]
     d["buttons"] = [row for row in rows if row]
     return d
 
