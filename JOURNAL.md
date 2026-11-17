@@ -3,6 +3,17 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-18 00:42 (Альфред) — демо до 96e64f0; дежурный дал proba занятый порт 8102 (Botter) — proba выключен
+git reset → 96e64f0 (core/ui/web.py, web/app.html, тест), chown alapa, web/site → /var/www/kpi/site. tests.test_control (от alapa) — 21 тест, ок.
+proba (создан дежурным 18.11 00:29): data/_duty/proba.ok — {"code":"proba","port":8102,"url":"https://proba.alapa.pro"}, «запущено … ответ 200».
+НО порт 8102 занят chogbot (Botter, botter.alapa.pro → 127.0.0.1:8102): дежурный проверяет только .env других клиентов, не занятые порты сервера.
+Итог: kpi-web@proba падал «Address already in use» (~98 перезапусков); proba.alapa.pro отдавал Botter (отсюда 200);
+после restart kpi-web@demo в 00:38 порт 8101 захватил процесс proba (run.py proba --web) — демо не поднималось, demo.alapa.pro показывал proba.
+С «да» Адама: systemctl disable --now kpi-web@proba; /etc/caddy/clients/proba.caddy → proba.caddy.off, caddy validate ок, reload;
+restart kpi-web@demo → active на 8101, ошибок после старта 0. Все сайты 200 (alapa.pro, demo, admin, teplocom, botter, fit), proba.alapa.pro — не отвечает.
+Ничего не удалено: clients/proba/, data/_duty/proba.ok, proba.caddy.off на месте. Нужно Джарвису: дежурному проверять занятые порты (ss) и
+список портов из Caddyfile (8101 demo/admin, 8102 botter, 8201 teplocom, 8090 fit); почему proba при занятом 8102 слушал 8101; proba — свободный порт.
+
 ## 2026-11-18 00:40 (Джарвис) — «Открыть его приложение» в пульте вела на «Сводку»
 Кнопки-ссылки (Button(url=…)) веб-приложение не понимало — отдавало пустой адрес, нажатие = главная. Теперь `url:https://…` → браузер
 (`web._ext`, `go()` в app.html). Проба (proba.alapa.pro) создана из пульта, дежурный отработал; открыть её — после выкатки. Потом «Пробу» убрать.
