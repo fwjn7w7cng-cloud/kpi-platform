@@ -200,8 +200,8 @@ class WebApi:
         msgs = [reply_json(r, self._files(uid)) for r in mine]
         first = msgs[0].get("view") if msgs else None
         home = sid in HOME_SIDS or (not self.panel and first and first.get("title") == ctx.cfg.name)   # главная — по заголовку (её возвращают и действия lv…)
-        who = ctx.me["fio"] if ctx.me and allowed else ""
-        role_t = "" if not allowed else (ctx.position_name if ctx.role in ("staff", "head") and ctx.position_name else
+        who = ctx.me["fio"] if ctx.me and allowed and not self.panel else ""
+        role_t = "Администратор Алапы" if self.panel and allowed else "" if not allowed else (ctx.position_name if ctx.role in ("staff", "head") and ctx.position_name else
                                          ctx.cfg.role_title(ctx.role) if ctx.role not in ("guest", "admin") else
                                          "Администратор" if ctx.role == "admin" else "")
         bar = None

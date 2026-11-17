@@ -88,7 +88,7 @@ class Partner(unittest.TestCase):
         rows = screens.bottom_rows(self.app.ctx(ADMIN))
         self.assertNotIn("adm", [t for row in rows for _, t in row])      # «Пульт» — в отдельном приложении «Управление»
         self.app.panel = True
-        self.assertIn(("🛠 Ещё", "adm"), [x for row in screens.bottom_rows(self.app.ctx(ADMIN)) for x in row])
+        self.assertIn(("☰ Ещё", "mcm"), [x for row in screens.bottom_rows(self.app.ctx(ADMIN)) for x in row])   # пульт (Адам 17.11)
         self.app.panel = False
         self.assertNotIn("gst", [t for row in rows for _, t in row])
         tos = [b.to for b in self.app.press(ADMIN, "adm")[0].all_buttons()]

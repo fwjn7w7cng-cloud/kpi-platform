@@ -1,0 +1,10 @@
+# /etc/systemd/system/alapa-duty.path — будит дежурного, когда пульт положил записку о новом приложении.
+[Unit]
+Description=Записки пульта о новых приложениях
+
+[Path]
+PathExistsGlob=/srv/alapa/data/_duty/*.new
+Unit=alapa-duty.service
+
+[Install]
+WantedBy=multi-user.target

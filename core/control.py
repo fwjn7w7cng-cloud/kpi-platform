@@ -103,32 +103,59 @@ def info(code, c):
 
 @screen("mc")
 def money_screen(ctx):
+    """🏠 Сводка пульта (Адам 17.11): деньги месяца и что сделать сегодня — каждое дело своей кнопкой."""
     no = _deny(ctx)
     if no:
         return no
-    items = [info(code, c) for code, c in all_clients(ctx.app, ctx.today)]
+    from core import pult as PU
+    cl = all_clients(ctx.app, ctx.today)
+    items = [info(code, c) for code, c in cl]
     mo = month_of(ctx.today)
     expect = came = 0
-    for code, c in all_clients(ctx.app, ctx.today):
+    for code, c in cl:
         st = B.state(c)
         b = B.bill(c, st, mo) if st.get("launch") else None
         if b:
             expect += b[2]
             came += b[2] if B.is_paid(st, mo, b) else B.got(st, mo)
     owe = sum(i["owe"] for i in items)
-    v = View("💰 Деньги и клиенты", f"{B.mname(mo).capitalize()} · клиентов {len(items)}")
-    v.tiles([("Ждём в этом месяце", money(expect), None), ("Пришло", money(came), "good"),
-             ("Должны сейчас", money(owe), "bad" if owe else None)])
-    v.table(["Клиенты", "Сколько"], [Row([t, Cell(str(sum(i["b"] == k for i in items)), tone if any(i["b"] == k for i in items) else None)])
-                                     for k, t, tone in BUCKETS])
-    waits = sum(len(i["wait"]) for i in items)
-    if not items:
-        v.note("Настоящих клиентов пока нет. Появятся после «🚀 Создать клиента» в анкете.")
-    kb = rows([Button(f"{t} ({sum(i['b'] == k for i in items)})", f"mcl:{k}") for k, t, _ in BUCKETS if any(i["b"] == k for i in items)], 2)
-    kb.append([Button(f"👥 Все клиенты ({len(items)})", "mcl:all")])
-    kb.append([Button(f"📨 Заявки ({waits})", "mcr"), Button("📅 Неделя вперёд", "mcw")])
-    kb.append([Button("🛠 Ещё: гости, партнёры, анкеты", "adm")])
-    return Reply(view=v, buttons=kb)
+    v = View("🏠 Сводка", f"{B.mname(mo).capitalize()} · клиентов {len(items)}")
+    v.ui("hero", {"label": f"{B.mname(mo).capitalize()} · пришло денег", "big": money(came), "id": "pult",
+                  "sub": f"из {money(expect)} по счетам этого месяца",
+                  "pairs": [["Ждём", money(max(expect - came, 0)), ""], ["Должны", money(owe), "bad" if owe else ""],
+                            ["В месяц всего", money(sum(i["monthly"] for i in items)), ""]]},
+         fallback=[f"Пришло {money(came)} из {money(expect)}", f"Должны {money(owe)}"])
+    todo = []
+    for code, c in cl:
+        for x in PU.ending_discounts(c, ctx.today):
+            todo.append({"t": f"{c.cfg.name}: скидка {B.discount_title(x)} кончается", "s": B.discount_term(x) + " — продлить или пусть закончится",
+                         "chip": ["Открыть", f"mcc:{code}", "warn"]})
+        st = PU.duty_state(ctx.app, code)
+        if st in ("wait", "bad"):
+            todo.append({"t": f"{c.cfg.name}: " + ("дежурный ещё запускает приложение" if st == "wait" else "дежурный не смог запустить"),
+                         "s": PU.duty_note(ctx.app, code) or "обычно до минуты", "chip": ["Открыть", f"mcc:{code}", "bad" if st == "bad" else "warn"]})
+    for i in items:
+        if i["wait"]:
+            todo.append({"t": f"{i['name']}: просит {len(i['wait'])} изменени" + ("е" if len(i["wait"]) == 1 else "я"), "s": "добавить или убрать функции, людей",
+                         "chip": ["Решить", "mcr", "warn"]})
+        if i["b"] == "late":
+            todo.append({"t": f"{i['name']}: просрочка", "s": i["when"], "chip": ["Открыть", f"mcc:{i['code']}", "bad"]})
+    for d, what in sorted((d, f"{c.cfg.name}: {w}") for code, c in cl for d, w in events(c, B.state(c), ctx.today, days=1)):
+        todo.append({"t": what, "s": "сегодня", "chip": ["", "", ""]})
+    reqs = [r for r in ctx.office.get("tariff_req") or [] if not r.get("created")]
+    if reqs:
+        todo.append({"t": f"Заявки «Хочу так»: {len(reqs)}", "s": reqs[-1].get("who", ""), "chip": ["Открыть", "mcg", "good"]})
+    from core.ui.tariff import promo
+    pr = promo(ctx)
+    if pr:
+        todo.append({"t": f"Идёт акция: подключение −{B.P.fmt(pr['pct'])}%", "s": f"до {B.dm(B._d(pr['till']))}", "chip": ["Настроить", "mcm", ""]})
+    for t in todo:
+        if not t["chip"][1]:
+            t.pop("chip")
+    v.ui("rows", {"items": todo, "empty": "На сегодня дел нет."}, "Сегодня", fallback=[t["t"] for t in todo] or ["На сегодня дел нет."])
+    v.ui("quick", {"items": [["📅 Неделя вперёд", "mcw"], ["📨 Заявки клиентов", "mcr"], ["＋ Новое приложение", "mnw:new"]]},
+         fallback=["Неделя вперёд · Заявки клиентов · Новое приложение"])
+    return Reply(view=v)
 
 
 @screen("mcl")
@@ -136,18 +163,24 @@ def clients_list(ctx, which="all"):
     no = _deny(ctx)
     if no:
         return no
-    items = [info(code, c) for code, c in all_clients(ctx.app, ctx.today)]
+    from core import pult as PU
+    items = [(info(code, c), c) for code, c in all_clients(ctx.app, ctx.today)]
     if which != "all":
-        items = [i for i in items if i["b"] == which]
-    title = dict((k, t) for k, t, _ in BUCKETS).get(which, "👥 Все клиенты")
+        items = [x for x in items if x[0]["b"] == which]
+    title = dict((k, t) for k, t, _ in BUCKETS).get(which, "🏢 Клиенты")
     v = View(title, f"{len(items)} клиент(ов)")
-    if not items:
-        v.note("Здесь пока никого.")
-    v.table(["Клиент", "₽ в месяц"], [Row([f"{DOT[i['b']]} {i['name']}", money(i["monthly"], "")], sub=i["when"],
-                                          mark="bad" if i["b"] == "late" else None) for i in items])
-    kb = [[Button(f"{DOT[i['b']]} {i['name']}", f"mcc:{i['code']}")] for i in items]
-    kb.append([Button("💰 Деньги", "mc")])
-    return Reply(view=v, buttons=kb)
+    tone = {"late": "bad", "due": "warn", "trial": "good", "ok": "good", "setup": ""}
+    rows_ = []
+    for i, c in items:
+        st = B.state(c)
+        ds = B.active_discounts(st, ctx.today)
+        duty = PU.duty_state(ctx.app, i["code"])
+        sub = f"{len(B.funcs(c))} функций · {B.people(c, st)} чел. · {i['when']}" + (" · " + ", ".join(B.discount_title(x) for x in ds) if ds else "") \
+            + (" · ⏳ запускается" if duty == "wait" else " · ⚠️ не запустилось" if duty == "bad" else "")
+        rows_.append({"t": f"{DOT[i['b']]} {i['name']}", "s": sub, "v": money(i["monthly"]), "chip": ["›", f"mcc:{i['code']}", tone[i["b"]]]})
+    v.ui("rows", {"items": rows_, "empty": "Клиентов пока нет — «＋ Новое приложение»."}, "",
+         fallback=[f"{x['t']}: {x['v']}" for x in rows_])
+    return Reply(view=v, buttons=[[Button("＋ Новое приложение", "mnw:new")]])
 
 
 # ---------- карточка ----------
@@ -173,13 +206,20 @@ def card(ctx, code, note=None):
     c = cctx(ctx, code)
     st = B.state(c)
     i = info(code, c)
-    v = View(f"{DOT[i['b']]} {c.cfg.name}", f"набор «{c.cfg.set_title}» · {B.people(c, st)} чел. · {money(i['monthly'])} в месяц")
-    v.lines([B.status(c, st)[0]], title="Сейчас")
+    from core import pult as PU
+    v = View(f"{DOT[i['b']]} {c.cfg.name}", (_link(code).split("/?")[0].split("//")[-1] or code))
+    if note:
+        v.note(note)
+    duty = PU.duty_state(ctx.app, code)
+    if duty == "wait":
+        v.note("⏳ Дежурный на сервере запускает приложение — обычно до минуты. Обновите экран.")
+    elif duty == "bad":
+        v.note("⚠️ Дежурный не смог запустить: " + (PU.duty_note(ctx.app, code) or "причина в журнале сервера") + ". Скажите Альфреду.")
+    PU.card_blocks(v, ctx, code, c)
+    v.lines([B.status(c, st)[0]], title="Деньги и даты")
     lv = {"remind": "напоминание", "view": "👀 только просмотр", "off": "⛔ доступ закрыт"}.get(i["level"])
     if lv:
         v.note(f"У клиента сейчас: {lv}.")
-    if note:
-        v.note(note)
     v.table(["Когда и что", "₽"], B.sched_rows(c, st))
     if st.get("hold"):
         v.lines([f"⏳ Отсрочка до {B.dm(B._d(st['hold']))} включительно."])
@@ -196,8 +236,8 @@ def card(ctx, code, note=None):
         kb.append([Button(f"📨 Заявки ({len(i['wait'])})", "mcr")])
     url = _link(code)
     if url:
-        kb.append([Button("🔑 Открыть его приложение", url=url)])
-    kb.append([Button("💰 Деньги", "mc")])
+        kb.insert(0, [Button("🔑 Открыть его приложение", url=url)])
+        v.lines([url], title="Ссылка администратора для клиента")
     return Reply(view=v, buttons=kb)
 
 

@@ -124,6 +124,7 @@ def data(ctx, ex=None, ui=None):
         "extra": [[f, E.FUNC_SHORT[f], pr["f_" + f], T.LOCK.get(f, E.MODULES[f][0])] for f in E.FUNCS if E.FUNCS[f][0] == "max"],
         "funcs": funcs, "on": sorted(T.depts_on(ctx.cfg)), "counts": T.counts_of(ctx), "year": bool(ctx.session.get("year")),
         "prices": {k: pr[k] for k in ("user", "disc_all", "disc_year", "setup_mult", "setup_min", "trial_days")} | {"round": P.ROUND},
+        "promo": T.promo(ctx),
         "requires": {k: sorted(v) for k, v in E.REQUIRES.items()},
         "roles": roles, "bricks": bricks_json(), "fields": {k: [x[0], x[1]] for k, x in PB.F.items()},
         "example": {p: example_json(ctx, p) for p in PB.POSITIONS},     # Адам 09.11: сумма примера — в свёрнутой строке должности

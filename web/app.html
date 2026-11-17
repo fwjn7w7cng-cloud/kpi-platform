@@ -225,6 +225,9 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 .uwel { background: var(--surface); border-radius: 20px; box-shadow: 0 0 0 1.5px var(--accent); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 .uwel h3 { margin: 0; font-family: var(--display); font-size: 19px; } .uwel ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--ink-2); }
 .uwel ol b { color: var(--ink); } .uwel p { margin: 0; font-size: 13px; color: var(--ink-2); }
+.uchoice { display: flex; flex-wrap: wrap; gap: 8px; }
+.uchoice button { border: 0; border-radius: 999px; padding: 9px 13px; font-size: 13.5px; font-weight: 600; background: var(--sunk); color: var(--ink); cursor: pointer; }
+.uchoice button.on { background: var(--ink); color: var(--bg); }
 .uquick { display: flex; flex-wrap: wrap; gap: 8px; }
 .uquick button { border: 0; border-radius: 999px; padding: 10px 14px; font-size: 14px; font-weight: 600; background: var(--surface); box-shadow: var(--edge); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
 .uquick button .si { width: 18px; height: 18px; } .uquick button.all { background: var(--sunk); box-shadow: none; color: var(--ink-2); }
@@ -759,6 +762,7 @@ const UI = {
       `<label class="ufld${f.w ? " w" : ""}"><span>${esc(f.l)}</span>${f.area ? `<textarea name="${esc(f.k)}" placeholder="${esc(f.ph || "")}"${d.done ? " disabled" : ""}>${esc(f.v || "")}</textarea>` :
         `<input name="${esc(f.k)}" value="${esc(f.v ?? "")}" placeholder="${esc(f.ph || "")}" inputmode="${f.num ? "decimal" : "text"}"${f.money ? ' data-money="1"' : ""}${d.done ? " disabled" : ""}>`}</label>`).join("")}` +
       (d.done ? `<div class="urow"><span class="ustamp">${esc(d.done)}</span></div>` : `<div class="urow" style="flex-wrap:wrap"><button class="ub pri" style="flex:1" data-send="${fid}" data-sto="${esc(d.send[1])}">${esc(d.send[0])}</button>${d.hint ? `<span style="flex-basis:100%;font-size:12.5px;color:var(--ink-2)">${esc(d.hint)}</span>` : ""}</div>`) + `</div>`; },
+  choice(d, t) { return uHead(t) + `<div class="uchoice">${(d.items || []).map(([l, to, on]) => `<button class="${on ? "on" : ""}"${uTo(to)}>${esc(l)}</button>`).join("")}</div>`; },
   quick(d) { return `<div class="uquick">${(d.items || []).map(([l, to]) => { const [i, t] = splitLabel(l);
     return `<button class="${to === "all" ? "all" : ""}"${uTo(to)}>${i ? ic(i) : ""}${esc(t)}${to === "all" ? " ›" : ""}</button>`; }).join("")}</div>`; },
   setbar(d) { return `<div class="uset"><div class="tx"><b>${esc(d.t)} · ${esc(d.v)}</b>${d.s ? `<span>${esc(d.s)}</span>` : ""}</div>` +
@@ -867,7 +871,8 @@ function bQuote() {
   const disc = all ? sum * pr.disc_all / 100 : 0;
   d.extra.forEach(([f, , p]) => { if (BS.funcs.has(f)) extra += p; });
   const monthly = R(sum - disc + extra), year = R(monthly * (1 - pr.disc_year / 100));
-  const setup = (BS.funcs.size || people) ? Math.max(Math.round(monthly * pr.setup_mult / 1000) * 1000, pr.setup_min) : 0;
+  let setup = (BS.funcs.size || people) ? Math.max(Math.round(monthly * pr.setup_mult / 1000) * 1000, pr.setup_min) : 0;
+  if (d.promo && setup) setup = Math.round(setup * (1 - d.promo.pct / 100) / 1000) * 1000;   // акция для новых (пульт)
   return {monthly, year, setup, people, on, all, full: R(sum + extra), disc: R(disc), funcs: sum - people * pr.user, users: people * pr.user, extra};
 }
 function bToggleFunc(f) {
@@ -1004,7 +1009,7 @@ function bSum(q) {
   const how = `функции ${nb(q.funcs)} + люди ${q.people}\u00a0×\u00a0${nb(pr.user)} = ${nb(q.funcs + q.users)}` +
     (q.disc ? `<br>скидка ${pr.disc_all}% за все 4 отдела: −${nb(q.disc)}` : "") + (q.extra ? `<br>дополнительно: +${nb(q.extra)}` : "") +
     (BS.year ? `<br>оплата за год: ещё −${pr.disc_year}%` : "");
-  return `<div class="bsum"><div class="bm"><b>${bfmt(main)} ₽ / мес</b><span class="bhow">${how}</span><span>подключение ${bfmt(q.setup)} ₽ · ${BS.d.prices.trial_days} дней бесплатно</span></div>${btn}</div>`;
+  return `<div class="bsum"><div class="bm"><b>${bfmt(main)} ₽ / мес</b><span class="bhow">${how}</span><span>подключение ${bfmt(q.setup)} ₽${BS.d.promo ? ` (акция −${BS.d.promo.pct}% до ${BS.d.promo.till.slice(8, 10)}.${BS.d.promo.till.slice(5, 7)})` : ""} · ${BS.d.prices.trial_days} дней бесплатно</span></div>${btn}</div>`;
 }
 function bldRender() {
   const el = $("bld"); if (!el || !BS) return;

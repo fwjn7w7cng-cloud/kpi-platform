@@ -124,13 +124,55 @@ def counts_for(ctx, n):
     return c
 
 
-def monthly(ctx, fs=None, n=None, st=None):
+def monthly(ctx, fs=None, n=None, st=None, on=None):
+    """В месяц по тарифу; on — на какой день смотреть скидки из пульта (по умолчанию — сегодня)."""
     from core.ui.tariff import quote_of
+    st = state(ctx) if st is None else st
     fs = funcs(ctx) if fs is None else set(fs)
     n = people(ctx, st) if n is None else n
     if not fs:
         return 0
-    return quote_of(ctx, fs, year=False, counts=counts_for(ctx, n) or {"sales": 0})["monthly"]
+    q = quote_of(ctx, fs, year=False, counts=counts_for(ctx, n) or {"sales": 0})
+    ds = active_discounts(st, on or today_(ctx))
+    if not ds:
+        return q["monthly"]
+    return max(0, P.rnd(q["monthly"] - discount_sum(ctx, fs, q, ds)))
+
+
+# ---------- скидки из пульта (Адам 17.11: «процентные скидки со сроком или бессрочно») ----------
+# st["discounts"] = [{id, what: all | people | <функция>, pct, start, till (ISO или None — бессрочно), why, ts}]
+
+def active_discounts(st, on):
+    d = on.isoformat() if hasattr(on, "isoformat") else str(on)
+    return [x for x in st.get("discounts") or [] if (x.get("start") or "") <= d and (not x.get("till") or d <= x["till"])]
+
+
+def discount_sum(ctx, fs, q, ds):
+    """Сколько рублей снимают скидки: на всё — от месячной суммы, на людей — от их цены, на функцию — от её цены."""
+    pr = P.prices(ctx.office)
+    out = 0.0
+    for x in ds:
+        pct = float(x.get("pct") or 0) / 100
+        w = x.get("what")
+        if w == "all":
+            out += q["monthly"] * pct
+        elif w == "people":
+            out += q["people"] * pr["user"] * pct
+        elif w in fs:
+            out += pr.get(f"f_{w}", 0) * pct
+    return out
+
+
+def discount_title(x):
+    w = x.get("what")
+    on = "на всё" if w == "all" else "на людей" if w == "people" else f"на «{E.FUNC_SHORT.get(w, w)}»"
+    return f"−{P.fmt(x.get('pct') or 0)}% {on}"
+
+
+def discount_term(x):
+    if not x.get("till"):
+        return "бессрочно"
+    return f"до {dm(_d(x['till']))} {x['till'][:4]}"
 
 
 def setup_sum(ctx, st):
@@ -164,7 +206,8 @@ def bill(ctx, st, month, m=None):
     fp = first_paid(ctx, st)
     if not fp:
         return None
-    m = monthly(ctx, st=st) if m is None else m
+    if m is None:
+        m = monthly(ctx, st=st, on=max(first_day(month), fp))
     fbm = first_bill_month(fp)
     if month < fbm:
         return None
@@ -177,7 +220,8 @@ def bill(ctx, st, month, m=None):
         due = day + timedelta(days=PAY_DAYS - 1)
         if month == fbm and merged(fp):
             lines.append((f"{dm(fp)} – конец {mgen(month_of(fp))} ({tail_days(fp)} дн.)", part(m, fp)))
-        lines.append((mname(month), m))
+        ds = active_discounts(st, day)
+        lines.append((mname(month) + (" · " + ", ".join(discount_title(x) for x in ds) if ds else ""), m))
     for x in st.get("extras") or []:
         if x.get("month") == month:
             lines.append((x.get("title") or "доплата", int(x.get("amount") or 0)))

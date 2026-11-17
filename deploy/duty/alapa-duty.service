@@ -1,0 +1,7 @@
+# /etc/systemd/system/alapa-duty.service — дежурный: запускает приложение нового клиента (deploy/duty/alapa-duty.sh).
+[Unit]
+Description=Дежурный Алапы: новое приложение клиента
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/alapa-duty.sh

@@ -48,8 +48,28 @@ def depts_on(cfg):
 def quote_of(ctx, sel=None, year=None, counts=None, depts=None):
     if year is None:
         year = bool(ctx.session.get("year")) if ctx.demo else False
-    return P.quote(sel if sel is not None else funcs_of(ctx.cfg), counts or counts_of(ctx), P.prices(ctx.office), year=year,
-                   depts=depts_on(ctx.cfg) if depts is None else depts)
+    q = P.quote(sel if sel is not None else funcs_of(ctx.cfg), counts or counts_of(ctx), P.prices(ctx.office), year=year,
+                depts=depts_on(ctx.cfg) if depts is None else depts)
+    pr = promo(ctx)                                    # акция для новых из пульта (Адам 17.11): скидка на подключение до даты
+    if pr and q["setup"]:
+        q["setup_full"] = q["setup"]
+        q["setup"] = int(round(q["setup"] * (1 - pr["pct"] / 100) / 1000)) * 1000
+        q["setup_lines"] = q["setup_lines"] + [(f"Акция до {pr['till'][8:10]}.{pr['till'][5:7]}: −{P.fmt(pr['pct'])}%", q["setup"] - q["setup_full"])]
+        q["promo"] = pr
+    return q
+
+
+def promo(ctx):
+    """Действующая акция для новых клиентов: {pct, till} или None. Живёт в базе офиса демо (её ставят в пульте)."""
+    if not ctx.demo:
+        return None
+    pr = ctx.office.get("promo") or {}
+    try:
+        if pr.get("on") and float(pr.get("pct") or 0) > 0 and ctx.today.isoformat() <= pr.get("till", ""):
+            return {"pct": float(pr["pct"]), "till": pr["till"]}
+    except (TypeError, ValueError):
+        pass
+    return None
 
 
 def quote_view(ctx, q, title, sub):
@@ -489,7 +509,15 @@ def on_price(ctx, text, data):
                                 "цена не меньше нуля.", data,
                        buttons=[[Button("✖️ Отмена", "pr")]])
     P.set_price(ctx.office, code, int(x) if x == int(x) else x, who=ctx.author())
+    _sync(ctx)
     return prices_screen(ctx)
+
+
+def _sync(ctx):
+    """Цены из пульта — сразу и в базы клиентов (Адам 17.11: «одинаково везде»)."""
+    if ctx.demo and is_admin(ctx):
+        from core import pult
+        pult.sync_prices(ctx)
 
 
 @screen("prx")
@@ -497,4 +525,5 @@ def price_reset(ctx):
     if not is_admin(ctx):
         return prices_screen(ctx)
     P.reset(ctx.office, who=ctx.author())
+    _sync(ctx)
     return prices_screen(ctx)

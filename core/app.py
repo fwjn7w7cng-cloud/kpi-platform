@@ -31,7 +31,9 @@ MODULES = ["debts", "reminders", "achievements", "staff", "payroll", "tasks", "a
 
 RESET = {"home", "mon"}          # главная и смена месяца: путь «Назад» начинается заново
 REPLACE = {"pb", "rating", "blt", "swb"}       # вкладки внизу одного экрана (должность в конструкторе, показатель рейтинга) — не копят шаги «Назад»
-STEPLESS = {"qzs", "qza"}        # прохождение теста: вопросы не копятся в путь, «‹ Назад» — к списку тестов
+STEPLESS = {"qzs", "qza"}
+# Действия пульта меняют базы клиентов (не базу демо) — «Назад» не должен их повторять (Адам 17.11)
+ACTIONS = {"mca", "mcy", "mcn", "mcf", "mfc", "mfp", "mdp", "mdv", "mdx", "mnp", "mns", "mpm"}        # прохождение теста: вопросы не копятся в путь, «‹ Назад» — к списку тестов
 
 
 def window_of(r):
@@ -73,6 +75,7 @@ class App:
         importlib.import_module("core.ui.orient")          # полоса демо, приветствие, поиск (Адам 09.11)
         importlib.import_module("core.billing")
         importlib.import_module("core.control")
+        importlib.import_module("core.pult")              # пульт: функции клиентов, скидки, каталог, доступы, новые приложения (Адам 17.11)
         importlib.import_module("core.onboard")
         importlib.import_module("core.people")
         importlib.import_module("core.reports")
@@ -307,7 +310,7 @@ class App:
         else:
             # Экран можно открыть ещё раз кнопкой «Назад», только если он ничего не менял и никому не писал.
             safe = sid not in RESET and ctx.db.rev() == rev and len(mine) == len(out) and not (mine and mine[-1].ask)
-            if sid in STEPLESS:
+            if sid in STEPLESS or sid in ACTIONS:
                 safe = False
             elif safe and same and sid in REPLACE:
                 trail[-1] = data

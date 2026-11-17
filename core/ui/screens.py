@@ -304,8 +304,7 @@ def _dept_bottom(ctx):
 def bottom_rows(ctx):
     """[[(подпись, экран)]] нижнего меню этого зрителя."""
     if ctx.app.panel:                                 # приложение управления (core/control.py)
-        return [[("🏠 Деньги", "home"), ("📨 Заявки", "mcr"), ("📅 Неделя", "mcw")],
-                [("📋 Анкеты", "cds"), ("💰 Цены", "pr"), ("🛠 Ещё", "adm")]]
+        return [[("🏠 Сводка", "home"), ("🏢 Клиенты", "mcl:all"), ("🧩 Функции", "mfn"), ("🎟 Доступы", "mcg"), ("☰ Ещё", "mcm")]]   # пульт (Адам 17.11)
     if ctx.role == "guest":
         return []
     role = "rep" if ctx.role == "newbie" else ctx.role
