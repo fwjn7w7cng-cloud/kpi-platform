@@ -152,8 +152,9 @@ class Builder(Base):
         self.app.press(14, "sw:ed:start")
         self.app.press(14, "sw:role:owner")
         r = self.app.press(14, "lg")[0]
+        self.assertIn("3 000 ₽ в месяц", r.view.subtitle)                        # цена — подписью (Адам 18.11)
         lines = next(b for k, b in r.view.blocks if k == "lines")[1]
-        self.assertTrue(any("3 000 ₽ в месяц" in x and "настройки внутри бесплатно" in x for x in lines))
+        self.assertTrue(len(lines) == 1 and "настройки" not in lines[0])            # одна простая фраза
         self.assertIn("sw:ed", [b.to for b in r.all_buttons()])
 
     def test_department_off_for_its_people(self):
@@ -180,8 +181,7 @@ class Prices(Base):
         self.assertTrue(self.app.text(1, "95")[0].ask)        # скидка 95% — не бывает
         self.owner(21)
         pick(self.app, 21, "t:stock")                         # сняли закупки — в замке уже новая цена
-        lines = next(b for k, b in self.app.press(21, "sk")[0].view.blocks if k == "lines")[1]
-        self.assertTrue(any("6 000 ₽ в месяц" in x for x in lines))
+        self.assertIn("6 000 ₽ в месяц", self.app.press(21, "sk")[0].view.subtitle)
         self.app.press(1, "prx")
         self.assertEqual(P.changed(self.app.office()), set())
 

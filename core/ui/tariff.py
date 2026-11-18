@@ -94,8 +94,7 @@ def quote_view(ctx, q, title, sub):
     srows.append(Row([Cell("Итого подключение", bold=True), Cell(money(q["setup"], ""), bold=True)]))
     v.table(["Подключение — платится один раз", "₽"], srows)
     lines = [f"Первые {q['trial_days']} дней — бесплатно: смотрите и решайте." if q["trial_days"] else "",
-             "Платите только за функции; настройки внутри функции — бесплатно. Люди считаются в подключённых отделах, "
-             "директор и администратор — бесплатно.",
+             "Платите за выбранные функции и за людей; директор и администратор — бесплатно.",
              f"Оплата за год — минус {P.fmt(pr['disc_year'])}%: {money(q['monthly_year'])} в месяц, {money(q['year_total'])} за год.",
              f"Все четыре отдела — скидка {P.fmt(pr['disc_all'])}% уже учтена." if q["discount"] else
              "Функцию можно добавить потом — доплата только за неё."]
@@ -238,7 +237,7 @@ def packages_window(ctx, act=None, value=None):
     def func_rows(grp, pre=""):
         for fc in [x for x in E.FUNCS if E.FUNCS[x][0] == grp]:
             kb.append([Button(f"{'☑' if fc in f else '☐'} {pre}{E.FUNC_SHORT[fc]} · {P.fmt(pr['f_' + fc])}", f"swe:t:{fc}",
-                              info=f"{LOCK.get(fc, E.MODULES[fc][0])}\n{P.fmt(pr['f_' + fc])} ₽ в месяц; настройки внутри — бесплатно.")])
+                              info=f"{LOCK.get(fc, E.MODULES[fc][0])}\n{P.fmt(pr['f_' + fc])} ₽ в месяц.")])
 
     func_rows("all", "💰 ")                                  # зарплата — для всех отделов
     for grp in DEPT_ORDER:                                    # отделы галочками, под включённым — его функции и люди
@@ -470,8 +469,7 @@ def prices_screen(ctx):
     v.table(["Что", "Цена"], [Row([title, Cell(f"{P.fmt(pr[code])} {unit}", "warn" if code in ch else None)],
                                  sub=f"стандарт {P.fmt(P.DEFAULT[code])}" if code in ch else "")
                               for code, title, _, unit in P.PRICES])
-    v.note("Платим только за функции; настройки внутри функции — бесплатно. Цены действуют для всех расчётов сразу: "
-           "конструктор, тариф, замки на экранах. Скидки — в процентах, пробный период — в днях.")
+    v.note("Цены действуют сразу везде: в «Собрать», в счетах клиентов и на закрытых экранах.")
     if not is_admin(ctx):
         v.note("Менять цены может только администратор платформы.")
         return Reply(view=v, buttons=[[Button("🧩 Собрать", "sw:ed")]] if ctx.demo else [])

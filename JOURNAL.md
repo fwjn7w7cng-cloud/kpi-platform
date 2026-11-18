@@ -3,6 +3,10 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-18 11:40 (Джарвис) — описания функций одной простой фразой
+Адам: «просто повествуй, и так везде». `screens.LOCK_TEXT` переписан (по фразе на функцию), закрытый экран: заголовок — короткое имя,
+подпись — «отдел · цена в месяц», без «Платите только за неё — настройки внутри бесплатно»; то же в ⓘ, тарифе, «Функциях на заказ».
+
 ## 2026-11-18 01:08 (Альфред) — тестовый клиент proba убран целиком (по команде Адама), всё перенесено в /root/removed-proba/
 systemctl disable --now kpi-web@proba → inactive. /etc/caddy/clients/proba.caddy (и proba.caddy.off.old) → /root/removed-proba/caddy/; caddy validate ок, reload.
 clients/proba → /root/removed-proba/clients-proba, data/proba → /root/removed-proba/data-proba, data/_duty/proba.* → /root/removed-proba/duty/.
