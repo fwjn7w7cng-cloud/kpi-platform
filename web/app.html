@@ -10,34 +10,33 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="__SHORT__">
-<meta name="theme-color" content="#F3F5F8">
+<meta name="theme-color" content="#1C1C1C">
 <meta name="referrer" content="same-origin">
 <style>[hidden]{display:none!important} body{margin:0} :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:0}</style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Onest:wght@600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
 <style>
 /* Цвета — от логотипа «Алапа»: тёмно-синий #15284F. Layout: одно окно приложения — шапка сверху, экран посередине, панель вкладок снизу (как нижняя панель бота). */
 :root {
-  --bg: #F3F5F8; --surface: #FFFFFF; --sunk: #EEF1F5; --line: #E2E6EC;
-  --ink: #18202B; --ink-2: #5D6878; --accent: #1B3B78; --accent-soft: #E7ECF5;
-  --good: #1E8E52; --good-soft: #E3F4EA; --warn: #B87A00; --warn-soft: #FBF0D7;
-  --bad: #CF3A3A; --bad-soft: #FBE7E7; --muted: #6B7280; --muted-soft: #EEF0F3;
-  --display: "Onest", "Golos Text", system-ui, sans-serif;
-  --body: "Golos Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Один вид — «Графит» (Адам 18.11: «из трёх чёрно-белая нравится, других тем не надо»): чёрное и белое, цвет — только у статусов и значков */
+  --bg: #F2F2F0; --surface: #FFFFFF; --sunk: #ECEBE7; --line: #E2E1DD;
+  --ink: #1C1C1C; --ink-2: #6E6E6B; --accent: #1C1C1C; --accent-soft: #ECEBE7;
+  --good: #1F6B3A; --good-soft: #E6F0E8; --warn: #8A5300; --warn-soft: #F6EEDD;
+  --bad: #A3201B; --bad-soft: #F7E6E4; --muted: #6E6E6B; --muted-soft: #ECEBE7;
+  --display: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --ic1: #E7ECF5; --ic2: #E3F4EA; --ic3: #FBF0D7; --ic4: #F3E8FB; --ic5: #FBE7E7; --ic6: #E2F3F6;
-  --r: 14px; --hero1: #15284F; --hero2: #2B4E8F;
-  --edge: 0 0 0 1px var(--line); --onacc: #fff; --heroink: #fff; --icc: var(--accent);
+  --r: 6px; --hero1: #1C1C1C; --hero2: #1C1C1C; --uhero: #1C1C1C;
+  --edge: 0 0 0 1px var(--line); --onacc: #fff; --heroink: #fff; --icc: var(--ink); --hdr: #1C1C1C;
+  color-scheme: light;
 }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #0F141B; --surface: #18202A; --sunk: #121922; --line: #263140;
-  --ink: #E8EDF4; --ink-2: #93A0B2; --accent: #8FB0EC; --accent-soft: #1A2742;
-  --good: #4CC383; --good-soft: #15302A; --warn: #E3B04B; --warn-soft: #34290F;
-  --bad: #F07373; --bad-soft: #3A1B1F; --muted: #94A0B0; --muted-soft: #1E2733; --ic1: #1A2742; --ic2: #15302A; --ic3: #34290F; --ic4: #2C1F3A; --ic5: #3A1B1F; --ic6: #12303A; --hero1: #1B2F5E; --hero2: #2B4E8F; color-scheme: dark; } }
-:root[data-theme="dark"] {
-  --bg: #0F141B; --surface: #18202A; --sunk: #121922; --line: #263140;
-  --ink: #E8EDF4; --ink-2: #93A0B2; --accent: #8FB0EC; --accent-soft: #1A2742;
-  --good: #4CC383; --good-soft: #15302A; --warn: #E3B04B; --warn-soft: #34290F;
-  --bad: #F07373; --bad-soft: #3A1B1F; --muted: #94A0B0; --muted-soft: #1E2733; --ic1: #1A2742; --ic2: #15302A; --ic3: #34290F; --ic4: #2C1F3A; --ic5: #3A1B1F; --ic6: #12303A; --hero1: #1B2F5E; --hero2: #2B4E8F; color-scheme: dark; }
+/* шапка — графитовая полоса */
+header { color: #fff; }
+header .htitle span { color: #A9A9A6; }
+header .back { background: #2C2C2C; color: #fff; box-shadow: none; }
+header .role { background: transparent; color: #fff; box-shadow: inset 0 0 0 1px #4A4A4A; border-radius: 4px; }
+header .tools { background: #2C2C2C; color: #fff; }
+.uh { border-radius: 8px; } .uh::after { display: none; }
 html, body { height: 100%; }
 body { background: var(--bgfx, var(--bg)); background-attachment: fixed; color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.4;
   -webkit-font-smoothing: antialiased; }
@@ -385,85 +384,6 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 .bm span { display: block; font-size: 12px; color: var(--ink-2); margin-top: 2px; }
 .bgo { border: 0; background: var(--accent); color: var(--onacc); font-weight: 700; font-size: 14.5px; border-radius: 12px; padding: 12px 14px; white-space: nowrap; cursor: pointer; }
 
-/* ===== Оформление (Адам 02.11): 7 стилей + «Классика»; выбор — 🎨 в шапке, хранится на телефоне ===== */
-html:root[data-skin] { --bgfx: none; }
-html:root[data-skin="glass"] { color-scheme: dark;
-  --bg: #1E2B6E; --bgfx: linear-gradient(160deg, #1A2B6B, #3B2C8F 45%, #0E7C86); --hdr: transparent;
-  --surface: rgba(255,255,255,.12); --sunk: rgba(255,255,255,.08); --line: rgba(255,255,255,.2);
-  --ink: #fff; --ink-2: rgba(255,255,255,.72); --accent: #7CF5D9; --accent-soft: rgba(124,245,217,.16); --onacc: #0B1B3A;
-  --good: #7CF5D9; --good-soft: rgba(124,245,217,.16); --warn: #FFD66B; --warn-soft: rgba(255,214,107,.16);
-  --bad: #FF8FA3; --bad-soft: rgba(255,143,163,.16); --muted: rgba(255,255,255,.6); --muted-soft: rgba(255,255,255,.1);
-  --ic1: rgba(255,255,255,.14); --ic2: rgba(124,245,217,.18); --ic3: rgba(255,214,107,.18); --ic4: rgba(196,160,255,.2); --ic5: rgba(255,143,163,.18); --ic6: rgba(120,200,255,.18);
-  --hero1: rgba(255,255,255,.2); --hero2: rgba(255,255,255,.07); --r: 18px; --edge: 0 0 0 1px rgba(255,255,255,.22), 0 8px 24px rgba(0,0,0,.14);
-  --display: "Manrope", system-ui, sans-serif; --body: "Manrope", system-ui, sans-serif; }
-html:root[data-skin="glass"] body::after { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
-  background: radial-gradient(260px 260px at 10% 8%, rgba(255,95,162,.55), transparent 70%), radial-gradient(280px 280px at 95% 55%, rgba(51,225,198,.45), transparent 70%); }
-html:root[data-skin="glass"] :is(.tile, .card, .list, .lt, .twrap, .lines, .msg, .medal, .hero, nav.tabs, header, .sheet > div, .back, .pill) {
-  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
-html:root[data-skin="glass"] .sheet > div { background: rgba(30,40,100,.82); }
-html:root[data-skin="glass"] nav.tabs { background: rgba(10,14,40,.35); }
-
-html:root[data-skin="one"] { color-scheme: light;
-  --bg: #FFFDF8; --surface: #FFFDF8; --sunk: #F4EEE2; --line: #EEE7DA; --ink: #111; --ink-2: #8A7F6A;
-  --accent: #111; --accent-soft: #F4EEE2; --onacc: #FFFDF8; --good: #1F7A4D; --good-soft: #E6F1EA; --warn: #B7791F; --warn-soft: #F8EEDC;
-  --bad: #C53030; --bad-soft: #F8E3E1; --muted: #8A7F6A; --muted-soft: #F4EEE2;
-  --ic1: #F4EEE2; --ic2: #F4EEE2; --ic3: #F4EEE2; --ic4: #F4EEE2; --ic5: #F4EEE2; --ic6: #F4EEE2;
-  --hero1: transparent; --hero2: transparent; --heroink: #111; --herov: 64px; --r: 14px; --icc: #111;
-  --display: "Playfair Display", Georgia, serif; }
-html:root[data-skin="one"] .hero { box-shadow: none; padding: 8px 2px 14px; border-bottom: 1px solid #111; border-radius: 0; }
-html:root[data-skin="one"] .hero .v { letter-spacing: -2px; line-height: 1; }
-
-html:root[data-skin="swiss"] { color-scheme: light;
-  --bg: #fff; --surface: #fff; --sunk: #F3F3F3; --line: #E8E8E8; --ink: #0A0A0A; --ink-2: #6E6E6E;
-  --accent: #E30613; --accent-soft: #FDE7E8; --good: #13804A; --good-soft: #E5F3EB; --warn: #B87A00; --warn-soft: #FBF0D7;
-  --bad: #E30613; --bad-soft: #FDE7E8; --muted: #6E6E6E; --muted-soft: #F3F3F3;
-  --ic1: #F3F3F3; --ic2: #F3F3F3; --ic3: #F3F3F3; --ic4: #F3F3F3; --ic5: #F3F3F3; --ic6: #F3F3F3;
-  --hero1: #0A0A0A; --hero2: #0A0A0A; --r: 6px; --icc: #0A0A0A;
-  --display: "Space Grotesk", system-ui, sans-serif; --body: "Space Grotesk", system-ui, sans-serif; }
-html:root[data-skin="swiss"] .hero { box-shadow: inset 0 -4px 0 #E30613; }
-html:root[data-skin="swiss"] nav.tabs { border-top: 2px solid #0A0A0A; }
-
-html:root[data-skin="mono"] { color-scheme: light;
-  --bg: #FAFAFA; --surface: #fff; --sunk: #EEE; --line: #DDD; --ink: #000; --ink-2: #555;
-  --accent: #000; --accent-soft: #EEE; --good: #000; --good-soft: #EEE; --warn: #000; --warn-soft: #EEE;
-  --bad: #D64545; --bad-soft: #FBE7E7; --muted: #666; --muted-soft: #EEE;
-  --ic1: #fff; --ic2: #fff; --ic3: #fff; --ic4: #fff; --ic5: #fff; --ic6: #fff;
-  --hero1: #000; --hero2: #000; --r: 12px; --edge: 0 0 0 1.5px #000, 3px 3px 0 1.5px #000;
-  --display: "Space Grotesk", system-ui, sans-serif; --body: "Space Grotesk", system-ui, sans-serif; }
-html:root[data-skin="mono"] .lt .ic, html:root[data-skin="mono"] .li .ic { box-shadow: inset 0 0 0 1.5px #000; }
-
-html:root[data-skin="memphis"] { color-scheme: light;
-  --bg: #FFF8E7; --surface: #fff; --sunk: #FFF1C9; --line: #1B1B1B22; --ink: #1B1B1B; --ink-2: #5C5C5C;
-  --accent: #FF4F79; --accent-soft: #FFE0E8; --good: #11875A; --good-soft: #D8F7E6; --warn: #B76E00; --warn-soft: #FFF0B3;
-  --bad: #E0244F; --bad-soft: #FFE0E8; --muted: #5C5C5C; --muted-soft: #F2EBD8;
-  --ic1: #FFE45E; --ic2: #3DDBD9; --ic3: #FF9EC0; --ic4: #B8F2A0; --ic5: #C9B8FF; --ic6: #FFC48A;
-  --hero1: #3DDBD9; --hero2: #3DDBD9; --heroink: #1B1B1B; --r: 16px; --icc: #1B1B1B;
-  --edge: 0 0 0 2.5px #1B1B1B, 4px 4px 0 2.5px #1B1B1B; --display: "Unbounded", system-ui, sans-serif; }
-html:root[data-skin="memphis"] .hero { box-shadow: 0 0 0 2.5px #1B1B1B, 5px 5px 0 2.5px #1B1B1B; }
-html:root[data-skin="memphis"] .lt .ic, html:root[data-skin="memphis"] .li .ic { box-shadow: inset 0 0 0 2px #1B1B1B; }
-html:root[data-skin="memphis"] body::after { content: ""; position: fixed; z-index: -1; pointer-events: none; right: -22px; top: 140px;
-  width: 70px; height: 70px; border-radius: 50%; background: #FFE45E; box-shadow: 0 0 0 2.5px #1B1B1B; }
-
-html:root[data-skin="brutal"] { color-scheme: light;
-  --bg: #E9E9E3; --surface: #fff; --sunk: #DADAD2; --line: #000; --ink: #000; --ink-2: #444;
-  --accent: #2B4CFF; --accent-soft: #DDE3FF; --good: #0A7A3E; --good-soft: #D5F2E1; --warn: #9A6200; --warn-soft: #FFF0B3;
-  --bad: #E0001B; --bad-soft: #FFD9DE; --muted: #444; --muted-soft: #DADAD2;
-  --ic1: #FFE600; --ic2: #DDE3FF; --ic3: #FFD9DE; --ic4: #D5F2E1; --ic5: #FFE600; --ic6: #DDE3FF;
-  --hero1: #FFE600; --hero2: #FFE600; --heroink: #000; --r: 0px; --icc: #000; --herov: 40px;
-  --edge: 0 0 0 3px #000; --display: "Space Grotesk", system-ui, sans-serif; --body: "Space Grotesk", system-ui, sans-serif; }
-html:root[data-skin="brutal"] .hero { box-shadow: 0 0 0 3px #000; border-radius: 0; }
-html:root[data-skin="brutal"] .lt { border-radius: 0; } html:root[data-skin="brutal"] .pill, html:root[data-skin="brutal"] .back, html:root[data-skin="brutal"] .role { border-radius: 0; }
-html:root[data-skin="brutal"] nav.tabs { border-top: 3px solid #000; }
-
-html:root[data-skin="carbon"] { color-scheme: dark;
-  --bg: #15161A; --bgfx: repeating-linear-gradient(45deg, #15161A 0 4px, #1B1C21 4px 8px);
-  --surface: #1E2026; --sunk: #2A2D35; --line: #2C2F37; --ink: #F2F4F7; --ink-2: #98A2B3;
-  --accent: #FF6A00; --accent-soft: rgba(255,106,0,.16); --onacc: #111; --good: #9BEA4B; --good-soft: rgba(155,234,75,.14);
-  --warn: #FFD66B; --warn-soft: rgba(255,214,107,.14); --bad: #FF4D4D; --bad-soft: rgba(255,77,77,.15); --muted: #98A2B3; --muted-soft: #2A2D35;
-  --ic1: #2A2D35; --ic2: #2A2D35; --ic3: #2A2D35; --ic4: #2A2D35; --ic5: #2A2D35; --ic6: #2A2D35;
-  --hero1: #26282F; --hero2: #111216; --r: 14px; --display: "Unbounded", system-ui, sans-serif; --body: "Manrope", system-ui, sans-serif; }
-html:root[data-skin="carbon"] .hero { box-shadow: 0 0 0 1px rgba(255,106,0,.45), 0 12px 30px -14px #FF6A00; }
-
 /* живые линии — значки кнопок (Адам 02.11) */
 .si { width: 1em; height: 1em; display: block; color: var(--icc); overflow: visible; }
 .lt .ic .si { width: 25px; height: 25px; } .li .ic .si { width: 19px; height: 19px; }
@@ -493,10 +413,9 @@ html:root[data-skin="carbon"] .hero { box-shadow: 0 0 0 1px rgba(255,106,0,.45),
 @keyframes sblink { 0%,92%,100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
 @keyframes sglow { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
 @keyframes stilt { 0%,80%,100% { transform: rotate(0); } 88% { transform: rotate(-10deg); } 94% { transform: rotate(8deg); } }
-.skins .act { display: flex; align-items: center; gap: 12px; text-align: left; }
-.skins .sw { width: 44px; height: 30px; border-radius: 8px; flex: none; box-shadow: 0 0 0 1px rgba(0,0,0,.15); display: grid; place-items: center; font-weight: 800; font-size: 13px; }
-.skins .act small { display: block; color: var(--ink-2); font-weight: 400; margin: 0; }
-.skins .act.on { box-shadow: 0 0 0 2px var(--accent); }
+/* «Графит» (Адам 18.11): углы почти прямые, всё строго */
+:is(.ubox, .udec, .utile, .uset, .uwel, .twrap, .tile, .lt, .card, .lines, .msg, .bdept, .bsum, .hero, .uh) { border-radius: var(--r) !important; }
+:is(.ub, .uchip, .uquick button, .uchoice button, .pill, .bgo, .bchip, .bghost, .blink, .act, .role, .tools) { border-radius: 4px !important; }
 </style>
 </head>
 <body>
@@ -504,7 +423,6 @@ html:root[data-skin="carbon"] .hero { box-shadow: 0 0 0 1px rgba(255,106,0,.45),
   <div class="top"><header>
     <button class="back" id="back" hidden aria-label="Назад">‹</button>
     <div class="htitle"><b id="htitle">__NAME__</b><span id="hsub"></span></div>
-    <button class="role tools" id="skinBtn" aria-label="Оформление"></button>
     <button class="role tools" id="tools" hidden>🛠</button>
     <button class="role" id="role" hidden>🎭</button>
   </header>
@@ -633,37 +551,7 @@ const EM = {"🏠":"home","📈":"up","📉":"down","💰":"coins","💵":"cash"
 const svgOf = n => `<svg class="si" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SI[n]}</svg>`;
 function ic(e) { const n = EM[String(e).replace(/️/g, "")]; return n && SI[n] ? svgOf(n) : esc(e); }
 
-// ===== Оформление: выбор хранится на этом телефоне =====
-const SKINS = [
-  ["swiss", "Швейцария", "чисто и строго, один красный акцент", "#fff", "#E30613", "Space+Grotesk:wght@500;700"],
-  ["glass", "Стекло", "матовое стекло на цветном фоне", "linear-gradient(135deg,#1A2B6B,#3B2C8F,#0E7C86)", "#7CF5D9", "Manrope:wght@400;600;800"],
-  ["one", "Одна цифра", "крупная цифра, тёплая бумага", "#FFFDF8", "#111", "Playfair+Display:wght@700"],
-  ["mono", "Монохром", "чёрное и белое, цвет — только у проблем", "#fff", "#000", "Space+Grotesk:wght@500;700"],
-  ["memphis", "Мемфис", "яркие фигуры, весело и смело", "#3DDBD9", "#FF4F79", "Unbounded:wght@600;800"],
-  ["brutal", "Бруталь", "крупно, грубо, честно", "#FFE600", "#2B4CFF", "Space+Grotesk:wght@500;700"],
-  ["carbon", "Карбон", "карбон и оранжевый, как спорткар", "repeating-linear-gradient(45deg,#15161A 0 4px,#1B1C21 4px 8px)", "#FF6A00", "Unbounded:wght@600;800&family=Manrope:wght@400;600"],
-  ["classic", "Классика", "как было: синий, светлый и тёмный по телефону", "#F3F5F8", "#1B3B78", ""],
-];
-const SKIN0 = "swiss";
-function skinNow() { let k = ""; try { k = localStorage.getItem("skin") || ""; } catch (e) {} return SKINS.some(s => s[0] === k) ? k : SKIN0; }
-function setSkin(k) {
-  const s = SKINS.find(x => x[0] === k) || SKINS[0];
-  document.documentElement.dataset.skin = s[0];
-  if (s[5] && !document.getElementById("font-" + s[0])) {
-    const l = document.createElement("link"); l.rel = "stylesheet"; l.id = "font-" + s[0];
-    l.href = `https://fonts.googleapis.com/css2?family=${s[5]}&display=swap`; document.head.appendChild(l);
-  }
-  requestAnimationFrame(() => { const m = document.querySelector('meta[name="theme-color"]');
-    if (m) m.content = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#F3F5F8"; });
-  try { localStorage.setItem("skin", s[0]); } catch (e) {}
-}
-function skinSheet() {
-  const cur = skinNow();
-  sheet(`<h2>🎨 Оформление</h2><div class="skins">${SKINS.map(([k, t, d, bg, acc]) =>
-    `<button class="act${k === cur ? " on" : ""}" data-skin="${k}"><span class="sw" style="background:${bg};color:${acc}">Аа</span><span><b>${esc(t)}</b><small>${esc(d)}</small></span></button>`).join("")}</div>` +
-    `<p class="note">Выбор сохраняется на этом телефоне. Кнопки, цифры и расчёты во всех стилях одинаковые.</p>`);
-}
-setSkin(skinNow());
+try { localStorage.removeItem("skin"); } catch (e) {}   // прежние стили (до 18.11) больше не нужны
 let S = {tabs: [], extra: [], tools: [], cur: "home", back: null, rings: {}, sc: {}, here: "", title: "", nav: ""}, toastT, busy = false;
 
 function toast(t) { const el = $("toast"); el.textContent = t; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => el.hidden = true, 2600); }
@@ -1194,12 +1082,9 @@ $("dbar").addEventListener("click", e => {
 $("sheet").addEventListener("click", e => {
   if (e.target === $("sheet")) { $("sheet").hidden = true; return; }
   const b = e.target.closest("button"); if (!b) return;
-  if (b.dataset.skin) { setSkin(b.dataset.skin); skinSheet(); return; }
   $("sheet").hidden = true;
   if (b.dataset.tab) go(b.dataset.tab, true);
 });
-$("skinBtn").innerHTML = svgOf("palette");
-$("skinBtn").addEventListener("click", skinSheet);
 $("role").addEventListener("click", () => {
   const b = S.demo;
   if (!b) { sheet(`<h2>Демо</h2>${S.extra.map(([l, to]) => `<button class="act" data-tab="${esc(to)}">${esc(l)}</button>`).join("")}`); return; }
