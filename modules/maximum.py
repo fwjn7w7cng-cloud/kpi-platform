@@ -43,7 +43,7 @@ def custom(ctx):
     left = max(CUSTOM_MAX - len(this), 0)
     extra = P.prices(ctx.office)["custom_extra"]
     v = View("🧩 Функции на заказ", f"{month_title(month)} · осталось {left} из {CUSTOM_MAX} бесплатных")
-    v.lines(["Напишите своими словами, чего не хватает — сделаем под вашу компанию.",
+    v.lines(["Новые отчёты, экраны, напоминания, расчёты — под задачи вашей фирмы.",
              f"3 функции в месяц входят, каждая следующая — {P.fmt(extra)} ₽."])
     v.cards([Card(f"Заявка №{r['id']}", ST[r["status"]], [r["text"], f"{r['author']} · {r['ts']}"] + ([r["note"]] if r.get("note") else []),
                   color="good" if r["status"] == "done" else "warn" if r["status"] == "work" else None)

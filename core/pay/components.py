@@ -283,7 +283,7 @@ def sales_percent(ctx, emp, c):
     min_plan — платить только с порога; rate_steps [[доля плана, ставка]] — ставка по ступеням; rate_above — сверх плана."""
     base = c.get("base", "sales")
     if base == "margin":
-        return [("% от наценки", 0, "нужна себестоимость в отчёте 1С — подключим вместе с клиентом")]
+        return [("% от наценки", 0, "нужна себестоимость в отчёте 1С")]
     if c.get("groups") or c.get("focus_rate") is not None:
         return _group_percent(ctx, emp, c)
     m = _scope_metric(ctx, emp, c, base)
