@@ -923,7 +923,7 @@ function bPage1(q) {
   const d = BS.d;
   let h = `<div class="bsec"><div class="bst">Сколько людей в фирме</div><div class="bchips">${d.sizes.map(([c, t, sz, ppl, , rng]) =>
     bChip(BS.base === c, "size", c, `${esc(t)}<small>${esc(rng)}</small>`, "", sz)).join("")}</div>
-    <p class="bhint">Всё уже заполнено типовым набором для фирмы такого размера. Меняйте только то, что у вас иначе.</p></div>`;
+    <p class="bhint">Всё уже заполнено типовым набором для фирмы такого размера. Поменять можно что угодно.</p></div>`;
   h += `<div class="bsec"><div class="bst">Отделы <em>включите нужные</em></div>` + d.depts.map(x => {
     const on = q.on[x.k], sel = x.fs.filter(([f]) => BS.funcs.has(f)), n = sel.length, price = sel.reduce((a, [, , p]) => a + p, 0), fx = BS.ui.fx[x.k];
     const words = n ? sel.map(([, t]) => t).join(", ") : "Без функций: оклад, табель, штрафы, «Моя зарплата» у каждого";
@@ -994,10 +994,10 @@ function bWords(t, dup) {
 }
 function bPage2(q) {
   const rs = BS.d.roles.filter(r => q.on[r.d]);
-  return `<div class="bsec"><div class="bst">Как платите людям</div><p class="bhint">У каждой должности уже стоит типовая схема. Нажмите «✏️ Изменить», если у вас иначе. Суммы — на людях демо-фирмы.</p></div>` +
+  return `<div class="bsec"><div class="bst">Как платите людям</div><p class="bhint">У каждой должности уже стоит типовая схема. Поменять — «✏️ Изменить». Суммы — на людях демо-фирмы.</p></div>` +
     (rs.length ? rs.map(bRole).join("") : `<p class="bhint">Включите хотя бы один отдел на первой странице.</p>`) +
     `<div class="bsec bend">${BS.d.partner ? `<button class="blink" data-b="go" data-v="look">👀 Посмотреть демо с этим набором</button>`
-      : `<p class="bhint">Нажмите «👀 Посмотреть мой бот» — откроется демо только с вашими отделами и функциями. Понравится — там же «📨 Хочу так».</p><button class="blink" data-b="go" data-v="req">📨 Уже решили? Отправить заявку</button>`}</div>`;
+      : `<p class="bhint">Нажмите «👀 Посмотреть мой бот» — откроется демо только с выбранными отделами и функциями. Понравится — там же «📨 Хочу так».</p><button class="blink" data-b="go" data-v="req">📨 Уже решили? Отправить заявку</button>`}</div>`;
 }
 function bSum(q) {
   const main = BS.year ? q.year : q.monthly;

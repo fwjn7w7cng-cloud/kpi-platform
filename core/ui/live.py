@@ -260,7 +260,7 @@ def owner_home(ctx, v):
     v.ui("feed", {"items": feed(ctx), "live": "по отчётам и отметкам"}, "Сейчас в фирме")
     ds = decisions(ctx)
     if ds:
-        v.ui("decide", {"items": ds}, "Нужно ваше решение")
+        v.ui("decide", {"items": ds}, "Ждёт решения")
     v.ui("tiles", {"items": dept_tiles(ctx)}, "Отделы")
 
 

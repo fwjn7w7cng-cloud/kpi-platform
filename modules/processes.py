@@ -410,7 +410,7 @@ def tpl_list(ctx, kind=None):
     if ctx.role == "head":
         kind = _kind_of(ctx)
     tpl = templates(ctx)
-    v = View("📋 Описания процессов", "шаги, кто отвечает, сроки — под вашу фирму")
+    v = View("📋 Описания процессов", "шаги, кто отвечает, сроки")
     shown = [t for t in tpl if kind is None or t["kind"] == kind]
     v.cards([Card(f"{KIND_TITLE.get(t['kind'], '')[:2]} {t['name']}", f"шагов {len(t['steps'])}",
                   [f"{n}. {s[0]} — {who_title(ctx, s[1])}, {s[2]} дн." for n, s in enumerate(t["steps"], 1)]) for t in shown]) \

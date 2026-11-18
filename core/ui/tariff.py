@@ -271,7 +271,7 @@ def pay_toggle(ctx, code):
     from core import onboard as O
     pay = O.pay_of(ctx)
     if code == "other":
-        return ctx.ask("pay_other", "Как у вас платят по-своему? Напишите одной-двумя фразами — например «премия 10 000 за каждого "
+        return ctx.ask("pay_other", "Как платят по-своему? Напишите одной-двумя фразами — например «премия 10 000 за каждого "
                                     "нового клиента» или «процент зависит от скидки». «-» — убрать.",
                        buttons=[[Button("✖️ Отмена", "sw:pay")]])
     if code == "plan":

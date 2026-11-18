@@ -888,7 +888,7 @@ def page(ctx, pos=None):
     if cards:
         v.cards(cards, title="Из чего складывается")
     else:
-        v.note("Схема пустая. Нажмите «☑️ Выбрать блоки» и отметьте галочками, что есть у вас.")
+        v.note("Схема пустая. Нажмите «☑️ Выбрать блоки» и отметьте галочками, что есть в фирме.")
     other = ((ctx.session.get("pay") or {}).get("other") or "").strip()
     if other:
         v.note(f"✍️ По-своему: {other} — посмотрим при подключении.")
@@ -931,7 +931,7 @@ def select(ctx, act=None, bid=None):
     ctx.session["pb_sel"] = sel
     ctx.save()
     v = View("☑️ Выбрать блоки", f"{POSITIONS[pos][1]} {POSITIONS[pos][0]} · отмечено {len(sel)}")
-    v.note("Отметьте, что есть у вас, и нажмите «ОК». Чего у фирмы нет — не отмечайте. Цифры — потом, внутри каждого блока.")
+    v.note("Отметьте, что есть в фирме, и нажмите «ОК». Чего у фирмы нет — не отмечайте. Цифры — потом, внутри каждого блока.")
     kb = [[Button(f"{'☑' if b in sel else '☐'} {BRICKS[b][1]} {BRICKS[b][2]}", f"pbs:t:{b}",
                   info=BRICKS[b][5][:1].upper() + BRICKS[b][5][1:] + ".\nВарианты: " + ", ".join(x[1] for x in variants(b, pos)[:8]) + ".")]
           for b in avail]

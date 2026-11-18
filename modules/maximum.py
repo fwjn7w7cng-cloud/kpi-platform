@@ -43,7 +43,7 @@ def custom(ctx):
     left = max(CUSTOM_MAX - len(this), 0)
     extra = P.prices(ctx.office)["custom_extra"]
     v = View("🧩 Функции на заказ", f"{month_title(month)} · осталось {left} из {CUSTOM_MAX} бесплатных")
-    v.lines(["Новые отчёты, экраны, напоминания, расчёты — под задачи вашей фирмы.",
+    v.lines(["Новые отчёты, экраны, напоминания, расчёты — под задачи фирмы.",
              f"3 функции в месяц входят, каждая следующая — {P.fmt(extra)} ₽."])
     v.cards([Card(f"Заявка №{r['id']}", ST[r["status"]], [r["text"], f"{r['author']} · {r['ts']}"] + ([r["note"]] if r.get("note") else []),
                   color="good" if r["status"] == "done" else "warn" if r["status"] == "work" else None)
@@ -137,11 +137,11 @@ def branches(ctx):
 @screen("branding", module="branding")
 def branding(ctx):
     url = ctx.app.web_url or "https://<компания>.alapa.pro"
-    v = View("🎨 Свой бренд", "приложение выглядит как ваше собственное")
+    v = View("🎨 Свой бренд", "приложение в цветах и с названием фирмы")
     v.tiles([("Название", ctx.cfg.name, None), ("Адрес", url.replace("https://", ""), None)])
-    v.lines(["Значок на телефоне — ваш логотип и ваше название под ним.",
+    v.lines(["Значок на телефоне — логотип и название фирмы.",
              "Цвета приложения — фирменные: шапка, кнопки, графики.",
-             "Свой адрес: <компания>.alapa.pro или ваш домен.",
-             "Файлы — ведомость, приказы, заказы поставщикам — с вашей шапкой."])
+             "Свой адрес: <компания>.alapa.pro или домен фирмы.",
+             "Файлы — ведомость, приказы, заказы поставщикам — с шапкой фирмы."])
     v.note("Пришлите логотип (PNG или SVG) и цвет — настроим за день.")
     return Reply(view=v)
