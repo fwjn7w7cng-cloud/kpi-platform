@@ -22,7 +22,7 @@
 - После заметной работы — запись сверху в `JOURNAL.md` (дата и время по Москве, кто, 1–3 строки).
 
 ## Сервер и выкатка
-- Сервер `103.214.71.188`, код в `/srv/alapa`, службы `kpi@<клиент>` / `kpi-web@<клиент>` от пользователя `alapa`.
+- Сервер `103.214.71.188`, код в `/srv/alapa`, служба `kpi-web@<клиент>` от пользователя `alapa`.
 - Обновление: `cd /srv/alapa && git fetch origin && git reset --hard origin/main && chown -R alapa:alapa /srv/alapa &&
-  systemctl restart kpi@demo kpi-web@demo && cp -r web/site/. /var/www/kpi/site/`
+  systemctl restart kpi-web@demo && cp -r web/site/. /var/www/kpi/site/`
 - Не в git (забрать при переезде): `clients/*/.env`, базы `data/<клиент>/`. Ночные копии — `/var/backups/alapa`.

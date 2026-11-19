@@ -639,7 +639,7 @@ def people(ctx, dept_id=None):
     es = [e for e in ctx.db.employees(dept=dept_id) if ctx.sees(e)]
     v = View(f"👤 {d.name}", f"{len(es)} человек")
     v.table(["Сотрудник", "Должность"], [Row([e["fio"], (ctx.cfg.position(e["position"]) or {}).get("name", "")],
-                                              sub="мессенджер не привязан" if not e["tg_id"] and not ctx.demo else "")
+                                              sub="ещё не входил в приложение" if not e["tg_id"] and not ctx.demo else "")
                                           for e in es])
     kb = rows([Button(_short(e["fio"]), f"emp:{e['id']}") for e in es], 3)
     tail = [Button("‹ Отделы", "people")] if len(depts) > 1 else []

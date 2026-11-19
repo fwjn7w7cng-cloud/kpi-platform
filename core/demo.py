@@ -143,7 +143,7 @@ def _request(ctx, guests, text):
     ctx.session.pop("await", None)
     ctx.save()
     out = [Reply(text="✅ Заявка отправлена. Как только администратор откроет доступ — придёт сообщение сюда.")]
-    out += _notify_admins(ctx, f"🙋 Заявка в демо\n{text}" + (f"\nИмя в мессенджере: {me['name']}" if me.get("name") else ""),
+    out += _notify_admins(ctx, f"🙋 Заявка в демо\n{text}" + (f"\nИмя: {me['name']}" if me.get("name") else ""),
                           [[Button(f"✅ {d} дн.", f"gsa:{uid}:{d}") for d in DAYS], [Button("❌ Отказать", f"gsn:{uid}")]])
     return out
 
@@ -235,7 +235,7 @@ def guest_card(ctx, uid):
         return guests_list(ctx)
     st = g.get("status")
     v = View(_title(g, uid), ST.get(st, ""))
-    lines = [f"Имя в мессенджере: {g.get('name') or '—'}", f"Вошёл: {g.get('via', '—')}, с {_dm(g.get('since'))}",
+    lines = [f"Имя: {g.get('name') or '—'}", f"Вошёл: {g.get('via', '—')}, с {_dm(g.get('since'))}",
              f"Доступ до: {_dm(g.get('till'))}" if g.get("till") else "Доступа ещё не было",
              f"Последний раз: {_dm(g.get('last'))} · нажатий {g.get('presses', 0)}"]
     if g.get("partner"):

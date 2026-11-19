@@ -1,13 +1,12 @@
-"""Запуск бота одного клиента:  python3 run.py <код_клиента>
+"""Запуск приложения одного клиента:  python3 run.py <код_клиента> [--web] [порт]
 
-Настройки и секреты — в clients/<код>/.env (в git не попадает):
-  BOT_TOKEN        токен бота из @BotFather
-  ADMIN_IDS        Telegram ID админов через запятую
-  MESSENGER        telegram (по умолчанию) | max
+Только своё приложение (Адам 20.11: Telegram и MAX убраны совсем). Настройки и секреты — в clients/<код>/.env (в git не попадает):
+  WEB_PORT, WEB_URL, WEB_ADMIN_KEY                 — порт, адрес и ключ входа администратора
+  ADMIN_IDS        номера админов через запятую (необязательно)
   MAIL_USER, MAIL_PASSWORD, MAIL_HOST, MAIL_FROM   — если отчёты приходят на почту (source.kind: mail)
   DRIVE_FOLDER, GOOGLE_KEY                         — если из папки Google Диска (source.kind: drive)
 
-Каждый клиент — отдельный процесс (deploy/kpi@.service): упал один — остальные работают.
+Каждый клиент — отдельный процесс (deploy/kpi-web@.service): упал один — остальные работают.
 """
 import logging
 import os
@@ -44,46 +43,22 @@ def web_port_of(client):
 
 def main(client, web_port=None):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    for noisy in ("httpx", "httpcore", "telegram.ext.Updater"):     # их адреса запросов содержат токен бота
-        logging.getLogger(noisy).setLevel(logging.WARNING)
     load_env(ROOT / "clients" / client / ".env")
     from core.app import App
+    from core.transport.web import WebApi, serve
     admins = [a for a in os.environ.get("ADMIN_IDS", "").replace(" ", "").split(",") if a]
     app = App(client, admins=admins, demo_gate=True)       # демо — только по приглашению или заявке (core/demo.py)
-    if web_port:                                           # своё приложение вместо мессенджера (core/transport/web.py)
-        from core.transport.web import WebApi, serve
-        api = WebApi(app, admin_key=os.environ.get("WEB_ADMIN_KEY", ""), base_url=os.environ.get("WEB_URL", ""))
-        panel = None
-        if app.demo:                                   # приложение управления — адрес admin.<домен> на том же порту (core/control.py)
-            panel = WebApi(app, admin_key=os.environ.get("WEB_ADMIN_KEY", ""), panel=True, lock=api.lock)
-        serve(api, port=web_port, panel=panel)
-        return
-    token = os.environ.get("BOT_TOKEN")
-    if not token:
-        sys.exit(f"Нет BOT_TOKEN в clients/{client}/.env")
-    mailbox = drive = None
-    kind = app.cfg.source.get("kind")
-    if kind == "mail" and os.environ.get("MAIL_USER"):
-        from core.ingest.mail import Mailbox
-        mailbox = Mailbox(os.environ["MAIL_USER"], os.environ.get("MAIL_PASSWORD", ""),
-                          os.environ.get("MAIL_HOST", "imap.gmail.com"), os.environ.get("MAIL_FROM", ""))
-    if kind == "drive" and os.environ.get("DRIVE_FOLDER"):
-        from core.ingest.drive import DriveFolder
-        drive = DriveFolder(os.environ["DRIVE_FOLDER"], os.environ.get("GOOGLE_KEY", str(ROOT / "google_key.json")))
-    if os.environ.get("MESSENGER", "telegram") == "max":
-        from core.transport.max import build
-        build(app, token)
-        return
-    from core.transport.telegram import build
-    logging.getLogger("kpi").info("клиент %s: %s, редакция %s", client, app.cfg.name, app.cfg.edition)
-    build(app, token, mailbox, drive).run_polling(drop_pending_updates=True)
+    api = WebApi(app, admin_key=os.environ.get("WEB_ADMIN_KEY", ""), base_url=os.environ.get("WEB_URL", ""))
+    panel = None
+    if app.demo:                                   # приложение управления — адрес admin.<домен> на том же порту (core/control.py)
+        panel = WebApi(app, admin_key=os.environ.get("WEB_ADMIN_KEY", ""), panel=True, lock=api.lock)
+    logging.getLogger("kpi").info("клиент %s: %s, порт %s", client, app.cfg.name, web_port)
+    serve(api, port=web_port, panel=panel)
 
 
 if __name__ == "__main__":
-    args = sys.argv[1:]
-    if len(args) == 1:
-        main(args[0])
-    elif len(args) in (2, 3) and args[1] == "--web":
-        main(args[0], web_port=int(args[2]) if len(args) == 3 else web_port_of(args[0]))
+    args = [a for a in sys.argv[1:] if a != "--web"]          # --web по старой памяти служб — принимаем и не требуем
+    if len(args) in (1, 2):
+        main(args[0], web_port=int(args[1]) if len(args) == 2 else web_port_of(args[0]))
     else:
-        sys.exit("Запуск: python3 run.py <код_клиента>  или  python3 run.py <код_клиента> --web [порт]")
+        sys.exit("Запуск: python3 run.py <код_клиента> [порт]")
