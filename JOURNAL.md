@@ -3,6 +3,12 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-19 17:18 (Альфред) — демо и пульт обновлены до b15c7fe: задания как в первом боте, «Как менялась зарплата»
+Перед обновлением (в нём core/data/migrations.py) — копия data/demo в /root/backups/alapa-demo-2026-11-19-1717.
+git reset → b15c7fe (с ec1da78: modules/tasks.py, core/paysnap.py, core/jobs, core/kpi/engine.py, migrations, clients/demo/seed.py, web/app.html, тесты),
+chown alapa, restart kpi-web@demo → active, 8101 держит kpi-web@demo, ошибок 0; web/site → /var/www/kpi/site.
+demo.alapa.pro → 200, admin.alapa.pro → 200. tests.test_tasks и tests.test_paysnap (sudo -u alapa python3) — 14 тестов, ок. Сам экран глазами не смотрел.
+
 ## 2026-11-18 19:24 (Альфред) — демо и пульт обновлены до 26d9ebd: одно оформление «Графит»
 git reset → 26d9ebd (web/app.html, CLAUDE.md), chown alapa, restart kpi-web@demo → active, 8101 держит kpi-web@demo, перезапусков 0, ошибок 0;
 web/site → /var/www/kpi/site. Сразу после restart demo и admin ответили 502 (приложение ещё поднималось), через ~10 с — 200 и 200 стабильно.
