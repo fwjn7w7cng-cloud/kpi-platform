@@ -48,6 +48,7 @@ def payslip(ctx, emp_id=None):
         kb.append([Button("📈 План", f"emp:{emp['id']}")])
     if _may_edit(ctx) and st != "approved" and (not ctx.me or emp["id"] != ctx.me["id"]):
         kb.append([Button("✏️ Премия / удержание", f"eda:{emp['id']}")])
+    kb.append([Button("🕓 Как менялась зарплата", f"pch:{emp['id']}")])     # Адам 19.11
     if not emp_id:                                            # своя зарплата: месяц листается здесь (Адам 17.11 — не на главной)
         from core.ui.screens import _month_switch
         kb.append(_month_switch(ctx, "pay"))
@@ -98,6 +99,56 @@ def fund(ctx, kind=None, ident=None):
         from core.ui.screens import _month_switch
         kb.append(_month_switch(ctx, "fund"))
     return Reply(view=v, buttons=[r for r in kb if r])
+
+
+# ---------- 🕓 как менялась (Адам 19.11, core/paysnap) ----------
+
+@screen("pch", module=M)
+def pay_changes(ctx, emp_id, sid=None):
+    from core import paysnap as PS
+    from core.ui import live
+    emp = ctx.db.employee(int(emp_id)) if str(emp_id).isdigit() else None
+    if not emp or not ctx.sees(emp):
+        return Reply(text="Нет доступа.")
+    own = bool(ctx.me and emp["id"] == ctx.me["id"])
+    lst, s, total, rows, facts = PS.compare(ctx, emp, sid)
+    v = View("🕓 Как менялась", f"{'моя зарплата' if own else emp['fio']} · {month_title(ctx.month).lower()}")
+    back = [[Button("‹ К зарплате", "pay" if own else f"pay:{emp['id']}")]]
+    if not s:
+        live.hero(v, "Сейчас", money(total), "снимков пока нет", ident="pch")
+        v.note(f"Бот запоминает расчёт каждый час — первые снимки появятся в течение часа и хранятся {PS.KEEP_DAYS} дня."
+               if not ctx.demo else "История есть только у текущего месяца.")
+        return Reply(view=v, buttons=back)
+    delta = total - s["total"]
+    sign = f"▲ +{money(delta)}" if delta > 0 else f"▼ −{money(-delta)}" if delta < 0 else "без изменений"
+    live.hero(v, f"{PS.tlabel(ctx, s['ts'])} → сейчас", money(total), f"было {money(s['total'])} · {sign}", ident="pch")
+    v.ui("choice", {"items": [[PS.tlabel(ctx, x["ts"]), f"pch:{emp['id']}:{x['id']}", x["id"] == s["id"]]
+                              for x in reversed(lst[-PS.SHOW:])]},
+         f"С какого времени сравнить · хранится {PS.KEEP_DAYS} дня",
+         fallback=[PS.tlabel(ctx, x["ts"]) for x in reversed(lst[-PS.SHOW:])])
+    ch = PS.diff(s["rows"], rows)
+    if ch:
+        v.ui("rows", {"items": [{"t": n, "s": f"{money(a)} → {money(b)}",
+                                 "chip": [f"▲ +{money(b - a)}" if b > a else f"▼ −{money(a - b)}", "", "good" if b > a else "bad"]}
+                                for n, a, b in ch]}, "Что изменилось в расчёте",
+             fallback=[f"{n}: {money(a)} → {money(b)}" for n, a, b in ch])
+    else:
+        v.note("Строки расчёта не менялись.")
+    fc = PS.fact_changes(s.get("facts") or {}, facts)
+    if fc:
+        def f(x, u):
+            return f"{x:g} %".replace(".", ",") if u == "%" else money(x) if u == "₽" else f"{x:g} {u}"
+        v.ui("rows", {"items": [{"t": t, "s": f"{f(a, u)} → {f(b, u)}",
+                                 "chip": [("▲ +" if b > a else "▼ −") + (f(abs(b - a), u)), "",
+                                          ("bad" if b > a else "good") if code_bad else ("good" if b > a else "bad")]}
+                                for t, a, b, u in fc for code_bad in [u == "%"]]}, "Что изменилось в цифрах",
+             fallback=[f"{t}: {f(a, u)} → {f(b, u)}" for t, a, b, u in fc])
+    ev = PS.events(ctx, emp, s)
+    if ev:
+        v.lines(ev, title="Что пришло за это время")
+    if ctx.demo:
+        v.note("В демо история — расчёт вечером каждого из прошлых дней. У настоящей фирмы бот запоминает его каждый час.")
+    return Reply(view=v, buttons=back)
 
 
 # ---------- правки ----------

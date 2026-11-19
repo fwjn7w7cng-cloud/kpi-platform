@@ -413,6 +413,52 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 @keyframes sblink { 0%,92%,100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
 @keyframes sglow { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
 @keyframes stilt { 0%,80%,100% { transform: rotate(0); } 88% { transform: rotate(-10deg); } 94% { transform: rotate(8deg); } }
+/* 📌 задания (Адам 19.11): форма одной страницей и доска «неделя» */
+.sform { gap: 4px; } .sfl { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; font-size: 13px; color: var(--ink-2); }
+.sfl > span { font-weight: 600; } .sfl small { font-size: 12px; color: var(--ink-2); }
+.sfl textarea, .sfl input:not([type=hidden]):not([type=file]) { box-sizing: border-box; width: 100%; border: 0; box-shadow: 0 0 0 1px var(--line); background: var(--sunk); border-radius: 6px; padding: 10px; font: inherit; font-size: 15px; color: var(--ink); }
+.sfl textarea { min-height: 84px; resize: vertical; } .sfl input[type=date] { width: auto; flex: 1 1 140px; }
+.sfrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pill { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 4px; padding: 7px 11px; font: inherit; font-size: 13.5px; cursor: pointer; }
+.pill.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.sfh { font-size: 15px; color: var(--ink); padding: 6px 0 2px; white-space: pre-wrap; }
+.sfg summary { cursor: pointer; padding: 6px 0; color: var(--ink); font-weight: 600; } .sfg .sfrow { padding-bottom: 6px; }
+.sferr { background: var(--bad-soft); color: var(--bad); border-radius: 6px; padding: 9px 11px; font-size: 13.5px; margin-bottom: 4px; }
+.sfp img { max-width: 220px; border-radius: 6px; box-shadow: var(--edge); }
+.board { display: flex; flex-direction: column; gap: 10px; }
+.bhd { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .bhd b { font-size: 16px; } .bhd .sp { flex: 1; }
+.bnav { border: 1px solid var(--line); background: var(--surface); height: 34px; border-radius: 4px; padding: 0 11px; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; color: var(--ink); }
+.bfl { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.bpp { border: 1px solid var(--line); border-radius: 4px; padding: 7px 10px; background: var(--surface); font: inherit; font-size: 13px; color: var(--ink); }
+.bgrid { display: none; }
+.bcol { background: var(--sunk); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px; min-height: 120px; min-width: 0; }
+.bcol.today { background: #E4E3DE; } .bcol.off .bch b { color: var(--ink-2); } .bcol.hov { outline: 2px dashed var(--ink); } .bcol.flash { background: var(--warn-soft) !important; }
+.bch { display: flex; justify-content: space-between; align-items: center; padding: 2px 2px 4px; } .bch b { font-size: 13px; } .bcol.today .bch b { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.bch span { font-size: 11px; background: var(--surface); border-radius: 9px; padding: 1px 7px; color: var(--ink-2); }
+.bcs, .bgrp, .bgb { display: flex; flex-direction: column; gap: 6px; }
+.bgt { font: inherit; font-size: 12.5px; color: var(--ink-2); background: none; border: 0; padding: 4px 0 0; cursor: pointer; text-align: left; }
+.bgt i { font-style: normal; margin-left: 6px; } .bgt i::after { content: "▾"; } .bgrp.fold .bgt i::after { content: "▸"; } .bgrp.fold .bgb { display: none; }
+.bc { display: flex; gap: 8px; align-items: flex-start; background: var(--surface); border-radius: 4px; padding: 8px 8px 8px 10px; border: 1px solid var(--line); border-left: 4px solid var(--line); }
+.bc[draggable] { cursor: grab; } .bc.drag { opacity: .4; } .bc.flash { outline: 2px solid var(--warn); }
+.bc.p-hi { border-left-color: var(--bad); } .bc.p-mid { border-left-color: #C98A00; } .bc.p-lo { border-left-color: #3B6FB6; } .bc.p-fz { border-left-color: #A8B3BF; background: #F7F8F9; }
+.bck { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid #A9A9A6; background: none; cursor: pointer; font-size: 12px; line-height: 16px; padding: 0; color: #fff; }
+.bck.dis { cursor: default; border-style: dashed; } .bc.done .bck { background: var(--good); border-color: var(--good); } .bc.wait .bck { background: #C98A00; border-color: #C98A00; }
+.bt { flex: 1; min-width: 0; border: 0; background: none; padding: 0; text-align: left; cursor: pointer; font: inherit; color: var(--ink); display: flex; flex-direction: column; gap: 3px; }
+.bt .tx { font-size: 13.5px; line-height: 1.3; overflow-wrap: anywhere; } .bt small { font-size: 11.5px; color: var(--ink-2); }
+.bc.done .bt .tx { text-decoration: line-through; color: var(--ink-2); }
+.bc.over { background: var(--bad-soft); } .bc .bo { color: var(--bad); font-weight: 600; } .bc .bw { color: var(--warn); font-weight: 600; }
+.badd { display: flex; gap: 4px; } .badd input { flex: 1; min-width: 0; box-sizing: border-box; border: 1px dashed #A9A9A6; background: var(--surface); border-radius: 4px; padding: 7px 8px; font: inherit; font-size: 13px; color: var(--ink); }
+.badd button { flex: none; width: 34px; border: 0; background: var(--ink); color: #fff; border-radius: 4px; font-size: 18px; line-height: 1; padding: 0; cursor: pointer; }
+.bstrip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.bsd { position: relative; border: 1px solid var(--line); background: var(--surface); border-radius: 4px; padding: 6px 0; display: flex; flex-direction: column; align-items: center; cursor: pointer; color: var(--ink); font: inherit; }
+.bsd small { font-size: 11px; color: var(--ink-2); } .bsd b { font-size: 16px; } .bsd.today b { text-decoration: underline; } .bsd.off { opacity: .6; }
+.bsd.on { background: var(--ink); border-color: var(--ink); } .bsd.on b, .bsd.on small { color: #fff; }
+.bsd i { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; font-weight: 700; line-height: 16px; min-width: 16px; border-radius: 8px; background: var(--ink-2); color: #fff; }
+.bsd i.r { background: var(--bad); }
+.bphone .bcol { margin-top: 8px; background: none; padding: 0; } .bphone .bcol .bch { display: none; }
+@media (min-width: 1000px) { .bgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; } .bphone { display: none; } }
+@media (min-width: 1000px) { .app:has(.board) { max-width: 1680px; } .bgrid { grid-template-columns: repeat(7, minmax(260px, 1fr)); overflow-x: auto; padding-bottom: 6px; } .bcol { min-height: calc(100vh - 300px); } }
+.files img.fimg { max-width: 100%; max-height: 420px; border-radius: 6px; box-shadow: var(--edge); cursor: zoom-in; }
 /* «Графит» (Адам 18.11): углы почти прямые, всё строго */
 :is(.ubox, .udec, .utile, .uset, .uwel, .twrap, .tile, .lt, .card, .lines, .msg, .bdept, .bsum, .hero, .uh) { border-radius: var(--r) !important; }
 :is(.ub, .uchip, .uquick button, .uchoice button, .pill, .bgo, .bchip, .bghost, .blink, .act, .role, .tools) { border-radius: 4px !important; }
@@ -657,6 +703,46 @@ const UI = {
     `<div class="ubtns">${(d.acts || []).map(([l, to], i) => `<button class="ub${i ? " pri" : ""}"${uTo(to)}>${esc(l)}</button>`).join("")}</div></div>`; },
   links(d) { return `<div class="ulinks">${(d.groups || []).map(([t, bs]) => `<div><h4>${esc(t)}</h4><div class="ubox">${bs.map(([l, to]) => { const [i, x] = splitLabel(l);
     return `<button${uTo(to)}>${i ? ic(i) : ""}<span>${esc(x)}</span></button>`; }).join("")}</div></div>`).join("")}</div>`; },
+  board(d) { const by = {}; for (const c of d.cards) (by[c.d] = by[c.d] || []).push(c);
+    const fl_ = d.flash || null; let sel = (fl_ && fl_[1]) || d.sel || "";
+    if (!d.days.some(x => x.d === sel)) sel = (d.days.find(x => x.today) || d.days[0]).d;
+    const card = c => { const meta = [c.rep ? "↻" : "", c.wait ? `<span class="bw">ждёт 👍</span>` : "", c.over ? `<span class="bo">просрочено с ${esc(c.od)}</span>` : "",
+        c.who ? esc(c.who) : "", c.k === "note" ? "📝" : "", c.clip ? "📎" : ""].filter(Boolean).join(" · ");
+      const ck = c.ck ? `<button class="bck" data-to="${esc(c.ck)}" title="${c.wait ? "👍 Принять" : "Выполнено"}">${c.done ? "✓" : ""}</button>` : `<span class="bck dis">${c.done ? "✓" : ""}</span>`;
+      return `<div class="bc p-${esc(c.p || "no")}${c.done ? " done" : ""}${c.wait ? " wait" : ""}${c.over ? " over" : ""}${fl_ && String(c.id) === String(fl_[0]) ? " flash" : ""}" data-bid="${esc(c.id)}"${c.mv ? ' draggable="true"' : ""}>` +
+        `${ck}<button class="bt" data-to="${esc(c.o)}"><span class="tx">${esc(c.t)}</span>${meta ? `<small>${meta}</small>` : ""}</button></div>`; };
+    const groups = (cs, day) => [["rep", "Повторяемые", cs.filter(c => c.rep)], ["oth", "Прочие", cs.filter(c => !c.rep)]].filter(g => g[2].length)
+      .map(([g, n, xs]) => `<div class="bgrp${bfold()[day + "|" + g] ? " fold" : ""}"><button type="button" class="bgt" data-bfold="${g}">${n} · ${xs.filter(c => !c.done).length}<i></i></button><div class="bgb">${xs.map(card).join("")}</div></div>`).join("");
+    const add = day => `<form class="badd" data-bd="${esc(day)}" data-sto="${esc(d.note)}:${esc(day)}"><input placeholder="+ Заметка" maxlength="300" autocomplete="off" enterkeyhint="done"><button type="submit" aria-label="Добавить">＋</button></form>`;
+    const col = x => { const cs = by[x.d] || [], left = cs.filter(c => !c.done).length;
+      return `<div class="bcol${x.today ? " today" : ""}${x.off ? " off" : ""}${fl_ && fl_[1] === x.d ? " flash" : ""}" data-bdrop="${esc(x.d)}"><div class="bch"><b>${esc(x.l)}</b>${left ? `<span>${left}</span>` : ""}</div>` +
+        `${x.past ? "" : add(x.d)}<div class="bcs">${groups(cs, x.d)}</div></div>`; };
+    const top = `<div class="bhd"><button class="bnav" data-to="${esc(d.prev)}">‹ день</button><b>${esc(d.title)}</b><button class="bnav" data-to="${esc(d.next)}">день ›</button>` +
+      (d.is_now ? "" : `<button class="pill" data-to="${esc(d.now)}">Сегодня</button>`) + `<span class="sp"></span>` +
+      (d.new ? `<button class="ub pri" data-to="${esc(d.new)}">➕ Поручить</button>` : "") + `</div>`;
+    const flt = `<div class="bfl">${d.filters.map(([k, n, on, to]) => `<button class="pill${on ? " on" : ""}" data-to="${esc(to)}">${esc(n)}</button>`).join("")}` +
+      (d.people.length ? `<select class="bpp" data-bpp="1"><option value="tasks:p:0">👤 Человек…</option>${d.people.map(([t, n, on, to]) => `<option value="${esc(to)}"${on ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>` : "") +
+      `<button class="pill" data-to="${esc(d.find)}">🔎 Найти</button></div>`;
+    const strip = `<div class="bstrip">${d.days.map(x => { const cs = by[x.d] || [], n = cs.filter(c => !c.done).length, red = cs.some(c => c.over);
+      return `<button class="bsd${x.d === sel ? " on" : ""}${x.today ? " today" : ""}${x.off ? " off" : ""}" data-to="tasks:d:${esc(x.d)}"><small>${esc(x.l.split(",")[0])}</small><b>${esc(x.l.split(", ")[1])}</b>${n ? `<i class="${red ? "r" : ""}">${n}</i>` : ""}</button>`; }).join("")}</div>`;
+    const one = d.days.find(x => x.d === sel);
+    return `<div class="board">${top}${flt}<div class="bgrid">${d.days.map(col).join("")}</div><div class="bphone">${strip}${col(one)}</div></div>`; },
+  sform(d, t) { const fid = "f" + (++UID);
+    const fld = f => { const w = f.when ? ` data-when="${esc(f.when[0])}" data-win="${esc(f.when[1].join(","))}"` : "", lab = `<span>${esc(f.l)}${f.req ? " *" : ""}</span>`;
+      if (f.t === "head") return `<div class="sfh">${esc(f.l)}</div>`;
+      if (f.t === "area") return `<label class="sfl"${w}>${lab}<textarea name="${esc(f.k)}" maxlength="${f.max || 2000}" placeholder="${esc(f.ph || "")}">${esc(f.v || "")}</textarea>${f.hint ? `<small>${esc(f.hint)}</small>` : ""}</label>`;
+      if (f.t === "text" || f.t === "num") return `<label class="sfl"${w}>${lab}<input name="${esc(f.k)}" value="${esc(f.v || "")}" placeholder="${esc(f.ph || "")}"${f.t === "num" ? ' inputmode="numeric"' : ""}></label>`;
+      if (f.t === "date") return `<div class="sfl"${w}>${lab}<div class="sfrow">${(f.quick || []).map(([v, l]) => `<button type="button" class="pill${v === f.v ? " on" : ""}" data-sfd="${esc(v)}">${esc(l)}</button>`).join("")}<input type="date" name="${esc(f.k)}" value="${esc(f.v || "")}"${f.min ? ` min="${esc(f.min)}"` : ""}></div></div>`;
+      if (f.t === "seg" || f.t === "multi") { const on = String(f.v ?? "").split(",");
+        return `<div class="sfl"${w}>${lab}<input type="hidden" name="${esc(f.k)}" value="${esc(f.v ?? "")}"><div class="sfrow" data-sfs="${f.t === "multi" ? "m" : "s"}">${(f.opts || []).map(([v, l]) => `<button type="button" class="pill${on.includes(String(v)) && (f.t === "multi" ? v !== "" : true) ? " on" : ""}" data-v="${esc(v)}">${esc(l)}</button>`).join("")}</div></div>`; }
+      if (f.t === "ppl") { const on = String(f.v || "").split(",");
+        return `<div class="sfl"${w}>${lab} <small class="sfc"></small><input type="hidden" name="${esc(f.k)}" value="${esc(f.v || "")}">` + (f.groups || []).map(([g, ps]) => {
+          const chips = `<div class="sfrow" data-sfs="m">${ps.map(([v, l]) => `<button type="button" class="pill${on.includes(String(v)) ? " on" : ""}" data-v="${esc(v)}">${esc(l)}</button>`).join("")}</div>`;
+          return g ? `<details class="sfg"${(f.groups.length === 1) ? " open" : ""}><summary>${esc(g)} · ${ps.length}</summary>${chips}</details>` : chips; }).join("") + `</div>`; }
+      if (f.t === "photo") return `<div class="sfl sfp"${w}>${lab}<input type="hidden" name="${esc(f.k)}" value=""><label class="pill">📷 Выбрать фото<input type="file" accept="image/*" data-sfph="1" hidden></label><img alt="" hidden><button type="button" class="pill" data-sfpx="1" hidden>✕ Убрать</button></div>`;
+      return ""; };
+    return uHead(t) + `<div class="ubox sform" data-form="${fid}" style="padding:12px 14px">${d.err ? `<div class="sferr">${esc(d.err)}</div>` : ""}${(d.fields || []).map(fld).join("")}` +
+      `<div class="urow" style="flex-wrap:wrap"><button class="ub pri" style="flex:1" data-send="${fid}" data-sto="${esc(d.send[1])}">${esc(d.send[0])}</button>${d.note ? `<span style="flex-basis:100%;font-size:12.5px;color:var(--ink-2)">${esc(d.note)}</span>` : ""}</div></div>`; },
   welcome(d) { return `<div class="uwel"><h3>${esc(d.title)}</h3><ol>${(d.items || []).map(([b, x]) => `<li><b>${esc(b)}</b> — ${esc(x)}</li>`).join("")}</ol>${d.note ? `<p>${esc(d.note)}</p>` : ""}` +
     `<div class="ubtns">${(d.acts || []).map(([l, to], i) => `<button class="ub${i ? "" : " pri"}" style="${i ? "" : "flex:1"}"${uTo(to)}>${esc(l)}</button>`).join("")}</div></div>`; },
 };
@@ -715,7 +801,7 @@ function msgHtml(m, home, first) {
   if (m.text && !m.ask) parts.push(`<div class="msg">${esc(m.text)}</div>`);
   if (m.ask) parts.push(`<div class="msg">${esc(m.ask)}</div><form class="askbar" id="askForm"><textarea id="askInput" rows="1" placeholder="Напишите ответ" required></textarea><button class="send" type="submit">Отправить</button></form>`);
   if (m.upload) parts.push(`<label class="upl">📎 Выбрать файлы из 1С<input type="file" id="upFile" multiple accept=".xls,.xlsx,.csv,.txt,.xml,.mxl,.html,.htm"></label>`);
-  if (m.files && m.files.length) parts.push(`<div class="files">${m.files.map(([n, u]) => u ? `<button class="file" data-file="${esc(u)}" data-name="${esc(n)}">📎 ${esc(n)}</button>` : "").join("")}</div>`);
+  if (m.files && m.files.length) parts.push(`<div class="files">${m.files.map(([n, u]) => !u ? "" : /\.(jpe?g|png|webp)$/i.test(n) ? `<img class="fimg" src="${esc(u)}" alt="${esc(n)}" data-file="${esc(u)}" data-name="${esc(n)}">` : `<button class="file" data-file="${esc(u)}" data-name="${esc(n)}">📎 ${esc(n)}</button>`).join("")}</div>`);
   // окно выбора: итог (плитки экрана) всегда виден над «ОК / Отмена» — сумма меняется сразу при каждой галочке
   const tl = m.view && (m.view.blocks || []).find(b => b.k === "tiles");
   const short = l => String(l).replace("Дальше, в месяц", "в месяц").split(",")[0];
@@ -964,6 +1050,7 @@ function show(d) {
   if (S.here) S.sc[S.here] = $("main").scrollTop;
   const keep = same ? $("main").scrollTop : S.nav === "back" ? (S.sc[here] || 0) : 0, keepW = same ? window.scrollY : 0;
   $("main").innerHTML = `<div class="screen">${parts.join("")}</div>`;
+  try { sfInit(); } catch (_) {}
   if (BLDD) { const x = BLDD; BLDD = null; bldInit(x); }
   $("main").scrollTop = keep;
   if (same) window.scrollTo(0, keepW);
@@ -1060,6 +1147,56 @@ async function uploadFiles(files) {
   } catch (e) { toast("Не получилось отправить файл. Проверьте интернет и попробуйте ещё раз."); }
   finally { busy = false; $("busy").hidden = true; }
 }
+// ===== 📌 задания (Адам 19.11, как в первом боте): форма одной страницей и доска «неделя»
+function sfWhen(box) { box.querySelectorAll("[data-when]").forEach(el => { const src = box.querySelector(`[name="${el.dataset.when}"]`);
+  const vis = src && !src.closest("[hidden]") && el.dataset.win.split(",").includes(src.value) && !(src.closest("[data-when]") && src.closest("[data-when]").hidden);
+  el.hidden = !vis; }); box.querySelectorAll("[data-when]").forEach(el => { const src = box.querySelector(`[name="${el.dataset.when}"]`);
+  if (src && src.closest("[data-when]") && src.closest("[data-when]").hidden) el.hidden = true; });
+  box.querySelectorAll(".sfc").forEach(c => { const h = c.parentElement.querySelector('input[type="hidden"]'); const n = h && h.value ? h.value.split(",").filter(Boolean).length : 0; c.textContent = n ? "· выбрано " + n : ""; }); }
+function sfInit() { document.querySelectorAll(".sform").forEach(sfWhen); boardScroll(); }
+$("main").addEventListener("click", e => {
+  const p = e.target.closest(".sform [data-sfs] [data-v]");
+  if (p) { const row = p.closest("[data-sfs]"), lab = p.closest(".sfl"), h = lab.querySelector('input[type="hidden"]');
+    if (row.dataset.sfs === "s") { lab.querySelectorAll("[data-v]").forEach(x => x.classList.remove("on")); p.classList.add("on"); h.value = p.dataset.v; }
+    else { p.classList.toggle("on"); h.value = [...lab.querySelectorAll("[data-sfs] [data-v].on")].map(x => x.dataset.v).join(","); }
+    sfWhen(p.closest(".sform")); e.stopPropagation(); return; }
+  const q = e.target.closest(".sform [data-sfd]");
+  if (q) { const lab = q.closest(".sfl"); lab.querySelectorAll("[data-sfd]").forEach(x => x.classList.toggle("on", x === q)); lab.querySelector('input[type="date"]').value = q.dataset.sfd; e.stopPropagation(); return; }
+  const x = e.target.closest("[data-sfpx]");
+  if (x) { const lab = x.closest(".sfp"); lab.querySelector('input[type="hidden"]').value = ""; const im = lab.querySelector("img"); im.hidden = true; im.src = ""; x.hidden = true; return; }
+  const f = e.target.closest("[data-bfold]");
+  if (f) { e.stopPropagation(); const col = f.closest("[data-bdrop]"), k = (col ? col.dataset.bdrop : "") + "|" + f.dataset.bfold, m = bfold();
+    m[k] = !m[k]; if (!m[k]) delete m[k]; try { localStorage.setItem("bfold", JSON.stringify(m)); } catch (_) {}
+    const g = f.closest(".bgrp"); if (g) g.classList.toggle("fold", !!m[k]); return; }
+}, true);
+$("main").addEventListener("change", async e => {
+  const s = e.target.closest("[data-bpp]"); if (s) { go(s.value); return; }
+  const dt = e.target.closest('.sform input[type="date"]'); if (dt) dt.closest(".sfl").querySelectorAll("[data-sfd]").forEach(x => x.classList.toggle("on", x.dataset.sfd === dt.value));
+  const ph = e.target.closest("[data-sfph]"); if (!ph || !ph.files || !ph.files[0]) return;
+  const lab = ph.closest(".sfp"), h = lab.querySelector('input[type="hidden"]'), im = lab.querySelector("img");
+  try { h.value = await shrink(ph.files[0]); im.src = h.value; im.hidden = false; lab.querySelector("[data-sfpx]").hidden = false; }
+  catch (_) { toast("Это фото не открылось — сохраните его как JPEG и выберите снова."); }
+});
+function shrink(file) { return new Promise((ok, no) => { const r = new FileReader(); r.onerror = no; r.onload = () => { const img = new Image(); img.onerror = no;
+  img.onload = () => { const k = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); let q = .8, u = c.toDataURL("image/jpeg", q); while (u.length > 900000 && q > .35) { q -= .15; u = c.toDataURL("image/jpeg", q); } ok(u); };
+  img.src = r.result; }; r.readAsDataURL(file); }); }
+function bfold() { try { return JSON.parse(localStorage.getItem("bfold") || "{}") || {}; } catch (_) { return {}; } }
+let BDRAG = null;
+document.addEventListener("dragstart", e => { const c = e.target.closest && e.target.closest(".bc[draggable]"); if (!c) return; BDRAG = c.dataset.bid; c.classList.add("drag"); try { e.dataTransfer.setData("text/plain", BDRAG); e.dataTransfer.effectAllowed = "move"; } catch (_) {} });
+document.addEventListener("dragend", () => { BDRAG = null; document.querySelectorAll(".bc.drag,.bcol.hov").forEach(x => x.classList.remove("drag", "hov")); });
+document.addEventListener("dragover", e => { const c = BDRAG && e.target.closest && e.target.closest("[data-bdrop]"); if (!c) return; e.preventDefault(); document.querySelectorAll(".bcol.hov").forEach(x => x !== c && x.classList.remove("hov")); c.classList.add("hov"); });
+document.addEventListener("drop", e => { const c = BDRAG && e.target.closest && e.target.closest("[data-bdrop]"); if (!c) return; e.preventDefault();
+  const id = BDRAG, d = c.dataset.bdrop; BDRAG = null; c.classList.remove("hov");
+  const card = document.querySelector(`.bc[data-bid="${id}"]`); if (card && card.closest("[data-bdrop]") === c) return;
+  go("tkm:" + id + ":" + d); });
+function baddSend(f) { const i = f.querySelector("input"); const v = i && i.value.trim(); if (!v || f.dataset.sent) return; f.dataset.sent = "1"; i.value = ""; call("press", {to: f.dataset.sto, form: {text: v}}); }
+document.addEventListener("submit", e => { const f = e.target.closest && e.target.closest("form.badd"); if (!f) return; e.preventDefault(); baddSend(f); });
+document.addEventListener("focusout", e => { const f = e.target.closest && e.target.closest("form.badd"); if (!f || e.target.tagName !== "INPUT") return;
+  if (e.relatedTarget && f.contains(e.relatedTarget)) return; if (document.hidden || !document.hasFocus()) return; baddSend(f); });
+function boardScroll() { const g = document.querySelector(".bgrid"); if (!g || g.scrollWidth <= g.clientWidth + 4) return;
+  const f = document.querySelector(".bcol.flash") || document.querySelector(".bcol.today"); const y = f && !f.classList.contains("flash") && f.previousElementSibling;
+  if (f) g.scrollLeft = Math.max(0, (y || f).offsetLeft - g.offsetLeft); }
 function go(to, top) {
   if (to && to.startsWith("url:")) { const u = to.slice(4); if (/^https:\/\//.test(u)) { const w = window.open(u, "_blank", "noopener"); if (!w) location.href = u; } return; }   // кнопка-ссылка: в браузер
   if (top) S.cur = to; call("press", {to, top: !!top});

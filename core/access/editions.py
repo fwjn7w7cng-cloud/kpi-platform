@@ -39,7 +39,7 @@ MODULES = {
     "payroll":      ("Зарплата: табель, оклад, сдельная, ГСМ, бонусы, штрафы", "any", None),
     "achievements": ("Достижения и челленджи", "sales", "business"),
     "staff":        ("Кабинеты склада, водителей, офиса", "ops", None),
-    "tasks":        ("Задачи от руководителя", "sales", "business"),
+    "tasks":        ("Задания", "sales", "business"),
     "clients":      ("Клиенты: спящие, падают, растут", "sales", "business"),
     "route":        ("Маршруты торговых и отчёт за день", "sales", "business"),
     "quiz":         ("Тесты и обучение новичков", "sales", "business"),
@@ -257,9 +257,9 @@ def upgrade(packages, code):
 FUNC_GROUPS = {"all": ("💰", "Все отделы"), "sales": ("📈", "Продажи"), "stock": ("📦", "Склад и закупки"),
                "logistics": ("🚚", "Логистика"), "office": ("👤", "Кадры и офис"), "max": ("⭐", "Дополнительно")}
 FUNCS = {
-    "payroll": ("all", 3000), "approval": ("all", 1000),
+    "payroll": ("all", 3000), "approval": ("all", 1000), "tasks": ("all", 2000),
     "kpi": ("sales", 3000), "route": ("sales", 2000), "debts": ("sales", 2000), "clients": ("sales", 2000),
-    "tasks": ("sales", 1000), "quiz": ("sales", 1000), "achievements": ("sales", 1000), "plans": ("sales", 1000),
+    "quiz": ("sales", 1000), "achievements": ("sales", 1000), "plans": ("sales", 1000),
     "forecast": ("sales", 1000), "call_today": ("sales", 1000), "watchdog": ("sales", 1000), "formulas": ("sales", 2000),
     "stock": ("stock", 3000), "warehouse": ("stock", 2000), "returns": ("stock", 1000),
     "logistics": ("logistics", 3000), "fuel": ("logistics", 1000),
@@ -269,7 +269,7 @@ FUNCS = {
 FUNC_SHORT = {
     "payroll": "Зарплата: табель, оклад, ГСМ", "approval": "Утверждение зарплаты",
     "kpi": "План и факт, рейтинг", "route": "Маршруты и отчёт дня", "debts": "Дебиторка", "clients": "Клиенты",
-    "tasks": "Задачи", "quiz": "Тесты и обучение", "achievements": "Достижения", "plans": "Утверждение планов",
+    "tasks": "Задания", "quiz": "Тесты и обучение", "achievements": "Достижения", "plans": "Утверждение планов",
     "forecast": "Прогноз", "call_today": "Кому позвонить", "watchdog": "Ночной сторож", "formulas": "Свои формулы",
     "stock": "Закупки и заказы", "warehouse": "Склад: приёмка", "returns": "Возвраты", "logistics": "Рейсы водителей",
     "fuel": "Контроль топлива", "hr": "Кадры и приказы", "branding": "Свой бренд", "branches": "Филиалы",

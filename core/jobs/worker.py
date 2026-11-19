@@ -1,5 +1,6 @@
 """Фоновая работа приложения клиента (веб-провод): рассылки по расписанию и забор отчётов 1С без кнопки (Адам 31.10).
 
+  раз в час      — снимок зарплаты каждого (core/paysnap: «🕓 Как менялась»);
   каждую минуту  — рассылки, которым пора (core/jobs/schedule.py: утренняя сводка, напоминания…) → лента + 🔔 на телефон;
   раз в 10 минут — источники отчётов из анкеты (source.kind): folder — папка на сервере (core/ingest/folder.py),
                    mail — почта (MAIL_*), drive — Google Диск (DRIVE_FOLDER) → общий конвейер → журнал «🧪 Что пришло»;
@@ -46,6 +47,7 @@ class Worker:
         self.app, self.deliver = app, deliver
         self.srcs = sources(app) if srcs is None else srcs
         self.last_pull = None
+        self.last_snap = None
 
     # ---------- рассылки ----------
 
@@ -62,6 +64,19 @@ class Worker:
         if self.srcs and self._paid() and (self.last_pull is None or (now - self.last_pull).total_seconds() >= PULL_EVERY * 60 - 5):
             self.last_pull = now
             out += self.pull()
+        for fn in schedule.TICKS:
+            try:
+                out += fn(self.app, now) or []
+            except Exception:                         # noqa: BLE001
+                log.exception("фоновая работа %s", getattr(fn, "__name__", fn))
+        hour = now.strftime("%Y-%m-%d %H")
+        if self.last_snap != hour:                    # 🕓 раз в час — снимок зарплаты (core/paysnap, Адам 19.11)
+            self.last_snap = hour
+            try:
+                from core import paysnap
+                paysnap.take(self.app, now)
+            except Exception:                         # noqa: BLE001
+                log.exception("снимок зарплаты")
         if out:
             self.deliver(out)
         return out

@@ -40,11 +40,12 @@ def staff_card(ctx, emp_id):
     if ctx.can("payroll"):
         t.append(("Зарплата", money(p.calc(emp).total), None))
     v.tiles(t)
-    open_tasks = ctx.db.q("SELECT text, due FROM tasks WHERE emp_id = ? AND status = 'open' ORDER BY due", emp["id"])
+    open_tasks = ctx.db.q("SELECT t.text, i.deadline AS due FROM task_items i JOIN task_defs t ON t.id = i.task_id "
+                          "WHERE i.who = ? AND i.status = 'work' AND t.self = 0 ORDER BY i.deadline", emp["id"])
     if open_tasks and ctx.can("tasks"):
         v.table(["Задача", "Срок"], [Row([x["text"], x["due"][8:10] + "." + x["due"][5:7]]) for x in open_tasks[:5]])
     kb = rows([mod_button(ctx, "💰 Зарплата", f"pay:{emp['id']}", "payroll"), Button("📅 Табель", f"ts:{emp['id']}"),
-               mod_button(ctx, "📌 Задачи", "tasks", "tasks")], 2)
+               mod_button(ctx, "📌 Задания", "tasks", "tasks")], 2)
     return Reply(view=v, buttons=kb)
 
 

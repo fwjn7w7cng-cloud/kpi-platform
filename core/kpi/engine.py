@@ -90,8 +90,10 @@ class Metric:
 
 
 class Kpi:
-    def __init__(self, cfg, db, month, today, hooks=None):
+    def __init__(self, cfg, db, month, today, hooks=None, upto=None):
+        """upto — факты только по этот день включительно (расчёт «каким он был», core/paysnap)."""
         self.cfg, self.db, self.month, self.hooks = cfg, db, month, hooks
+        self.upto = upto
         self.cal = Month(cfg, month, today)
         kcfg = cfg.raw.get("kpi") or {}
         self.akb_min = float(kcfg.get("akb_min", 1))
@@ -117,6 +119,8 @@ class Kpi:
 
     def _load(self):
         s, e = self.start, self.end
+        if self.upto is not None:
+            e = min(e, self.upto.isoformat() if hasattr(self.upto, "isoformat") else str(self.upto))
         self.sales = defaultdict(float)                 # emp → ₽
         self.by_client = defaultdict(lambda: defaultdict(float))   # emp → клиент → ₽
         self.by_group = defaultdict(lambda: defaultdict(float))    # emp → группа → ₽

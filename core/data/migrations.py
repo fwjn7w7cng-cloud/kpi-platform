@@ -154,4 +154,29 @@ ALTER TABLE debts ADD COLUMN over REAL;
 ALTER TABLE stock_orders ADD COLUMN emp_id INTEGER;
 ALTER TABLE stock_orders ADD COLUMN extra TEXT NOT NULL DEFAULT '{}';
 """),
+    (6, "🕓 как менялась зарплата: снимок расчёта раз в час (только если изменился)", """
+CREATE TABLE pay_hist (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, emp_id INTEGER NOT NULL, month TEXT NOT NULL,
+  total REAL NOT NULL, rows TEXT NOT NULL DEFAULT '[]', facts TEXT NOT NULL DEFAULT '{}', hash TEXT NOT NULL DEFAULT '');
+CREATE INDEX pay_hist_em ON pay_hist(emp_id, month, ts);
+"""),
+    (7, "📌 задания как в первом боте: задание, копии у исполнителей, фото; прежние задачи переносятся", """
+CREATE TABLE task_defs (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL DEFAULT '', photo TEXT NOT NULL DEFAULT '',
+  author INTEGER NOT NULL, author_name TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT 'once', rule TEXT NOT NULL DEFAULT '{}',
+  prio TEXT NOT NULL DEFAULT '', days INTEGER NOT NULL DEFAULT 1, people TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'active', self INTEGER NOT NULL DEFAULT 0, ts TEXT NOT NULL);
+CREATE TABLE task_items (id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER NOT NULL, who INTEGER NOT NULL,
+  name TEXT NOT NULL DEFAULT '', deadline TEXT, status TEXT NOT NULL DEFAULT 'work', answer TEXT NOT NULL DEFAULT '',
+  photo TEXT NOT NULL DEFAULT '', ans_ts TEXT, done_ts TEXT, move TEXT, log TEXT NOT NULL DEFAULT '[]', ts TEXT NOT NULL,
+  bday TEXT, iday TEXT);
+CREATE INDEX task_items_who ON task_items(who, status);
+CREATE INDEX task_items_task ON task_items(task_id);
+CREATE TABLE task_files (id INTEGER PRIMARY KEY AUTOINCREMENT, data BLOB NOT NULL, mime TEXT NOT NULL, owner INTEGER, ts TEXT NOT NULL);
+INSERT INTO task_defs (id, text, author, author_name, kind, people, status, self, ts)
+  SELECT k.id, k.text, k.author_id, COALESCE((SELECT fio FROM employees WHERE id = k.author_id), ''), 'once',
+         '[[' || k.emp_id || ', "' || REPLACE(COALESCE((SELECT fio FROM employees WHERE id = k.emp_id), ''), '"', '') || '"]]',
+         'active', 0, k.ts FROM tasks k;
+INSERT INTO task_items (task_id, who, name, deadline, status, answer, ts, ans_ts, done_ts, iday)
+  SELECT k.id, k.emp_id, COALESCE((SELECT fio FROM employees WHERE id = k.emp_id), ''), k.due,
+         CASE k.status WHEN 'open' THEN 'work' WHEN 'done' THEN 'ok' ELSE 'fail' END, k.note, k.ts, k.done_ts, k.done_ts, k.ts FROM tasks k;
+"""),
 ]

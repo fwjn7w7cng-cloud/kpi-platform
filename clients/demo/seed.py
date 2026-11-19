@@ -17,7 +17,7 @@ from core.calendar import Month, first_day, last_day, month_of, shift_month
 from core.data.model import (Client, Dataset, Debt, Group, ItemSale, Payment, Return, Sale, Stock, Trip, TripStop,
                              Visit)
 
-VERSION = 2          # поменялся наполнитель — поднять: демо-базы пересоздадутся сами при следующем открытии (30.10: вся фирма)
+VERSION = 3          # поменялся наполнитель — поднять: демо-базы пересоздадутся сами при следующем открытии (30.10: вся фирма)
 
 # команда → (сколько торговых, характеры: множитель темпа к плану)
 TEAMS = {"north": [1.22, 1.06, 0.98, 0.93, 0.74], "south": [1.12, 1.01, 0.95, 0.88, 0.79], "key": [1.04, 0.97]}
@@ -226,12 +226,12 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=4):
     for i, (eid, key, team, skill) in enumerate(reps[:6]):
         due = today + timedelta(days=R.randint(-2, 5))
         status = "done" if i % 3 == 0 else "open"
-        db.x("INSERT INTO tasks (author_id, emp_id, text, due, status, ts) VALUES (?,?,?,?,?,?)",
-             rop["id"] if i % 2 else owner["id"], eid, task_texts[i % len(task_texts)], due.isoformat(), status, today.isoformat())
+        _task(db, rop if i % 2 else owner, [eid], task_texts[i % len(task_texts)], due, "ok" if status == "done" else "work", today)
     _route_marks(db, R, cfg, today)
     _stock(db, R, groups, months_list, today)
     _quiz(db, R, today)
     _company(db, cfg, random.Random(rnd_seed + 100), today, months_list, newbie, start_new)
+    _tasks_more(db, random.Random(rnd_seed + 200), today, owner, rop, reps)
     for m in months_list:
         db.put(f"planst:{m}", {"status": "ok", "note": "", "hist": [{"ts": f"{m}-01T09:00", "who": "Директор",
                                                                      "status": "ok", "note": ""}]})
@@ -504,6 +504,51 @@ def _company(db, cfg, R, today, months_list, newbie, start_new):
          "note": "Готово: «📦 Не отгружено вчера» в 08:30"},
         {"id": 2, "month": month_of(today), "text": "Бонус торговому за новые точки: 500 ₽ за клиента, который купил впервые",
          "author": owner["fio"] if owner else "Директор", "status": "work", "ts": today.strftime("%d.%m 09:15"), "note": ""}])
+
+
+def _task(db, author, emps, text, due, status, today, kind="once", rule=None, prio="", answer="", move=None, self_=False):
+    """📌 Задание демо в таблицах модуля «Задания» (modules/tasks.py)."""
+    import json
+    names = {e["id"]: e["fio"] for e in db.employees(active=None)}
+    ppl = [[e, " ".join(names.get(e, "").split()[:2])] for e in emps]
+    an = " ".join((author or {}).get("fio", "Директор").split()[:2])
+    ts = f"{today - timedelta(days=3)} 10:00:00"
+    tid = db.x("INSERT INTO task_defs (text, author, author_name, kind, rule, prio, days, people, status, self, ts) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+               text, author["id"], an, kind, json.dumps(rule or {}, ensure_ascii=False), prio, 1, json.dumps(ppl, ensure_ascii=False),
+               "active", 1 if self_ else 0, ts)
+    for e, n in ppl:
+        log = [[ts[:16], an, "выдано"]]
+        ans_ts = f"{today} 09:40:00" if status in ("ok", "done", "fail") else None
+        if status in ("ok", "done", "fail"):
+            log.append([ans_ts[:16], n, {"fail": "не выполнено", "ok": "выполнено", "done": "выполнено"}[status] + (f": {answer}" if answer else "")])
+        db.x("INSERT INTO task_items (task_id, who, name, deadline, status, answer, ans_ts, done_ts, move, log, ts, iday) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+             tid, e, n, due.isoformat(), status, answer, ans_ts, ans_ts if status == "ok" else None,
+             json.dumps(move, ensure_ascii=False) if move else None, json.dumps(log, ensure_ascii=False), ts, (today - timedelta(days=3)).isoformat())
+    return tid
+
+
+def _tasks_more(db, R, today, owner, rop, reps):
+    """Демо: доска заданий живая — повторы, ответ ждёт 👍, «не выполнено», просьба о переносе, заметки директора и склада."""
+    es = db.employees()
+    wh = next((e for e in es if e["role"] == "head" and e["dept"] != rop["dept"]), None)
+    staff = [e for e in es if e["role"] == "staff" and wh and e["dept"] == wh["dept"]][:2]
+    rid = [r[0] for r in reps]
+    if len(rid) >= 3:
+        _task(db, rop, rid[:3], "Отчёт за день до 19:00 — продажи, сбор, км", today, "work", today, kind="rep", rule={"type": "daily"})
+        _task(db, rop, [rid[1]], "Сверка с ключевым клиентом за прошлый месяц", today - timedelta(days=1), "done", today,
+              prio="hi", answer="Сверил, расхождений нет, акт подписан")
+        _task(db, rop, [rid[2]], "Выставить фокусную группу у трёх клиентов", today, "fail", today, prio="mid",
+              answer="Двое на ремонте, будут на следующей неделе")
+        _task(db, owner, [rid[0]], "Закрыть долг 60+ у проблемного клиента", today + timedelta(days=1), "work", today, prio="hi",
+              move={"to": (today + timedelta(days=4)).isoformat(), "why": "Клиент платит в пятницу", "state": "ask"})
+    if wh:
+        _task(db, owner, [wh["id"]], "Инвентаризация склада — итоги директору", today + timedelta(days=2), "work", today, prio="mid")
+        if staff:
+            _task(db, wh, [e["id"] for e in staff], "Порядок на складе и чистая зона отгрузки", today, "work", today,
+                  kind="rep", rule={"type": "weekly", "days": [0, 3]})
+    for k, txt in enumerate(["Позвонить в банк по кредитной линии", "Согласовать цены с новым поставщиком", "Планёрка с отделом продаж"]):
+        _task(db, owner, [owner["id"]], txt, today + timedelta(days=k), "ok" if k == 0 else "work", today, self_=True,
+              prio=["", "mid", ""][k])
 
 
 def _route_marks(db, R, cfg, today):

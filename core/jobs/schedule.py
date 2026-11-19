@@ -13,6 +13,12 @@ from datetime import datetime
 from core.calendar import WEEKDAYS
 
 JOBS = []
+TICKS = []          # fn(app, now) → [Reply]: каждую минуту из фоновой работы (задания: выдача в 09:00, «срок перенесён»)
+
+
+def tick(fn):
+    TICKS.append(fn)
+    return fn
 
 
 @dataclass
