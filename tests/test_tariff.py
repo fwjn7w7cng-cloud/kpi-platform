@@ -26,15 +26,15 @@ class Quote(unittest.TestCase):
         self.assertEqual(q["people"], 8)
 
     def test_presets_and_max(self):
-        want = {"start": 9800, "business": 19500, "control": 31000, "company": 52900, "max": 117100}   # Адам 17.11: без скидки за все отделы
+        want = {"start": 9800, "business": 20500, "control": 32000, "company": 53900, "max": 118100}   # Адам 17.11: без скидки; 19.11: задания 2 000
         for code, monthly in want.items():
             q = P.quote(E.preset_functions(code), E.PRESETS[code]["people"], P.DEFAULT)
             self.assertEqual(q["monthly"], monthly, code)
         q = P.quote(E.preset_functions("max"), E.PRESETS["max"]["people"], P.DEFAULT, year=True)
         self.assertTrue(q["all_depts"])
-        self.assertEqual(q["monthly"], P.rnd(34000 + 127 * 300 + 45000))         # скидки за все отделы по умолчанию нет
+        self.assertEqual(q["monthly"], P.rnd(35000 + 127 * 300 + 45000))         # скидки за все отделы по умолчанию нет
         self.assertEqual(q["discount"], 0)
-        self.assertEqual(q["setup"], 176000)
+        self.assertEqual(q["setup"], 177000)
         self.assertEqual(q["monthly_year"], P.rnd(q["monthly"] * 0.9))
 
     def test_empty_old_packages_and_only_extra(self):
@@ -214,7 +214,7 @@ class ClientTariff(unittest.TestCase):
         r = self.app.press(700, "tf")[0]
         self.assertEqual(r.view.title, "💳 Тариф")
         tiles = dict((a, b) for a, b, _ in next(b for k, b in r.view.blocks if k == "tiles"))
-        self.assertEqual(tiles["Дальше, в месяц"], "15 600 ₽")          # функции «Бизнеса» 15 000 + 2 торговых × 300
+        self.assertEqual(tiles["Дальше, в месяц"], "16 600 ₽")          # функции «Бизнеса» 16 000 + 2 торговых × 300
         self.assertIn("blc", [b.to for b in r.all_buttons()])
         w = self.app.press(700, "tfr:stock")[0]                         # старый адрес — окно с отмеченными «Закупками»
         self.assertIn("blc:ok", [b.to for b in w.all_buttons()])

@@ -50,8 +50,8 @@ class BillingClient(unittest.TestCase):
         self.assertEqual(tiles(r)["Бесплатно, дней"], "9")                       # бесплатно до 3 декабря
         self.assertIn("Счёт 4 декабря", tiles(r))
         m = tiles(r)["В месяц"]
-        self.assertEqual(m, "15 600 ₽")
-        self.assertEqual(tiles(r)["Счёт 4 декабря"], "14 100 ₽")              # 15 600 × 28 / 31
+        self.assertEqual(m, "16 600 ₽")
+        self.assertEqual(tiles(r)["Счёт 4 декабря"], "15 000 ₽")              # 16 600 × 28 / 31
         self.assertIn("Бесплатно ещё 9", texts(app.press(700, "home")[0]))
         app = self.at(date(2026, 12, 11))
         self.assertIn("не оплачен", texts(app.press(700, "bl")[0]))                        # срок был 9 декабря
@@ -68,12 +68,12 @@ class BillingClient(unittest.TestCase):
         app.press(1, "blm:s")
         app.text(1, "10 000")                                         # ноябрь — только часть
         r = app.press(700, "bl")[0]
-        self.assertIn("оплачено 10 000 ₽ из 15 600 ₽, осталось 5 600 ₽", texts(r))
+        self.assertIn("оплачено 10 000 ₽ из 16 600 ₽, осталось 6 600 ₽", texts(r))
         app.press(1, "blm:s")
-        app.text(1, "5 600")
+        app.text(1, "6 600")
         self.assertIn("Ноябрь оплачен", texts(app.press(700, "bl")[0]))
         app.press(1, "blm:u")                                         # сняли последнюю отметку — снова остаток
-        self.assertIn("осталось 5 600", texts(app.press(700, "bl")[0]))
+        self.assertIn("осталось 6 600", texts(app.press(700, "bl")[0]))
 
     def test_add_function_needs_approval_and_bills_rest_of_month(self):
         self.app.press(1, "blm:d")
@@ -86,7 +86,7 @@ class BillingClient(unittest.TestCase):
         t = texts(r)
         self.assertIn("С декабря каждый месяц + 3 000 ₽", t)
         self.assertIn("Сейчас, за остаток ноября (15 дн.) + 1 500 ₽", t)
-        self.assertEqual(tiles(r)["Счёт 1 декабря, итого"], "20 100 ₽")                   # 18 600 + 1 500
+        self.assertEqual(tiles(r)["Счёт 1 декабря, итого"], "21 100 ₽")                   # 19 600 + 1 500
         out = app.press(700, "blc:ok")
         self.assertTrue(any(x.to == 1 and "Одобрить" in str([b.label for b in x.all_buttons()]) for x in out))
         self.assertNotIn("stock", app.ctx(700).cfg.functions or set())                      # до одобрения — не включено
@@ -94,7 +94,7 @@ class BillingClient(unittest.TestCase):
         self.assertTrue(any(x.to == 700 and "Включено" in x.text for x in out))
         self.assertIn("stock", app.ctx(700).cfg.modules)
         r = app.press(700, "bl")[0]
-        self.assertEqual(tiles(r)["Счёт 1 декабря"], "20 100 ₽")
+        self.assertEqual(tiles(r)["Счёт 1 декабря"], "21 100 ₽")
         self.assertIn("доплата за ноябрь", texts(r))
 
     def test_reject_with_reason(self):
