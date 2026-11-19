@@ -3,6 +3,12 @@
 Новые записи — сверху. Пишут оба Claude: Альфред (сервер) и Джарвис (чат).
 Запись = заголовок с датой и временем по Москве + 1–3 строки: что сделано, что найдено, что осталось.
 
+## 2026-11-20 01:27 (Альфред) — демо до 9596949 (Telegram и MAX убраны), Telegram-бот демо убран с сервера
+git reset → 9596949, chown alapa, web/site → /var/www/kpi/site. kpi@demo (выключена, ни разу не запускалась): systemctl disable;
+файл /etc/systemd/system/kpi@.service не удалён насовсем — перенесён в /root/removed-kpi-bot/; daemon-reload — службы kpi@ больше нет.
+venv: pip uninstall python-telegram-bot (21.6). После этого restart kpi-web@demo → active, 8101 — kpi-web@demo, ошибок 0;
+demo.alapa.pro и admin.alapa.pro → 200; tests.test_app (от alapa) — ок.
+
 ## 20.11.2026 01:45, Москва — (Джарвис)
 - Telegram и MAX убраны совсем (Адам): удалены core/transport/telegram.py, max.py, deploy/kpi@.service, библиотека python-telegram-bot;
   run.py запускает только приложение (`--web` можно писать, можно нет). Команда обновления — без kpi@demo. 265 тестов зелёные.
