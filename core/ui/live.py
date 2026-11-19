@@ -537,6 +537,13 @@ def staff_home(ctx, v):
             sent = f" · отправлен {sent[8:10]}.{sent[5:7]}" if len(sent) >= 10 else ""
             items.append({"t": o["supplier"], "s": f"{_n(n, 'позиция', 'позиции', 'позиций')}{sent}", "chip": ["принять", f"wrc:{o['id']}", "warn"]})
         v.ui("rows", {"items": items, "empty": "Поставок в пути нет"}, "Приёмка")
+    if ctx.dept_kind == "warehouse":                    # учёт в Алапе: приходы от закупок ждут пересчёта (modules/acc.py)
+        rs = ctx.db.q("SELECT id, supplier, lines, day FROM receipts WHERE status = 'sent' ORDER BY day, id LIMIT 6")
+        if rs:
+            import json
+            v.ui("rows", {"items": [{"t": f"Приход №{r['id']} · {r['supplier']}",
+                                     "s": f"{_n(len(json.loads(r['lines'])), 'позиция', 'позиции', 'позиций')} · пересчитать и принять",
+                                     "chip": ["принять", f"rca:{r['id']}", "warn"]} for r in rs]}, "Приходы ждут склад")
 
 
 def driver_home(ctx, v, p):

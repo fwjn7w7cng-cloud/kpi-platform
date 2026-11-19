@@ -179,4 +179,14 @@ INSERT INTO task_items (task_id, who, name, deadline, status, answer, ts, ans_ts
   SELECT k.id, k.emp_id, COALESCE((SELECT fio FROM employees WHERE id = k.emp_id), ''), k.due,
          CASE k.status WHEN 'open' THEN 'work' WHEN 'done' THEN 'ok' ELSE 'fail' END, k.note, k.ts, k.done_ts, k.done_ts, k.ts FROM tasks k;
 """),
+    (8, "📦 учёт в Алапе: товары с себестоимостью, приходы от поставщиков, журнал закрытых цифр", """
+CREATE TABLE goods (code TEXT PRIMARY KEY, name TEXT NOT NULL, grp TEXT NOT NULL DEFAULT '', unit TEXT NOT NULL DEFAULT 'шт',
+  price REAL NOT NULL DEFAULT 0, cost REAL NOT NULL DEFAULT 0, qty REAL NOT NULL DEFAULT 0, supplier TEXT NOT NULL DEFAULT '',
+  ts TEXT NOT NULL DEFAULT '');
+CREATE TABLE receipts (id INTEGER PRIMARY KEY AUTOINCREMENT, no TEXT NOT NULL DEFAULT '', day TEXT NOT NULL, supplier TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft', pay TEXT NOT NULL DEFAULT 'debt', author TEXT NOT NULL DEFAULT '', author_id INTEGER,
+  lines TEXT NOT NULL DEFAULT '[]', note TEXT NOT NULL DEFAULT '', ts TEXT NOT NULL, done_ts TEXT, done_by TEXT NOT NULL DEFAULT '');
+CREATE TABLE secret_log (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, who TEXT NOT NULL, role TEXT NOT NULL DEFAULT '',
+  what TEXT NOT NULL, why TEXT NOT NULL DEFAULT '', support INTEGER NOT NULL DEFAULT 0);
+"""),
 ]

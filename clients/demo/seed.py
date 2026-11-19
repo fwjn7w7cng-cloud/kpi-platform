@@ -17,7 +17,7 @@ from core.calendar import Month, first_day, last_day, month_of, shift_month
 from core.data.model import (Client, Dataset, Debt, Group, ItemSale, Payment, Return, Sale, Stock, Trip, TripStop,
                              Visit)
 
-VERSION = 4          # поменялся наполнитель — поднять: демо-базы пересоздадутся сами при следующем открытии (20.11: свои магазины)
+VERSION = 5          # поменялся наполнитель — поднять: демо-базы пересоздадутся сами при следующем открытии (20.11: учёт в Алапе)
 
 # команда → (сколько торговых, характеры: множитель темпа к плану)
 TEAMS = {"north": [1.22, 1.06, 0.98, 0.93, 0.74], "south": [1.12, 1.01, 0.95, 0.88, 0.79], "key": [1.04, 0.97]}
@@ -239,6 +239,7 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=4):
     _company(db, cfg, random.Random(rnd_seed + 100), today, months_list, newbie, start_new)
     _tasks_more(db, random.Random(rnd_seed + 200), today, owner, rop, reps)
     _retail_orders(db, rt, today)
+    _accounting(db, random.Random(rnd_seed + 400), today)                              # 20.11: учёт в Алапе
     for m in months_list:
         db.put(f"planst:{m}", {"status": "ok", "note": "", "hist": [{"ts": f"{m}-01T09:00", "who": "Директор",
                                                                      "status": "ok", "note": ""}]})
@@ -394,6 +395,58 @@ def _retail_orders(db, shop, today):
                              "late_days": R.randint(4, 25) if late else 0, "debt": round(amt / o["months"] * R.uniform(1, 2.5), -3) if late else 0})
     db.put("rt_orders", {"asm_word": asm_word, "stages": STAGES if asm_word else STAGES[:3], "items": orders})
     db.put("rt_inst", inst)
+
+
+def _accounting(db, R, today):
+    """📦 Учёт в Алапе: товары с себестоимостью из среза остатков, приходы (история, один ждёт склад, черновик),
+    кому владелец открыл закрытые цифры и журнал просмотров (modules/acc.py)."""
+    import json
+    on = db.one('SELECT MAX("on") AS d FROM stock')["d"]
+    if not on:
+        return
+    price = {x["code"]: x["a"] / x["q"] for x in db.q("SELECT code, SUM(qty) AS q, SUM(amount) AS a FROM item_sales "
+                                                    "GROUP BY code HAVING q > 0")}
+    grp = {g["code"]: g["name"] for g in db.q("SELECT code, name FROM groups")}
+    goods = []
+    for x in db.q('SELECT code, name, supplier, qty FROM stock WHERE "on" = ? ORDER BY code', on):
+        p = round(price.get(x["code"]) or R.uniform(300, 3000), -1)
+        cost = round(p / R.choice([1.25, 1.35, 1.45, 1.5, 1.55, 1.6, 1.7]), 2)
+        goods.append((x["code"], x["name"], x["name"].split(" · ")[0], p, cost, x["qty"], x["supplier"]))
+    db.c.executemany("INSERT OR REPLACE INTO goods (code, name, grp, price, cost, qty, supplier, ts) VALUES (?,?,?,?,?,?,?,?)",
+                     [(*g, on) for g in goods])
+    es = db.employees()
+    pos = lambda p: [e for e in es if e["position"] == p]                   # noqa: E731
+    short = lambda e: f"{e['fio'].split()[0]} {e['fio'].split()[1][0]}." if e else ""   # noqa: E731
+    buyers, heads, acc = pos("buyer"), pos("buy_head"), pos("accountant")
+    by_sup = {}
+    for g in goods:
+        by_sup.setdefault(g[6], []).append(g)
+    sups = sorted(by_sup)
+    n = 410
+    for k in range(9):
+        sup = sups[k % len(sups)]
+        b = buyers[k % len(buyers)] if buyers else None
+        lines = [[g[0], R.choice([4, 6, 10, 12, 20, 30]), round(g[4] * R.uniform(0.95, 1.06), -1)] for g in R.sample(by_sup[sup], 3)]
+        if k < 7:
+            st, day = "done", today - timedelta(days=24 - 3 * k)
+            got = [[c, q, p, q if R.random() > 0.15 else q - 1] for c, q, p in lines]
+            note = "Недостача: 1 шт" if any(x[3] < x[1] for x in got) else ""
+        else:
+            st, day = ("sent", today) if k == 7 else ("draft", today - timedelta(days=1))
+            got, note = [[c, q, p, None] for c, q, p in lines], ""
+        n += 1
+        db.x("INSERT INTO receipts (id, no, day, supplier, status, pay, author, author_id, lines, note, ts, done_ts, done_by) "
+             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", n, f"{R.randint(1000, 4999)}", day.isoformat(), sup, st,
+             R.choice(["debt", "debt", "paid"]), short(b), b["id"] if b else None, json.dumps(got), note,
+             f"{day.isoformat()}T10:15:00", f"{day.isoformat()}T15:40:00" if st == "done" else None,
+             short(pos("storekeeper")[0]) if st == "done" and pos("storekeeper") else "")
+    people = [e["id"] for e in (heads[:1] + buyers[:1] + acc[:1])]
+    db.put("secret", {"people": people, "support": True, "open": {}})
+    y = today - timedelta(days=1)
+    log = [(f"{y}T17:40:00", short(acc[0]) if acc else "Бухгалтер", "Бухгалтер", "товары с себестоимостью", "", 0),
+           (f"{y}T14:32:00", "Поддержка Алапы", "admin", "открыла закрытые цифры на 30 мин", "настраивали приход по вашей просьбе", 1),
+           (f"{today}T11:05:00", short(buyers[0]) if buyers else "Закупки", "Менеджер по закупкам", f"завёл приход №{n - 1} с ценами закупки", "", 0)]
+    db.c.executemany("INSERT INTO secret_log (ts, who, role, what, why, support) VALUES (?,?,?,?,?,?)", log)
 
 
 def _trips(db, R, cal, end, sales, drivers):
