@@ -19,6 +19,10 @@ class Ctx:
         self.demo = app.demo
         self.session = self._load_session()
         self.industry = self.session.get("industry", app.cfg.industry) if self.demo else app.cfg.industry
+        from core.config import SEGMENTS
+        from core.ui.retail import has_shops
+        seg = self.session.get("segment") if self.demo else None       # Адам 20.11: опт / опт + розница / розница
+        self.segment = seg if seg in SEGMENTS else ("opt" if self.demo or not has_shops(app.cfg) else "mix")
         self.office = app.office()
         guest = None
         if self.demo and app.demo_gate:              # демо по приглашению: у каждого гостя своя копия фирмы
@@ -50,13 +54,17 @@ class Ctx:
     def _hidden(self):
         """Демо (Адам 17.11: «что в сборке — то и везде»): отделы, выключенные в «Собрать», и люди сверх выбранного числа
         не показываются нигде — ни в фонде, ни в командах, ни в ролях. Директор, админ и бухгалтер остаются всегда."""
+        from core.ui.retail import segment_hide
+        seg = segment_hide(self.cfg, self.db._employees(active=None), self.segment)
         if not isinstance(self.session.get("funcs"), list):
-            return frozenset()
+            return frozenset(seg)
         counts = self.session.get("counts") or {}
         keep_roles = {"owner", "admin", "accountant"}
         lead = {"head": 0, "sv": 1}
-        hide, by = set(), {}
+        hide, by = set(seg), {}
         for e in self.db._employees(active=None):
+            if e["id"] in seg:
+                continue
             d = self.cfg.dept(e["dept"])
             code = E.dept_package(d.kind) if d else None
             if e["role"] in keep_roles or not code:
@@ -126,6 +134,10 @@ class Ctx:
 
     def _default_for(self, role):
         es = self.db.employees()
+        from core.ui.retail import shop_dept
+        sd = shop_dept(self.cfg)
+        if sd and self.segment != "retail":            # «Торговый» и «Супервайзер» — из опта; магазины — своими должностями
+            es = [e for e in es if e["dept"] != sd] or es
         if role == "rep":
             reps = [e for e in es if e["role"] == "rep"]
             if reps:

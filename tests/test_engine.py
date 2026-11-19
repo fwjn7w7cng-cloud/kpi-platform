@@ -52,7 +52,7 @@ class Demo(unittest.TestCase):
         dept = self.k.scope("dept", "sales")
         self.assertAlmostEqual(dept["sales"].fact, sum(self.k.emp(i)["sales"].fact for i in ids), places=2)
         self.assertAlmostEqual(dept["sales"].plan, sum(self.k.emp(i)["sales"].plan for i in ids), places=2)
-        teams = sum(self.k.scope("team", t.id)["sales"].fact for t in self.cfg.teams)
+        teams = sum(self.k.scope("team", t.id)["sales"].fact for t in self.cfg.teams_of("sales"))
         self.assertAlmostEqual(teams, dept["sales"].fact, places=2)
 
     def test_spread_of_performance(self):

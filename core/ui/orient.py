@@ -8,13 +8,16 @@
 import re
 
 from core.access import editions as E
-from core.config import INDUSTRIES
+from core.config import INDUSTRIES, SEGMENTS
 from core.ui.kit import Button, Reply, View, rows
 from core.ui.registry import MENU, screen, text_input
 
 ROLE_LABELS = [("🧑‍💼 Торговый", "rep"), ("👥 Супервайзер", "sv"), ("🏢 Руководитель продаж", "head"),
                ("👔 Директор", "owner"), ("🧾 Бухгалтер", "accountant"), ("🛠 Администратор", "admin")]
 PEOPLE_IN_BAR = 6
+SEG_HINT = {"opt": "торговые ездят по магазинам, дебиторка, маршруты",
+            "mix": "отдел продаж и свои магазины в одной фирме",
+            "retail": "только магазины: смены, касса, чеки, рассрочка"}
 
 
 # ---------- полоса демо ----------
@@ -24,8 +27,16 @@ def demo_bar(ctx):
     from core.ui.screens import DEPT_ICON, _short
     from core.ui.tariff import base_of
     allowed = E.PRESETS[base_of(ctx)]["roles"]
-    roles = [[t, f"sw:role:{r}"] for t, r in ROLE_LABELS if r in allowed]
+    seg = getattr(ctx, "segment", "opt")
+    drop = {"rep", "sv", "head"} if seg == "retail" else set()          # розница: торговых и супервайзеров нет
+    roles = [[t, f"sw:role:{r}"] for t, r in ROLE_LABELS if r in allowed and r not in drop]
     have = {e["position"] for e in ctx.db.employees()}
+    from core.ui.retail import shop_dept
+    sd = shop_dept(ctx.cfg)
+    for p in ctx.cfg.positions:                                       # свои магазины — должностями (Адам 20.11)
+        if sd and p["dept"] == sd and p["id"] in have:
+            roles.insert(len(roles) - 2 if len(roles) > 2 else len(roles),
+                         [{"shop": "🏬 ", "seller": "🛍 "}.get(p.get("duty"), "🏬 ") + p["name"], f"sw:pos:{p['id']}"])
     for d in ctx.cfg.departments:
         if d.kind == "sales":
             continue
@@ -34,20 +45,23 @@ def demo_bar(ctx):
                 roles.append([f"{DEPT_ICON.get(d.kind, '🏬')} {p['name']}", f"sw:pos:{p['id']}"])
     people = [[f"{_short(e['fio'])} · {(ctx.cfg.position(e['position']) or {}).get('name', '')[:14]}", f"sw:as:{e['id']}"]
               for e in ctx.db.employees()[:PEOPLE_IN_BAR]]
-    role_t = ctx.position_name if ctx.role in ("staff", "head") and ctx.position_name else \
+    shopish = ctx.duty in ("seller", "shop")
+    role_t = ctx.position_name if (ctx.role in ("staff", "head") or shopish) and ctx.position_name else \
         ctx.cfg.role_title(ctx.role) if ctx.role not in ("guest", "admin") else "Администратор"
     if ctx.me and ctx.session.get("as"):
         role_t = f"{role_t} · {_short(ctx.me['fio'])}"
     cur = f"sw:as:{ctx.session['as']}" if ctx.session.get("as") else f"sw:role:{ctx.role}"
-    if ctx.me and ctx.role in ("staff", "head") and not ctx.session.get("as"):
+    if ctx.me and (ctx.role in ("staff", "head") or shopish) and not ctx.session.get("as"):
         cur = f"sw:pos:{ctx.me['position']}"
     short_t = {"Торговый представитель": "Торговый", "Руководитель продаж": "Рук. продаж", "Менеджер по закупкам": "Закупщик",
                "Диспетчер логистики": "Диспетчер", "Специалист по кадрам": "Кадры", "Начальник логистики": "Нач. логистики",
-               "Заведующий складом": "Зав. складом", "Начальник закупок": "Нач. закупок"}
-    base_t = ctx.position_name if ctx.role in ("staff", "head") and ctx.position_name else \
+               "Заведующий складом": "Зав. складом", "Начальник закупок": "Нач. закупок",
+               "Директор магазина": "Дир. магазина", "Продавец-консультант": "Продавец"}
+    base_t = ctx.position_name if (ctx.role in ("staff", "head") or shopish) and ctx.position_name else \
         ctx.cfg.role_title(ctx.role) if ctx.role not in ("guest", "admin") else "Администратор"
     return {"role": role_t, "short": short_t.get(base_t, base_t), "cur": cur, "roles": roles, "people": people, "more": "sw:who",
             "industry": INDUSTRIES[ctx.industry], "industries": [[t, f"sw:ind:{k}"] for k, t in INDUSTRIES.items()],
+            "segment": SEGMENTS[seg], "segments": [[t, f"sw:seg:{k}", SEG_HINT[k]] for k, t in SEGMENTS.items()] if sd else [],
             "build": "sw:ed", "find": "find"}
 
 

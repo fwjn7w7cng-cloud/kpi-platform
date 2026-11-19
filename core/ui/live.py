@@ -213,8 +213,12 @@ def dept_tiles(ctx):
     for d in ctx.cfg.departments:
         if not ctx.cfg.dept_on(d.id):
             continue
-        to = "sales" if d.kind == "sales" else f"deptv:{d.kind}"
+        from core.ui.retail import shop_dept
+        shop = d.id == shop_dept(ctx.cfg)
+        to = "rto" if shop else "sales" if d.kind == "sales" else f"deptv:{d.kind}"
         n = len([e for e in k.employees.values() if e["dept"] == d.id and e["active"]])
+        if d.kind == "sales" and not n:              # демо: отдел не в этом сегменте (опт без магазинов, розница без торговых)
+            continue
         v, s = f"{n} чел.", ""
         if d.kind == "sales":
             m = k.scope("dept", d.id)
@@ -224,7 +228,7 @@ def dept_tiles(ctx):
                 if e["dept"] == d.id and e["role"] in SELLERS and e["active"]:
                     es = k.emp(e["id"])["sales"]
                     low += bool(es.plan and es.pct < es.need * 0.8)
-            s = f"{low} торговых отстают от графика" if low else "все идут по графику"
+            s = (f"{low} {'продавцов' if shop else 'торговых'} отстают от графика" if low else "все идут по графику")
         elif d.kind in ("warehouse", "purchasing") and ctx.can("stock"):
             try:
                 from modules import stock as SM

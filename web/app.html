@@ -154,6 +154,14 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
   white-space: nowrap; cursor: pointer; color: var(--ink); flex: none; }
 .dbar button b { font-weight: 600; } .dbar button.go { background: var(--accent); color: #fff; font-weight: 600; }
 .dbar button.sq { padding: 6px 9px; }
+.segs { display: grid; gap: 8px; margin-bottom: 14px; }
+.segs button { text-align: left; border: 1px solid var(--line, #ddd); background: var(--surface); border-radius: 6px; padding: 10px 12px; display: grid; gap: 2px; color: inherit; font: inherit; }
+.segs button b { font-weight: 600; } .segs button span { font-size: 12.5px; color: var(--ink-2); }
+.segs button.on { border: 2px solid var(--ink, #222); padding: 9px 11px; }
+.urow .ustp { flex-basis: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; margin-top: 6px; }
+.urow .ustp span { font-size: 11.5px; text-align: center; padding: 3px 4px; border-radius: 4px; background: var(--sunk); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.urow .ustp span.done { background: var(--good-soft); color: var(--good); }
+.urow .ustp span.cur { background: var(--ink, #222); color: var(--surface, #fff); font-weight: 600; }
 .chips2 { display: flex; flex-wrap: wrap; gap: 6px; } .chips2 button { border: 1px solid var(--line, #e5e5ea); background: var(--surface);
   border-radius: 20px; padding: 7px 11px; font-size: 13.5px; cursor: pointer; } .chips2 button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .sheet h3 { font-size: 13px; color: var(--ink-2); margin: 8px 0 2px; text-transform: uppercase; letter-spacing: .05em; }
@@ -679,9 +687,10 @@ const UI = {
   tiles(d, t) { return uHead(t) + `<div class="utiles">${(d.items || []).map(([i, ti, v, s, to]) =>
     `<button class="utile"${uTo(to)}><span class="ic">${ic(i)}</span><b>${esc(ti)}</b><span class="v">${esc(v)}</span><span class="s">${esc(s)}</span></button>`).join("")}</div>`; },
   rows(d, t) { return uHead(t, d.right ? `<small>${esc(d.right)}</small>` : "") + `<div class="ubox">${(d.items || []).map(x =>
-    `<div class="urow" style="${x.bar ? "flex-wrap:wrap" : ""}"><div class="tx"><b>${esc(x.t)}</b>${x.s ? `<span>${esc(x.s)}</span>` : ""}</div>${x.v ? `<span class="val">${esc(x.v)}</span>` : ""}` +
+    `<div class="urow" style="${x.bar || x.steps ? "flex-wrap:wrap" : ""}"><div class="tx"><b>${esc(x.t)}</b>${x.s ? `<span>${esc(x.s)}</span>` : ""}</div>${x.v ? `<span class="val">${esc(x.v)}</span>` : ""}` +
     (x.chip ? (x.chip[1] ? `<button class="uchip ${x.chip[2] || ""}"${uTo(x.chip[1])}>${esc(x.chip[0])}</button>` : `<span class="uchip ${x.chip[2] || ""}">${esc(x.chip[0])}</span>`) : "") +
-    (x.bar ? `<div class="ubar ${x.bar[1] || ""}"><i style="width:${Math.max(2, Math.min(100, x.bar[0] * 100)).toFixed(1)}%"></i></div>` : "") + `</div>`).join("") ||
+    (x.bar ? `<div class="ubar ${x.bar[1] || ""}"><i style="width:${Math.max(2, Math.min(100, x.bar[0] * 100)).toFixed(1)}%"></i></div>` : "") +
+    (x.steps ? `<div class="ustp">${x.steps.map(([l, st]) => `<span class="${st || ""}">${esc(l)}</span>`).join("")}</div>` : "") + `</div>`).join("") ||
     `<div class="urow"><div class="tx"><span>${esc(d.empty || "Пусто")}</span></div></div>`}${d.foot ? `<div class="urow">${(d.foot || []).map(([l, to]) => `<button class="ub pri" style="flex:1"${uTo(to)}>${esc(l)}</button>`).join("")}</div>` : ""}</div>`; },
   explain(d, t) { return uHead(t) + `<div class="ubox">${(d.items || []).map(([n, v, why, neg]) => { const id = "x" + (++UID);
     return `<div class="upl2"><button data-tog="${id}"><span class="nm">${esc(n)}</span><span class="sm${neg ? " neg" : ""}">${esc(v)}</span><span class="ar">${why ? "▾" : ""}</span></button>${why ? `<div class="why" id="${id}" hidden>${esc(why)}</div>` : ""}</div>`; }).join("")}` +
@@ -1201,11 +1210,17 @@ function go(to, top) {
   if (to && to.startsWith("url:")) { const u = to.slice(4); if (/^https:\/\//.test(u)) { const w = window.open(u, "_blank", "noopener"); if (!w) location.href = u; } return; }   // кнопка-ссылка: в браузер
   if (top) S.cur = to; call("press", {to, top: !!top});
 }
+// Сегмент фирмы (Адам 20.11): опт / опт + розница / розница — карточками с пояснением, рядом с отраслью
+function segHtml(b) {
+  if (!b.segments || !b.segments.length) return "";
+  return `<h2>Сегмент фирмы</h2><div class="segs">${b.segments.map(([l, to, h]) =>
+    `<button data-tab="${esc(to)}"${l === b.segment ? ' class="on"' : ""}><b>${esc(l)}</b><span>${esc(h)}</span></button>`).join("")}</div>`;
+}
 function sheet(html) { $("sheetBody").innerHTML = html; $("sheet").hidden = false; }
 // Полоса демо (Адам 09.11): «Смотрю как» и отрасль — листом, одно нажатие — экран перестроился; «Собрать» и поиск — сразу.
 function dbar() {
   const el = $("dbar"), b = S.demo; el.hidden = true; if (!b) return;
-  el.innerHTML = `<div class="sc"><button data-d="role" title="Чьими глазами смотрим">👤 <b>${esc(b.role)}</b> ▾</button><button data-d="ind" title="Отрасль демо-фирмы">🏭 ${esc(b.industry)} ▾</button></div>` +
+  el.innerHTML = `<div class="sc"><button data-d="role" title="Чьими глазами смотрим">👤 <b>${esc(b.role)}</b> ▾</button><button data-d="ind" title="Отрасль и сегмент демо-фирмы">🏭 ${esc(b.industry)}${b.segments && b.segments.length ? " · " + esc(b.segment) : ""} ▾</button></div>` +
     `<button class="go" data-tab="${esc(b.build)}">🧩 Собрать</button><button class="sq" data-tab="${esc(b.find)}" aria-label="Найти">🔍</button>`;
 }
 $("dbar").addEventListener("click", e => {
@@ -1214,7 +1229,7 @@ $("dbar").addEventListener("click", e => {
   const b = S.demo, chip = ([l, to]) => `<button data-tab="${esc(to)}"${to === b.cur ? ' class="on"' : ""}>${esc(l)}</button>`;
   if (x.dataset.d === "role") sheet(`<h2>Чьими глазами смотреть</h2><div class="chips2">${b.roles.map(chip).join("")}</div>` +
     `<h3>Или конкретный человек</h3><div class="chips2">${b.people.map(chip).join("")}<button data-tab="${esc(b.more)}">Все люди ›</button></div>`);
-  else sheet(`<h2>Отрасль демо-фирмы</h2><p class="bhint">Названия клиентов, товаров и групп — как в этой отрасли.</p><div class="chips2">${b.industries.map(chip).join("")}</div>`);
+  else sheet(segHtml(b) + `<h2>Отрасль</h2><p class="bhint">Названия клиентов, товаров и групп — как в этой отрасли.</p><div class="chips2">${b.industries.map(([l, to]) => `<button data-tab="${esc(to)}"${l === b.industry ? ' class="on"' : ""}>${esc(l)}</button>`).join("")}</div>`);
 });
 $("sheet").addEventListener("click", e => {
   if (e.target === $("sheet")) { $("sheet").hidden = true; return; }
@@ -1228,7 +1243,7 @@ $("role").addEventListener("click", () => {
   const chip = ([l, to]) => `<button data-tab="${esc(to)}"${to === b.cur ? ' class="on"' : ""}>${esc(l)}</button>`;
   sheet(`<h2>Чьими глазами смотреть</h2><p class="bhint">У каждого — свой экран и своя зарплата.</p><div class="roles2">${b.roles.map(chip).join("")}</div>` +
     `<h3>Или конкретный человек</h3><div class="chips2">${b.people.map(chip).join("")}<button data-tab="${esc(b.more)}">Все люди ›</button></div>` +
-    `<h3>Отрасль · ${esc(b.industry)}</h3><div class="chips2">${b.industries.map(chip).join("")}</div>` +
+    segHtml(b).replace("<h2>", "<h3>").replace("</h2>", "</h3>") + `<h3>Отрасль · ${esc(b.industry)}</h3><div class="chips2">${b.industries.map(([l, to]) => `<button data-tab="${esc(to)}"${l === b.industry ? ' class="on"' : ""}>${esc(l)}</button>`).join("")}</div>` +
     (S.extra.length ? `<h3>Ещё</h3><div class="chips2">${S.extra.map(chip).join("")}</div>` : ""));
 });
 $("tools").addEventListener("click", () => S.tools.length === 1 ? go(S.tools[0][1], true) :

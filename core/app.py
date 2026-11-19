@@ -72,6 +72,7 @@ class App:
         importlib.import_module("core.ui.screens")
         importlib.import_module("core.ui.tariff")
         importlib.import_module("core.ui.builder")
+        importlib.import_module("core.ui.retail")          # свои магазины: опт + розница / розница (Адам 20.11)
         importlib.import_module("core.ui.orient")          # полоса демо, приветствие, поиск (Адам 09.11)
         importlib.import_module("core.billing")
         importlib.import_module("core.control")

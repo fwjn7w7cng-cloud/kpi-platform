@@ -47,7 +47,7 @@ def home(ctx):
         return _dept_off(ctx)
     from core.ui import orient
     role_t = ctx.cfg.role_title(ctx.role) if ctx.role in R.ROLES else "Администратор"
-    if ctx.role in ("staff", "head") and ctx.position_name:
+    if (ctx.role in ("staff", "head") or ctx.duty in ("seller", "shop")) and ctx.position_name:
         role_t = ctx.position_name
     v = View(ctx.cfg.name, f"{ctx.name()} · {role_t} · {month_title(ctx.month).lower()}")
     if orient.welcome_due(ctx):                       # Адам 17.11: приветствие — карточкой сверху главной, не отдельным экраном
@@ -142,8 +142,17 @@ def _live_home(ctx, v):
     """Главная по роли — живыми блоками. False — роль без живого экрана (старый вид)."""
     from core.ui import live
     try:
-        if ctx.role in ("owner", "admin", "accountant") and ctx.scope == "all":
+        from core.ui import retail
+        if ctx.role in ("owner", "admin", "accountant") and ctx.scope == "all" and ctx.segment != "opt" and retail.has_shops(ctx.cfg):
+            retail.owner_home(ctx, v)                  # Адам 20.11: свои магазины
+        elif ctx.role in ("owner", "admin", "accountant") and ctx.scope == "all":
             live.owner_home(ctx, v)
+        elif ctx.duty == "shop" and ctx.me:
+            retail.shop_home(ctx, v)
+        elif ctx.duty == "seller" and ctx.me:
+            retail.seller_home(ctx, v)
+        elif ctx.duty == "assembler" and ctx.me:
+            retail.asm_home(ctx, v)
         elif ctx.role in ("head", "sv") and ctx.dept_kind == "sales":
             live.head_home(ctx, v)
         elif ctx.role in SELLERS and ctx.me:
@@ -959,6 +968,14 @@ def demo(ctx, what=None, value=None, *more):
         return home(ctx.app.ctx(ctx.user_id))
     if what == "ind":
         return industry_window(ctx)
+    if what == "seg" and value:                      # Адам 20.11: опт / опт + розница / розница — рядом с отраслью
+        from core.config import SEGMENTS
+        if value in SEGMENTS:
+            ctx.session["segment"], ctx.session["as"] = value, None
+            if value == "retail" and ctx.session.get("role") in ("head",):
+                ctx.session["role"] = "owner"
+            ctx.save()
+        return home(ctx.app.ctx(ctx.user_id))
     from core.ui import tariff as T
     if what == "ed" and value in E.PRESETS:
         return T.set_packages(ctx, E.PRESETS[value]["packages"], base=value)

@@ -17,7 +17,7 @@ from core.calendar import Month, first_day, last_day, month_of, shift_month
 from core.data.model import (Client, Dataset, Debt, Group, ItemSale, Payment, Return, Sale, Stock, Trip, TripStop,
                              Visit)
 
-VERSION = 3          # поменялся наполнитель — поднять: демо-базы пересоздадутся сами при следующем открытии (30.10: вся фирма)
+VERSION = 4          # поменялся наполнитель — поднять: демо-базы пересоздадутся сами при следующем открытии (20.11: свои магазины)
 
 # команда → (сколько торговых, характеры: множитель темпа к плану)
 TEAMS = {"north": [1.22, 1.06, 0.98, 0.93, 0.74], "south": [1.12, 1.01, 0.95, 0.88, 0.79], "key": [1.04, 0.97]}
@@ -63,6 +63,7 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=4):
     newbie = db.add_employee(fio, "sales", team="south", position="rep", role="newbie", hired=start_new)
     db.c.execute("UPDATE employees SET fired = ?, active = 0 WHERE id = ?", ((start_new - timedelta(days=1)).isoformat(), leaver[0]))
     db.bind_key(leaver[1], newbie, since=start_new)
+    rt = _retail_people(db, cfg, random.Random(rnd_seed + 300), industry, today, m0)     # 20.11: свои магазины
 
     # ---------- справочники ----------
     groups = V.GROUPS[industry]
@@ -83,6 +84,7 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=4):
         form = R.choice(V.FORMS)
         name = f"{form} «{shop}»" if form in ("ООО", "Магазин", "Маг.") else f"ИП {R.choice(V.SURNAMES_M)} · {shop}"
         cli_rows.append(Client(c[0], name, R.choice(V.TOWNS), f"8 000 000-{int(c[0]) % 100:02d}-{int(c[0]) % 97:02d}"))
+    cli_rows += [Client(f"R-{t}", f"Покупатели · {n}", "", "") for t, n in rt["shops"]]
     db.load(Dataset("clients", m0, last_day(months_list[-1]), rows=cli_rows, source="seed"))
 
     skill_of = {key: skill for _, key, _, skill in reps}
@@ -135,8 +137,9 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=4):
             d = R.choice([x for x in workdays if not current or x < today] or workdays[:1])
             pays.append(Payment(d, key, ccode, round(paid, -1)))
         end = min(cal.end, today - timedelta(days=1)) if current else cal.end
+        rsales = _retail_month(db, rt, month, cal, today, groups, trend)
         if end >= cal.start:
-            db.load(Dataset("sales", cal.start, cal.end, rows=[s for s in sales if s.day <= end], source="seed"))
+            db.load(Dataset("sales", cal.start, cal.end, rows=[s for s in sales + rsales if s.day <= end], source="seed"))
             db.load(Dataset("payments", cal.start, cal.end, rows=[p for p in pays if p.day <= end], source="seed"))
         db.load(Dataset("visits", cal.start, cal.end, rows=visits, source="seed"))
         if end >= cal.start:
@@ -188,11 +191,14 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=4):
                 else:
                     db.set_plan(month, eid, k, v, who="seed", src="план")
 
+        for eid, plan in rt["plans"].get(month, {}).items():
+            db.set_plan(month, eid, "sales", plan, who="seed", src="план")
+
     # ---------- табель, правки, статусы месяцев ----------
     cur = months_list[-1]
     cal = Month(cfg, cur, today)
     passed = cal.passed_days()
-    everyone = db.employees()
+    everyone = [e for e in db.employees() if e["dept"] != "shops" and e["position"] != "assembler"]   # магазины — свой генератор
     if passed:
         pick = R.sample(everyone, min(6, len(everyone)))
         for i, e in enumerate(pick):
@@ -232,11 +238,162 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=4):
     _quiz(db, R, today)
     _company(db, cfg, random.Random(rnd_seed + 100), today, months_list, newbie, start_new)
     _tasks_more(db, random.Random(rnd_seed + 200), today, owner, rop, reps)
+    _retail_orders(db, rt, today)
     for m in months_list:
         db.put(f"planst:{m}", {"status": "ok", "note": "", "hist": [{"ts": f"{m}-01T09:00", "who": "Директор",
                                                                      "status": "ok", "note": ""}]})
     db.put("seeded", {"industry": industry, "seeded": today.isoformat(), "months": months_list, "v": VERSION})
     return {"reps": len(reps), "clients": len(clients), "months": months_list}
+
+
+# ---------- свои магазины (Адам 20.11: сегменты «Опт + розница» и «Розница») ----------
+# Всё со своим генератором случайностей: цифры опта от магазинов не сдвигаются.
+SHOP_SELLERS = {"s1": 3, "s2": 3, "s3": 2}
+AVG_CHECK = {"furniture": 24000, "electronics": 18000, "building": 7000}       # остальным отраслям — 2 500
+BUYERS = ["Алиев Х.", "Байсаров И.", "Умаров М.", "Хасанов Р.", "Цакаев А.", "Исаев Т.", "Магомадов С.", "Абдулаев З.",
+          "Эльмурзаев Б.", "Алиев Р.", "Хасанов М.", "Умаров А."]
+
+
+def _retail_people(db, cfg, R, industry, today, m0):
+    """Директора магазинов, продавцы, сборщики. Без должностей в анкете — магазинов нет."""
+    out = {"R": R, "industry": industry, "shops": [], "sellers": [], "heads": {}, "asm": [], "plans": {}, "months": {}}
+    if not (cfg.position("seller") and cfg.position("shop_head")):
+        return out
+    have = {" ".join(e["fio"].split()[:2]).lower() for e in db.employees(active=None)}
+    gen = _names(R)
+
+    def fresh():
+        for fio, key in gen:
+            if key.lower() not in have:
+                have.add(key.lower())
+                return fio, key
+    shops = [{"id": t.id, "name": t.name} for t in cfg.teams_of("shops")]
+    out["shops"] = [(t["id"], t["name"]) for t in shops]
+    for t in shops:
+        fio, key = fresh()
+        out["heads"][t["id"]] = db.add_employee(fio, "shops", team=t["id"], position="shop_head", role="sv", keys=[key],
+                                                hired=m0 - timedelta(days=R.randint(300, 1200)))
+        for i in range(SHOP_SELLERS.get(t["id"], 2)):
+            fio, key = fresh()
+            eid = db.add_employee(fio, "shops", team=t["id"], position="seller", role="rep", keys=[key],
+                                  hired=m0 - timedelta(days=R.randint(150, 1400)))
+            out["sellers"].append((eid, key, t["id"], [1.12, 0.98, 0.86][i % 3] * R.uniform(0.95, 1.05), i % 2))
+    if cfg.position("assembler") and V.ASSEMBLY.get(industry):          # сборщики — где после доставки собирают
+        for _ in range(2):
+            fio, key = fresh()
+            out["asm"].append(db.add_employee(fio, "logistics", position="assembler", role="staff", keys=[key],
+                                              hired=m0 - timedelta(days=R.randint(200, 900))))
+    return out
+
+
+def _retail_month(db, shop, month, cal, today, groups, trend):
+    """Месяц магазинов: смены через день, чеки, рассрочка; продажи — строками по продавцу и группе (для % от продаж)."""
+    if not shop["sellers"]:
+        return []
+    R = shop["R"]
+    avg = AVG_CHECK.get(shop["industry"], 2500)
+    inst_share = 0.22 if shop["industry"] in AVG_CHECK else 0.05
+    weights = [w for _, _, w in groups]
+    start, stop = cal.start, cal.end
+    data = {"checks": {}, "shifts": {}, "cash": {}, "came": {}, "inst": {}, "avg_bar": round(avg * 0.92, -2)}
+    rows = []
+    plans = {}
+    for eid, key, team, skill, off in shop["sellers"]:
+        days, checks, inst = [], {}, 0
+        exp = 0
+        d = start
+        while d <= stop:
+            if (d.toordinal() + off) % 2 == 0 or (d.weekday() == 5 and R.random() < 0.3):      # через день + субботы
+                days.append(d.isoformat())
+                n = max(1, round(55000 / avg * skill * trend * R.uniform(0.55, 1.45)))
+                exp += 55000 / avg * skill * trend * avg
+                if d < today:
+                    tot, pos = 0, 0
+                    by_g = {}
+                    for _ in range(n):
+                        amt = round(R.lognormvariate(0, 0.45) * avg * skill * 0.9, -2)
+                        g = R.choices([x[0] for x in groups], weights=weights)[0]
+                        by_g[g] = by_g.get(g, 0) + amt
+                        tot += amt
+                        pos += R.choice([1, 1, 2, 2, 3])
+                        if R.random() < inst_share:
+                            inst += 1
+                    for g, a in by_g.items():
+                        rows.append(Sale(d, key, f"R-{team}", g, a, qty=1, discount=round(R.uniform(0, 0.05), 3)))
+                    checks[d.isoformat()] = [n, pos, tot]
+                    c = data["cash"].setdefault(team, {}).setdefault(d.isoformat(), [0, 0])
+                    c[0] += tot
+            d += timedelta(days=1)
+        data["shifts"][str(eid)] = days
+        data["checks"][str(eid)] = checks
+        data["inst"][str(eid)] = inst
+        plans[eid] = round(exp * 0.95 * 0.92, -4)
+    for team, by_day in data["cash"].items():
+        for day, c in by_day.items():
+            c[1] = c[0]
+    # вчера один магазин кассу не сдал; сегодня — кто на смене и во сколько пришёл (один опоздал)
+    y = (today - timedelta(days=1)).isoformat()
+    if month == today.strftime("%Y-%m"):
+        if len(shop["shops"]) > 1 and y in data["cash"].get(shop["shops"][1][0], {}):
+            data["cash"][shop["shops"][1][0]][y][1] = None
+        came = {}
+        on = [s_ for s_ in shop["sellers"] if today.isoformat() in data["shifts"][str(s_[0])]]
+        for i, (eid, *_r) in enumerate(on):
+            came[str(eid)] = f"10:{R.choice([18, 22, 26])}" if i == 1 else f"09:{R.randint(41, 58)}"
+            if i == 1:
+                db.add_timesheet(today, eid, "late", minutes=int(came[str(eid)][3:]), who="seed")
+        data["came"] = {today.isoformat(): came}
+    shop["plans"][month] = plans
+    db.put(f"rt:{month}", data)
+    return rows
+
+
+STAGES = ["Заказ", "Оплата", "Доставка", "Сборка"]
+
+
+def _retail_orders(db, shop, today):
+    """Заказы с доставкой и рассрочка: открытые на всех этапах, закрытые за месяц — у сборщиков премия и жалобы."""
+    import json  # noqa: F401
+    if not shop["sellers"]:
+        return
+    R = random.Random(911)
+    items = V.RETAIL_ITEMS.get(shop["industry"]) or [f"{g[1]} · комплект" for g in V.GROUPS[shop["industry"]][:6]]
+    avg = AVG_CHECK.get(shop["industry"], 2500)
+    asm_word = V.ASSEMBLY.get(shop["industry"], "")
+    orders, inst = [], []
+    n = 0
+    for back in range(30, -12, -1):
+        d = today - timedelta(days=back)
+        for _ in range(R.choice([2, 3, 3, 4])):
+            n += 1
+            eid, key, team, *_r = R.choice(shop["sellers"])
+            amt = round(avg * R.uniform(1.5, 8), -3)
+            pay = R.choices(["prepay", "inst", "full"], weights=[50, 30, 20])[0]
+            deliv = d + timedelta(days=R.randint(4, 16))
+            if back < 0:                                 # будущее — не создаём
+                continue
+            if deliv < today - timedelta(days=1):
+                stage = 4                                # закрыт
+            elif deliv <= today:
+                stage = 3 if R.random() < 0.5 else 2
+            else:
+                stage = 1 if R.random() < 0.6 else 2
+            o = {"id": n, "day": d.isoformat(), "shop": team, "seller": eid, "client": R.choice(BUYERS), "item": R.choice(items),
+                 "sum": amt, "pay": pay, "prepay": round(amt * 0.5, -3) if pay == "prepay" else 0,
+                 "months": R.choice([6, 10, 12]) if pay == "inst" else 0, "deliv": deliv.isoformat(), "stage": stage,
+                 "paid": pay != "prepay" or stage >= 2 or R.random() < 0.6, "late": deliv <= today and stage < 3 and R.random() < 0.5,
+                 "asm": shop["asm"][n % len(shop["asm"])] if shop["asm"] and asm_word else None,
+                 "complaint": stage == 4 and R.random() < 0.08}
+            if not asm_word and o["stage"] == 3:
+                o["stage"] = 4
+            orders.append(o)
+            if pay == "inst":
+                late = R.random() < 0.12
+                inst.append({"id": n, "day": d.isoformat(), "shop": team, "seller": eid, "client": o["client"], "sum": amt,
+                             "first": round(amt * 0.25, -3), "months": o["months"], "late": late,
+                             "late_days": R.randint(4, 25) if late else 0, "debt": round(amt / o["months"] * R.uniform(1, 2.5), -3) if late else 0})
+    db.put("rt_orders", {"asm_word": asm_word, "stages": STAGES if asm_word else STAGES[:3], "items": orders})
+    db.put("rt_inst", inst)
 
 
 def _trips(db, R, cal, end, sales, drivers):
@@ -558,7 +715,7 @@ def _route_marks(db, R, cfg, today):
     while WEEKDAYS[y.weekday()] in cfg.weekend:
         y -= timedelta(days=1)
     reasons = ["Закрыто", "Нет денег", "Не успел", "Нет на месте"]
-    reps = [e for e in db.employees() if e["role"] in ("rep", "newbie")]
+    reps = [e for e in db.employees() if e["role"] in ("rep", "newbie") and e["dept"] != "shops"]
     got, _ = db.sales_by_emp(month_of(today))
     plans = db.plans(month_of(today))
     top = max(reps, key=lambda e: got.get(e["id"], 0) / (plans.get(e["id"], {}).get("sales") or 1e12))["id"]
@@ -591,7 +748,7 @@ def _route_marks(db, R, cfg, today):
 def _quiz(db, R, today):
     """Результаты тестов: за 3 прошлые недели у всех, за эту — у половины; новичок прошёл первый урок."""
     import json
-    people = [e for e in db.employees() if e["role"] in ("rep", "sv")]
+    people = [e for e in db.employees() if e["role"] in ("rep", "sv") and e["dept"] != "shops"]
     for back in range(4):
         d = today - timedelta(days=7 * back)
         y, w, _ = d.isocalendar()

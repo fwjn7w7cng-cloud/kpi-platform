@@ -25,6 +25,7 @@ departments:
   - {id: logistics, name: "Логистика",    kind: logistics}
   - {id: purchasing, name: "Закупки",     kind: purchasing}
   - {id: office,    name: "Офис",         kind: office}
+  - {id: shops,     name: "Магазины",     kind: sales}    # свои магазины (сегмент «Опт + розница» / «Розница», Адам 20.11)
 
 # Линии — направления продаж (бренды, юрлица). У простой фирмы — одна.
 lines:
@@ -34,6 +35,9 @@ teams:
   - {id: north, name: "Команда Север",     dept: sales, line: main}
   - {id: south, name: "Команда Юг",        dept: sales, line: main}
   - {id: key,   name: "Ключевые клиенты",  dept: sales, line: main}
+  - {id: s1,    name: "ТЦ «Гранд»",        dept: shops, line: main}
+  - {id: s2,    name: "Салон на Победы",   dept: shops, line: main}
+  - {id: s3,    name: "Склад-магазин",     dept: shops, line: main}
 
 # Должности: кто в какой роли и по какой схеме получает зарплату; duty — обязанность внутри отдела
 # (driver — «Мой день» водителя, dispatcher — отметки водителей и ГСМ, hr — кадры)
@@ -52,6 +56,9 @@ positions:
   - {id: accountant, name: "Бухгалтер",              dept: office,    role: accountant, pay: salary}
   - {id: manager,    name: "Офис-менеджер",          dept: office,    role: staff,      pay: salary}
   - {id: director,   name: "Директор",               dept: office,    role: owner,      pay: none}
+  - {id: shop_head,  name: "Директор магазина",      dept: shops,     role: sv,         pay: shop,     duty: shop}
+  - {id: seller,     name: "Продавец-консультант",   dept: shops,     role: rep,        pay: seller,   duty: seller}
+  - {id: assembler,  name: "Сборщик",                dept: logistics, role: staff,      pay: assembler, duty: assembler}
 
 # Подписи ролей — как их называют в этой компании (необязательно)
 roles:
@@ -110,6 +117,21 @@ pay_schemes:
     - {type: per_unit, unit: pickup, price: "200", name: "Привоз от поставщика"}
     - {type: fixed_bonus, name: "Без ошибок и пропусков", amount: "5 000", cut_per_miss: "1 000"}
     - {type: per_unit, unit: ret_err, price: "1 000", cut: true, name: "Ошибки при доставке"}
+    - {type: timesheet}
+  shop:
+    - {type: salary, amount: "50 000"}
+    - {type: sales_percent, rate: "0,5%", scope: team}
+    - {type: plan_bonus, metric: sales, scope: team, mode: steps, steps: [["90%", "10 000"], ["100%", "20 000"]]}
+    - {type: timesheet}
+  seller:
+    - {type: per_unit, unit: shifts, price: "1 500", name: "Оклад за смены"}
+    - {type: sales_percent, rate: "3%"}
+    - {type: per_unit, unit: inst, price: "500", name: "Рассрочка оформлена"}
+    - {type: per_unit, unit: avg_check, price: "1 700", name: "Бонус за средний чек"}
+    - {type: timesheet}
+  assembler:
+    - {type: per_unit, unit: assembly, price: "1 000", name: "Сборки"}
+    - {type: per_unit, unit: complaints, price: "1 000", cut: true, name: "Жалобы покупателей"}
     - {type: timesheet}
   salary:
     - {type: salary}
