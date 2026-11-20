@@ -47,6 +47,9 @@ def receive(ctx, name, data):
     if ctx.session.get("upto") == "gdu":                     # «📥 Товары из Excel» (modules/goodsio.py), не отчёт 1С
         from modules import goodsio
         return goodsio.receive(ctx, name, data)
+    if str(ctx.session.get("upto") or "").startswith("brand:"):   # логотип клиента из пульта (core/pult.py, «🎨 Бренд»)
+        from core import pult
+        return pult.brand_receive(ctx, ctx.session["upto"][6:], name, data)
     if ctx.demo:
         return [Reply(text="В демо цифры выдуманы — загружать некуда. У настоящего клиента здесь принимаются отчёты 1С.")]
     if not may(ctx):

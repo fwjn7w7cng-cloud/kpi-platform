@@ -16,7 +16,7 @@ from core.ui.views import View
 from modules import acc as A
 from modules import ship as SH
 
-M = "stock"
+M = "shop_sale"
 DISC = {"seller": 0.05, "shop": 0.20}                       # потолок скидки по обязанности; владелец — любая
 PAY = [["cash", "💵 Наличные"], ["card", "💳 Карта"], ["transfer", "📲 Перевод"], ["inst", "📆 Рассрочка"], ["prepay", "⏳ Предоплата"]]
 TAKE = [["self", "Сам, сейчас"], ["deliv", "🚚 Доставка"], ["asm", "🚚 + 🔧 Доставка и сборка"]]

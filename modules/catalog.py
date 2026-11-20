@@ -19,7 +19,7 @@ from core.ui.views import View
 from modules import acc as A
 from modules import ship as SH
 
-M = "stock"
+M = "goods"
 
 
 def boss(ctx):

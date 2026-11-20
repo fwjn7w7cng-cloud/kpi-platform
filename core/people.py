@@ -225,7 +225,7 @@ def card(ctx, emp_id):
     kb.append(row)
     try:
         from modules.catalog import sees_ok
-        if sees_ok(ctx, e) and ctx.can("stock"):                 # Адам 20.11: «видит магазины» у руководителя
+        if sees_ok(ctx, e) and ctx.can("goods"):                 # Адам 20.11: «видит магазины» у руководителя
             kb.append([Button("🏬 Видит магазины", f"shs:{e['id']}")])
     except ImportError:
         pass

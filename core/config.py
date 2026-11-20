@@ -81,13 +81,14 @@ class ClientConfig:
     segment: str = ""            # opt / mix / retail (Адам 20.11); пусто — по магазинам в анкете
     warehouses: list = field(default_factory=list)   # [(id, название)] складов учёта в Алапе; пусто — один «Склад» (wh)
     depts: object = None         # включённые отделы (05.11): с функциями и без («только зарплата и табель»)
+    shown: frozenset = frozenset()   # демо: функции учёта в Алапе видны, пока зритель не собрал свой набор (Адам 20.11)
 
     @property
     def modules(self):
         """Все модули, доступные клиенту: по выбранным функциям, а если их нет — по набору пакетов."""
         if self.functions is not None:
-            return E.modules_from(self.functions, self.packages)
-        return E.modules_of(self.packages)
+            return E.modules_from(self.functions, self.packages) | self.shown
+        return E.modules_of(self.packages) | self.shown
 
     def with_functions(self, functions, depts=None):
         """Копия анкеты с функциями поштучно (демо: окно набора; клиент: functions в анкете).

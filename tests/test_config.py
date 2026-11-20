@@ -95,7 +95,7 @@ class Errors(unittest.TestCase):
         self.assertEqual(cfg.edition, E.CUSTOM)
         self.assertEqual(cfg.set_title, "Продажи Старт + Склад и закупки")
         self.assertEqual(E.lock_text("clients"), "Функция · 📈 Продажи")                 # платим за функции (31.10)
-        self.assertEqual(E.lock_text("custom"), "Функция · ⭐ Дополнительно")
+        self.assertEqual(E.lock_text("branches"), "Функция · ⭐ Дополнительно")
 
     def test_own_packages_over_preset(self):
         raw = demo_raw()
@@ -145,7 +145,7 @@ class Editions(unittest.TestCase):
         eds = [E.edition_modules(x) for x in E.ORDER]
         for a, b in zip(eds, eds[1:]):
             self.assertTrue(a < b)
-        self.assertEqual(eds[-1], set(E.MODULES))           # в «Максимум» входит всё
+        self.assertEqual(eds[-1], set(E.MODULES) - set(E.ACC_FUNCS))           # в «Максимум» входит всё
         self.assertEqual(E.preset_of({"sales": "control", "stock": True, "logistics": True, "office": True}), "company")
         self.assertEqual(E.preset_of({"stock": True}), E.CUSTOM)
         self.assertEqual(E.title_of({}), "ничего не подключено")

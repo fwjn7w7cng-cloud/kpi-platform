@@ -39,12 +39,19 @@ class Ctx:
                 cfg = cfg.with_packages(self.session["packages"])
             elif self.session.get("edition") in E.PRESETS:
                 cfg = cfg.with_edition(self.session["edition"])
+            if not isinstance(self.session.get("funcs"), list):    # свой набор не собран — учёт в Алапе тоже показываем
+                import dataclasses
+                cfg = dataclasses.replace(cfg, shown=frozenset(E.ACC_FUNCS))
         else:                                         # одобренные Адамом добавления / удаления функций (core/billing)
-            b = self.office.get("billing") or {}
+            from core.billing import acc_upgrade
+            b = acc_upgrade(cfg, self.office)
             if isinstance(b.get("functions"), list):
                 cfg = cfg.with_functions(b["functions"], cfg.depts)
         from core.ui.retail import apply_edits
         self.cfg = apply_edits(cfg, self.db)          # магазины, переименованные / добавленные в приложении (Адам 20.11)
+        if not self.demo:
+            from core.payedit import apply_cfg
+            self.cfg = apply_cfg(self.cfg, self.db)   # цифры зарплаты, поправленные в пульте (Адам 20.11)
         self.db.hide = self._hidden() if self.demo else frozenset()
         self.month = self.session.get("month") or month_of(self.today)
         if self.month > month_of(self.today):

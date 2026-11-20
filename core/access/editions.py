@@ -56,11 +56,17 @@ MODULES = {
     "logistics":    ("Логистика: рейсы, «Мой день» водителя, сдельная оплата", "logistics", None),
     "fuel":         ("Контроль топлива против топливной карты", "logistics", None),
     "hr":           ("Кадры: приём, перевод, увольнение, приказы", "office", None),
-    "branding":     ("Свой бренд: логотип и название на значке, свой адрес", "max", None),
+    "branding":     ("Свой бренд: логотип и название на значке, свой адрес", "any", None),   # бесплатно у всех (Адам 20.11)
     "branches":     ("Несколько филиалов и юрлиц в одном приложении", "max", None),
     "custom":       ("Функции на заказ: 3 в месяц", "max", None),
     "processes":    ("Процессы отдела: шаги, ответственные, сроки, задания отделу", "max", None),
+    # учёт в Алапе (Адам 20.11) — без 1С; пакет «acc» не входит ни в один готовый набор, включаются только поштучно
+    "goods":        ("Учёт товаров и остатков: товары, три цены, приходы, справочники, загрузка из Excel", "acc", None),
+    "shop_sale":    ("Продажа в магазине: корзина, скидка, рассрочка, доставка", "acc", None),
+    "ship":         ("Склад и салоны: остатки по местам, погрузка, маршрутный лист, перемещения", "acc", None),
+    "opt_sale":     ("Продажа оптом: накладные в долг, выдача складом, долг и оплаты клиента", "acc", None),
 }
+ACC_FUNCS = ("goods", "shop_sale", "ship", "opt_sale")
 
 # Готовые наборы. Каждый следующий включает предыдущий.
 PRESETS = {
@@ -104,7 +110,8 @@ EDITIONS = PRESETS          # старое имя
 CUSTOM = "custom"           # «свой набор» — не совпадает ни с одним готовым
 
 # Модули, без которых другой модуль не работает (внутри пакетов выполняется само собой)
-REQUIRES = {"approval": {"payroll"}, "audit": {"payroll"}, "call_today": {"debts"}, "fuel": {"logistics"}, "warehouse": {"stock"}}
+REQUIRES = {"approval": {"payroll"}, "audit": {"payroll"}, "call_today": {"debts"}, "fuel": {"logistics"}, "warehouse": {"stock"},
+            "shop_sale": {"goods"}, "ship": {"goods"}, "opt_sale": {"goods"}}
 
 
 def normalize(packages):
@@ -255,7 +262,8 @@ def upgrade(packages, code):
 # ---------- функции (Адам 31.10: платим только за функции; отдел — папка, настройки внутри функции — бесплатно) ----------
 # код модуля: (отдел для группировки, цена по умолчанию ₽/мес). Отдел подключён, если в нём выбрана хоть одна функция.
 FUNC_GROUPS = {"all": ("💰", "Все отделы"), "sales": ("📈", "Продажи"), "stock": ("📦", "Склад и закупки"),
-               "logistics": ("🚚", "Логистика"), "office": ("👤", "Кадры и офис"), "max": ("⭐", "Дополнительно")}
+               "logistics": ("🚚", "Логистика"), "office": ("👤", "Кадры и офис"), "acc": ("🧾", "Учёт в Алапе — без 1С"),
+               "max": ("⭐", "Дополнительно")}
 FUNCS = {
     "payroll": ("all", 3000), "approval": ("all", 1000), "tasks": ("all", 2000),
     "kpi": ("sales", 3000), "route": ("sales", 2000), "debts": ("sales", 2000), "clients": ("sales", 2000),
@@ -263,8 +271,9 @@ FUNCS = {
     "forecast": ("sales", 1000), "call_today": ("sales", 1000), "watchdog": ("sales", 1000), "formulas": ("sales", 2000),
     "stock": ("stock", 3000), "warehouse": ("stock", 2000), "returns": ("stock", 1000),
     "logistics": ("logistics", 3000), "fuel": ("logistics", 1000),
+    "goods": ("acc", 3000), "ship": ("acc", 2000), "shop_sale": ("acc", 2000), "opt_sale": ("acc", 3000),
     "hr": ("office", 2000),
-    "branding": ("max", 10000), "branches": ("max", 10000), "custom": ("max", 20000), "processes": ("max", 5000),
+    "branches": ("max", 10000), "processes": ("max", 5000),
 }
 FUNC_SHORT = {
     "payroll": "Зарплата: табель, оклад, ГСМ", "approval": "Утверждение зарплаты",
@@ -274,8 +283,9 @@ FUNC_SHORT = {
     "stock": "Закупки и заказы", "warehouse": "Склад: приёмка", "returns": "Возвраты", "logistics": "Рейсы водителей",
     "fuel": "Контроль топлива", "hr": "Кадры и приказы", "branding": "Свой бренд", "branches": "Филиалы",
     "custom": "Функции на заказ", "processes": "Процессы отдела",
+    "goods": "Учёт товаров и остатков", "shop_sale": "Продажа в магазине", "ship": "Склад и салоны", "opt_sale": "Продажа оптом",
 }
-FREE = {"reminders", "audit", "staff"}          # бесплатно у всех (кабинеты — когда подключён отдел вне продаж)
+FREE = {"reminders", "audit", "staff", "branding"}          # бесплатно у всех (кабинеты — когда подключён отдел вне продаж)
 
 
 def functions_of(packages):
@@ -314,7 +324,7 @@ def packages_of(functions, depts=()):
 def modules_from(functions, packages):
     """Модули клиента, если функции выбраны поштучно: выбранные + бесплатные (кабинеты — при отделе вне продаж)."""
     out = {f for f in functions if f in MODULES}
-    out |= {"reminders", "audit"}
+    out |= {"reminders", "audit", "branding"}
     p = normalize(packages)
     if p["stock"] or p["logistics"] or p["office"]:
         out.add("staff")

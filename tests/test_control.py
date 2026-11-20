@@ -126,6 +126,71 @@ class Pult(Control):
         trail = self.demo.ctx(1).session.get("trail") or []
         self.assertFalse(any(t.startswith("mcf") for t in trail))           # «Назад» не повторит переключение
 
+    def test_card_people_pay_brand(self):
+        """Адам 20.11: люди по отделам ± в карточке, цифры зарплаты из пульта, свой бренд бесплатно и с логотипом."""
+        from core import billing as B
+        from core.access import editions as E
+        self.assertNotIn("branding", E.FUNCS)                              # свой бренд — бесплатно у всех
+        self.assertIn("branding", self.acme.ctx(700).cfg.modules)
+        self.assertNotIn("custom", E.FUNCS)
+        base = B.monthly(self.acme.ctx(700))
+        self.demo.press(1, "mcps:acme", form={"sales": "10", "stock": "3", "logistics": "0", "office": "2"})
+        c = self.acme.ctx(700)
+        self.assertEqual(B.people(c), 15)
+        self.assertEqual(B.counts_for(c, 15)["stock"], 3)
+        self.demo.press(1, "mcp:acme:sales:1")
+        c = self.acme.ctx(700)
+        self.assertEqual(B.counts_for(c, B.people(c))["sales"], 11)
+        self.assertNotEqual(B.monthly(c), base)
+        # зарплата: ставка торгового 0,4% → 0,5%
+        r = self.demo.press(1, "mce:acme:rep")[0]
+        f = next(b[1] for k, b in r.view.blocks if k == "ui" and b[0] == "form")
+        key = next(x["k"] for x in f["fields"] if x["l"].startswith("% от продаж"))
+        bad = self.demo.press(1, "mcev:acme:rep", form={key: "абв"})
+        self.assertIn("Не сохранил", text_of(bad[0]))
+        self.demo.press(1, "mcev:acme:rep", form={key: "0,5"})
+        c = self.acme.ctx(700)
+        comp = next(x for x in c.cfg.raw["pay_schemes"]["rep"] if x["type"] == "sales_percent")
+        self.assertAlmostEqual(comp["rate"], 0.005)
+        self.demo.press(1, "mcex:acme:rep")
+        comp = next(x for x in self.acme.ctx(700).cfg.raw["pay_schemes"]["rep"] if x["type"] == "sales_percent")
+        self.assertAlmostEqual(comp["rate"], 0.004)
+        # бренд: логотип → цвета сами, приложение клиента пересобирает страницу
+        from PIL import Image
+        import io
+        im = Image.new("RGB", (300, 300), (10, 30, 80))
+        for x in range(100, 200):
+            for y in range(100, 140):
+                im.putpixel((x, y), (230, 190, 90))
+        buf = io.BytesIO()
+        im.save(buf, "PNG")
+        self.demo.press(1, "mcb:acme")
+        out = self.demo.upload(1, "logo.png", buf.getvalue())
+        self.assertIn("Логотип загружен", text_of(out[0]))
+        from core import brand as BR
+        b = BR.get(self.acme.db())
+        self.assertTrue(b["logo"] and b["c1"].startswith("#"))
+        from core.transport.web import WebApi
+        api = WebApi(self.acme)
+        self.assertIn("brandcss", api.page)
+        self.assertIn("logo.png", api.static)
+        self.demo.press(1, "mcbs:acme", form={"name": "Барт", "c1": "#0B1F4D", "c2": "E0B04A"})
+        api._fresh()
+        self.assertIn("#0B1F4D", api.page)
+        self.assertIn("Барт", api.page)
+        self.demo.press(1, "mcbx:acme")
+        api._fresh()
+        self.assertNotIn("brandcss", api.page)
+
+    def test_acc_functions(self):
+        """Учёт в Алапе — отдельные функции со своей ценой; старому клиенту с учётом в Алапе включаются один раз."""
+        from core.access import editions as E
+        for f in E.ACC_FUNCS:
+            self.assertIn(f, E.FUNCS)
+        self.assertFalse(set(E.ACC_FUNCS) & E.functions_of(E.PRESETS["max"]["packages"]))   # в готовые наборы не входят
+        self.assertEqual(E.toggle_function(set(), "opt_sale"), {"opt_sale", "goods"})
+        self.assertTrue(set(E.ACC_FUNCS) <= self.demo.ctx(1).cfg.modules)                   # в демо видны
+
     def test_discounts(self):
         from core import billing as B
         base = B.monthly(self.acme.ctx(700))

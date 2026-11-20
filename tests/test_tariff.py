@@ -26,21 +26,21 @@ class Quote(unittest.TestCase):
         self.assertEqual(q["people"], 8)
 
     def test_presets_and_max(self):
-        want = {"start": 9800, "business": 20500, "control": 32000, "company": 53900, "max": 118100}   # Адам 17.11: без скидки; 19.11: задания 2 000
+        want = {"start": 9800, "business": 20500, "control": 32000, "company": 53900, "max": 88100}   # 20.11: свой бренд бесплатно, «на заказ» убрано   # Адам 17.11: без скидки; 19.11: задания 2 000
         for code, monthly in want.items():
             q = P.quote(E.preset_functions(code), E.PRESETS[code]["people"], P.DEFAULT)
             self.assertEqual(q["monthly"], monthly, code)
         q = P.quote(E.preset_functions("max"), E.PRESETS["max"]["people"], P.DEFAULT, year=True)
         self.assertTrue(q["all_depts"])
-        self.assertEqual(q["monthly"], P.rnd(35000 + 127 * 300 + 45000))         # скидки за все отделы по умолчанию нет
+        self.assertEqual(q["monthly"], P.rnd(35000 + 127 * 300 + 15000))         # скидки за все отделы по умолчанию нет
         self.assertEqual(q["discount"], 0)
-        self.assertEqual(q["setup"], 177000)
+        self.assertEqual(q["setup"], 132000)
         self.assertEqual(q["monthly_year"], P.rnd(q["monthly"] * 0.9))
 
     def test_empty_old_packages_and_only_extra(self):
         self.assertTrue(P.quote(set(), {}, P.DEFAULT)["empty"])
         self.assertEqual(P.quote({"sales": "start"}, {"sales": 2}, P.DEFAULT)["monthly"], 8000 + 600)   # старый вид — тоже понимает
-        q = P.quote({"branding"}, {}, P.DEFAULT)
+        q = P.quote({"branches"}, {}, P.DEFAULT)
         self.assertEqual((q["monthly"], q["setup"]), (10000, 20000))
 
     def test_round_numbers_by_default(self):

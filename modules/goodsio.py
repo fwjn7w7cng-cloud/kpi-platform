@@ -23,7 +23,7 @@ from core.ui.views import View
 from modules import acc as A
 from modules import ship as SH
 
-M = "stock"
+M = "goods"
 KEY = "goods_import"
 MAX_ROWS = 20000
 PRICE_T = {"price": "розничная цена", "price_opt": "оптовая цена", "cost": "закупочная цена"}

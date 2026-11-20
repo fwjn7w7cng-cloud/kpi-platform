@@ -80,6 +80,23 @@ def card_blocks(v, ctx, code, c):
                   "pairs": [["Функций", f"{len(fs)} из {len(E.FUNCS)}", ""], ["Людей", str(n), ""],
                             ["Было бы без скидок", money(q["monthly"]), ""] if ds else ["Подключение", money(B.setup_sum(c, st)), ""]]},
          fallback=[f"В месяц: {money(total)}", how])
+    cn = B.counts_for(c, n)
+    ditems = []
+    for dcode in E.DEPT_CODES:
+        icon, title = E.FUNC_GROUPS[dcode]
+        k = int(cn.get(dcode) or 0)
+        ditems.append({"t": f"{icon} {title}", "v": f"{k} чел.",
+                       "chips": [["−", f"mcp:{code}:{dcode}:-1", ""], ["＋", f"mcp:{code}:{dcode}:1", "good"]]})
+    v.ui("rows", {"items": ditems, "right": f"всего {n}", "foot": [["✏️ Вписать числа", f"mcpe:{code}"]]}, "👥 Люди по отделам",
+         fallback=[f"{x['t']}: {x['v']}" for x in ditems])
+    from core import payedit as PE
+    uses = PE.who_uses(c.cfg)
+    sch = PE.schemes(c.cfg)
+    pedit = c.db.get(PE.KEY) or {}
+    sitems = [{"t": ", ".join(names), "s": PE.summary(sch[name]) + (" · поправлено в пульте" if name in pedit else ""),
+               "chip": ["✏️", f"mce:{code}:{name}", ""]} for name, names in uses.items()]
+    v.ui("rows", {"items": sitems, "empty": "Схем зарплаты нет."}, "💵 Как считаем зарплату",
+         fallback=[f"{x['t']}: {x['s']}" for x in sitems] or ["Схем зарплаты нет."])
     for g in GROUPS:
         icon, title = E.FUNC_GROUPS[g]
         items = []
@@ -121,6 +138,222 @@ def toggle_func(ctx, code, f=""):
     parts = [f"включил «{E.FUNC_SHORT[x]}»" for x in sorted(on)] + [f"выключил «{E.FUNC_SHORT[x]}»" for x in sorted(off)]
     _set_funcs(c, new, ", ".join(parts).capitalize(), who(ctx))
     return K.card(ctx, code)
+
+
+# ---------- люди по отделам (Адам 20.11: «не могу менять количество людей в отделах») ----------
+
+def _set_counts(c, counts, by):
+    st = B.state(c)
+    counts = {k: max(0, min(5000, int(counts.get(k) or 0))) for k in E.DEPT_CODES}
+    st["counts"], st["people"] = counts, sum(counts.values())
+    B.save(c, st)
+    add_hist(c, "Люди по отделам: " + ", ".join(f"{E.FUNC_GROUPS[k][1]} {counts[k]}" for k in E.DEPT_CODES if counts[k])
+             + f" — всего {st['people']}", by)
+
+
+@screen("mcp")
+def people_step(ctx, code, dept="", step="0"):
+    no = _deny(ctx)
+    if no or not _known(ctx, code) or dept not in E.DEPT_CODES:
+        return no or K.money_screen(ctx)
+    c = K.cctx(ctx, code)
+    cn = dict(B.counts_for(c, B.people(c)))
+    try:
+        cn[dept] = max(0, int(cn.get(dept) or 0) + int(step))
+    except ValueError:
+        pass
+    _set_counts(c, cn, who(ctx))
+    return K.card(ctx, code)
+
+
+@screen("mcpe")
+def people_edit(ctx, code, note=None):
+    no = _deny(ctx)
+    if no or not _known(ctx, code):
+        return no or K.money_screen(ctx)
+    c = K.cctx(ctx, code)
+    cn = B.counts_for(c, B.people(c))
+    v = View(f"👥 Люди · {c.cfg.name}", "сколько людей в каждом отделе — сумма в месяц пересчитается сразу")
+    if note:
+        v.note(note)
+    v.ui("form", {"fields": [{"k": k, "l": f"{E.FUNC_GROUPS[k][0]} {E.FUNC_GROUPS[k][1]}", "v": str(int(cn.get(k) or 0)), "num": True}
+                             for k in E.DEPT_CODES],
+                  "send": ["Сохранить", f"mcps:{code}"], "hint": "Директор и админ клиента — бесплатно, их не считаем."}, "По отделам")
+    return Reply(view=v, buttons=[[Button("‹ Назад", f"mcc:{code}")]])
+
+
+@screen("mcps")
+def people_save(ctx, code):
+    no = _deny(ctx)
+    if no or not _known(ctx, code):
+        return no or K.money_screen(ctx)
+    form = getattr(ctx, "form", None) or {}
+    cn = {}
+    for k in E.DEPT_CODES:
+        x = str(form.get(k, "0")).replace(" ", "").strip() or "0"
+        if not x.isdigit() or int(x) > 5000:
+            return people_edit(ctx, code, note=f"{E.FUNC_GROUPS[k][1]}: нужно целое число от 0 до 5 000.")
+        cn[k] = int(x)
+    c = K.cctx(ctx, code)
+    _set_counts(c, cn, who(ctx))
+    return K.card(ctx, code, "✅ Люди по отделам сохранены.")
+
+
+# ---------- как считаем зарплату (Адам 20.11) ----------
+
+@screen("mce")
+def pay_edit(ctx, code, name="", note=None):
+    from core import payedit as PE
+    no = _deny(ctx)
+    if no or not _known(ctx, code):
+        return no or K.money_screen(ctx)
+    c = K.cctx(ctx, code)
+    sch = PE.schemes(c.cfg)
+    if name not in sch:
+        return K.card(ctx, code)
+    names = PE.who_uses(c.cfg).get(name) or [name]
+    v = View(f"💵 {', '.join(names)}", f"{c.cfg.name} · как считаем зарплату")
+    if note:
+        v.note(note)
+    v.lines([PE.describe(x) for x in sch[name] if isinstance(x, dict)], title="Сейчас")
+    fs = PE.fields(sch[name])
+    if fs:
+        v.ui("form", {"fields": fs, "send": ["Сохранить", f"mcev:{code}:{name}"],
+                      "hint": "Проценты — «0,4» или «0,4%», суммы — «25 000». Сразу в приложении клиента, со следующего пересчёта."},
+             "Цифры")
+    else:
+        v.note("Цифр для правки нет.")
+    v.note("Добавить или убрать блок (например, «бонус за АКБ») — пока через Джарвиса, следующим шагом — прямо здесь.")
+    kb = [[Button("‹ Назад", f"mcc:{code}")]]
+    if name in (c.db.get(PE.KEY) or {}):
+        kb.insert(0, [Button("↩️ Вернуть как в анкете", f"mcex:{code}:{name}")])
+    return Reply(view=v, buttons=kb)
+
+
+@screen("mcev")
+def pay_save(ctx, code, name=""):
+    from core import payedit as PE
+    no = _deny(ctx)
+    if no or not _known(ctx, code):
+        return no or K.money_screen(ctx)
+    c = K.cctx(ctx, code)
+    sch = PE.schemes(c.cfg)
+    if name not in sch:
+        return K.card(ctx, code)
+    new, problems = PE.apply_form(sch[name], getattr(ctx, "form", None) or {})
+    if problems:
+        return pay_edit(ctx, code, name, note="Не сохранил: " + "; ".join(problems[:5]))
+    if new == sch[name]:
+        return K.card(ctx, code, "Ничего не поменялось.")
+    ed = c.db.get(PE.KEY) or {}
+    ed[name] = new
+    c.db.put(PE.KEY, ed)
+    names = ", ".join(PE.who_uses(c.cfg).get(name) or [name])
+    add_hist(c, f"Зарплата «{names}»: {PE.summary(new)}", who(ctx))
+    return K.card(ctx, code, f"✅ Зарплата «{names}» сохранена.")
+
+
+@screen("mcex")
+def pay_reset(ctx, code, name=""):
+    from core import payedit as PE
+    no = _deny(ctx)
+    if no or not _known(ctx, code):
+        return no or K.money_screen(ctx)
+    c = K.cctx(ctx, code)
+    ed = c.db.get(PE.KEY) or {}
+    if ed.pop(name, None) is not None:
+        c.db.put(PE.KEY, ed)
+        add_hist(c, f"Зарплата «{name}»: вернул как в анкете", who(ctx))
+    return K.card(ctx, code, "↩️ Вернул как в анкете.")
+
+
+# ---------- 🎨 свой бренд (Адам 20.11: «приложение в цветах логотипа», бесплатно у всех) ----------
+
+def _brand_save(c, b, text, by):
+    from core import brand as BR
+    b = {**b, "ts": datetime.now().isoformat()}
+    c.office.put(BR.KEY, b)
+    add_hist(c, text, by)
+
+
+@screen("mcb")
+def brand_screen(ctx, code, note=None):
+    from core import brand as BR
+    no = _deny(ctx)
+    if no or not _known(ctx, code):
+        return no or K.money_screen(ctx)
+    c = K.cctx(ctx, code)
+    b = BR.get(c.office)
+    ctx.session["upto"] = f"brand:{code}"
+    ctx.save()
+    v = View(f"🎨 Бренд · {c.cfg.name}", "логотип, название на значке и цвета приложения клиента")
+    if note:
+        v.note(note)
+    files = [("значок.png", BR.icon(512, b))] if BR.logo_bytes(b) else []
+    if not files:
+        v.note("Логотипа пока нет — у клиента значок и цвета Алапы. Нажмите «Выбрать файлы» и пришлите PNG или JPG.")
+    v.ui("form", {"fields": [{"k": "name", "l": "Название на значке телефона", "v": b.get("name") or c.cfg.name, "w": True},
+                             {"k": "c1", "l": "Главный цвет (шапка, кнопки)", "v": b.get("c1", ""), "ph": "#0B1F4D"},
+                             {"k": "c2", "l": "Второй цвет (полоса под шапкой)", "v": b.get("c2", ""), "ph": "#E0B04A"}],
+                  "send": ["Сохранить", f"mcbs:{code}"],
+                  "hint": "Цвета бот берёт из логотипа сам — поправьте, если не понравились. Приложение клиента обновится "
+                          "при следующем открытии, значок на телефоне — тоже (на iPhone иногда только после переустановки)."}, "Как выглядит")
+    kb = [[Button("‹ Назад", f"mcc:{code}")]]
+    if b:
+        kb.insert(0, [Button("↩️ Убрать бренд — как у Алапы", f"mcbx:{code}")])
+    return Reply(view=v, buttons=kb, upload="image", files=files)
+
+
+def brand_receive(ctx, code, name, data):
+    from core import brand as BR
+    if _deny(ctx) or not _known(ctx, code):
+        return [Reply(text="Логотип загружает только администратор платформы.")]
+    if not data or len(data) > 8 * 1024 * 1024:
+        return [brand_screen(ctx, code, note="Файл пустой или больше 8 МБ.")]
+    png, err = BR.prepare(data)
+    if err:
+        return [brand_screen(ctx, code, note=err)]
+    c = K.cctx(ctx, code)
+    c1, c2 = BR.colors(png)
+    b = {**BR.get(c.office), "logo": __import__("base64").b64encode(png).decode(), "c1": c1, "c2": c2}
+    b.setdefault("name", c.cfg.name)
+    _brand_save(c, b, f"Бренд: новый логотип, цвета {c1} и {c2}", who(ctx))
+    return [brand_screen(ctx, code, note=f"✅ Логотип загружен. Цвета из логотипа: {c1} и {c2}.")]
+
+
+@screen("mcbs")
+def brand_save(ctx, code):
+    from core import brand as BR
+    no = _deny(ctx)
+    if no or not _known(ctx, code):
+        return no or K.money_screen(ctx)
+    form = getattr(ctx, "form", None) or {}
+    c = K.cctx(ctx, code)
+    b = dict(BR.get(c.office))
+    name = str(form.get("name", "")).strip()[:30]
+    cs = {}
+    for k in ("c1", "c2"):
+        x = str(form.get(k, "")).strip().upper()
+        if x and not x.startswith("#"):
+            x = "#" + x
+        if x and not BR.HEX.fullmatch(x):
+            return brand_screen(ctx, code, note=f"Цвет «{x}» — нужно как #0B1F4D (решётка и 6 знаков).")
+        cs[k] = x
+    b.update({"name": name or c.cfg.name, **{k: x for k, x in cs.items() if x}})
+    _brand_save(c, b, f"Бренд: «{b['name']}», цвета {b.get('c1', '—')} и {b.get('c2', '—')}", who(ctx))
+    return brand_screen(ctx, code, note="✅ Сохранено.")
+
+
+@screen("mcbx")
+def brand_drop(ctx, code):
+    from core import brand as BR
+    no = _deny(ctx)
+    if no or not _known(ctx, code):
+        return no or K.money_screen(ctx)
+    c = K.cctx(ctx, code)
+    c.office.put(BR.KEY, {"ts": datetime.now().isoformat()})
+    add_hist(c, "Бренд убран — как у Алапы", who(ctx))
+    return K.card(ctx, code, "↩️ Бренд убран: значок и цвета Алапы.")
 
 
 # ---------- скидки ----------
@@ -534,6 +767,10 @@ def _nw_funcs(d):
     for dep in d["depts"]:
         if dep != "sales":
             fs |= {f for f, (g, _) in E.FUNCS.items() if g == dep}
+    fs -= set(E.ACC_FUNCS)
+    if d.get("src") == "alapa":                      # учёт в Алапе — свои функции (Адам 20.11)
+        seg = d.get("seg", "opt")
+        fs |= {"goods", "ship"} | ({"shop_sale"} if seg != "opt" else set()) | ({"opt_sale"} if seg != "retail" else set())
     return {f for f in fs if E.FUNCS[f][0] != "max"}
 
 
@@ -659,6 +896,7 @@ def new_app_create(ctx):
         cc = capp.ctx(K.ADMIN)
         st = B.state(cc)
         st["people"] = sum(counts.values())
+        st["counts"] = {k: int(counts.get(k) or 0) for k in E.DEPT_CODES}
         st["setup"] = q["setup"]
         st["functions"] = sorted(fs)
         from core import demo as D

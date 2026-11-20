@@ -100,12 +100,52 @@ class WebApi:
         for uid in self._office().get("web_admins") or []:
             app.admins.add(int(uid))
         self.name = name or app_name(app.cfg.name, app.demo)      # «Алапа · демо» / «Алапа · <фирма>»
-        raw = (ROOT / "web" / "app.html").read_text(encoding="utf-8")
+        self._raw = (ROOT / "web" / "app.html").read_text(encoding="utf-8")
+        self._name0, self._short0, self._brand_ts = self.name, short, None
+        self._build({})
+        self._fresh()
+
+    def _build(self, b):
+        """Страница, значки и манифест. b — свой бренд клиента (core/brand.py): название на значке, логотип, цвета."""
         import hashlib
+        from core import brand as BR
+        name, short = self._name0, self._short0
+        if b.get("name"):
+            name = short = str(b["name"])[:30]
+        icons = {n: BR.icon(n, b) for n in (180, 192, 512)} if BR.logo_bytes(b) else {}
         # версия страницы и значка: телефон со старой страницей перезагрузится сам, значок и название не возьмёт из старой памяти
-        self.ver = hashlib.sha1((raw + self.name + short).encode() + icon_png(180)).hexdigest()[:10]
-        self.static = static_files(self.name, short, live=True, ver=self.ver)
-        self.page = raw.replace("__NAME__", self.name).replace("__SHORT__", short).replace("__VER__", self.ver)
+        self.ver = hashlib.sha1((self._raw + name + short + BR.css(b)).encode() + (icons.get(180) or icon_png(180))).hexdigest()[:10]
+        st = static_files(name, short, live=True, ver=self.ver)
+        if icons:
+            for n, data in icons.items():
+                st[f"icon-{n}.png"] = (data, "image/png")
+            st["logo.png"] = (BR.logo_bytes(b), "image/png")
+        if b.get("c1") and BR.HEX.fullmatch(b["c1"]):
+            m = json.loads(st["manifest.webmanifest"][0])
+            m["theme_color"] = BR.readable(b["c1"])
+            st["manifest.webmanifest"] = (json.dumps(m, ensure_ascii=False, indent=1).encode(), "application/manifest+json")
+        self.static = st
+        page = self._raw.replace("__NAME__", name).replace("__SHORT__", short).replace("__VER__", self.ver)
+        if BR.css(b):
+            page = page.replace("</head>", BR.css(b) + "</head>", 1)
+            page = page.replace('<meta name="theme-color" content="#1C1C1C">', f'<meta name="theme-color" content="{BR.readable(b["c1"])}">', 1)
+        if icons:
+            page = page.replace('<div class="htitle">', '<img class="hlogo" src="logo.png" alt=""><div class="htitle">', 1)
+        self.page = page
+
+    def _fresh(self):
+        """Бренд поменяли в пульте (другой процесс) — пересобрать страницу. Дёшево: одна строка из базы."""
+        if self.panel or self.app.demo:
+            return
+        try:
+            from core import brand as BR
+            b = BR.get(self._office())
+        except Exception:                               # noqa: BLE001 — база занята: остаёмся с прежним видом
+            return
+        ts = b.get("ts") or ""
+        if ts != self._brand_ts:
+            self._brand_ts = ts
+            self._build(b)
 
     def _office(self):
         return self.app.office()
@@ -237,6 +277,9 @@ class WebApi:
         if u.startswith("/api/") and self.req_guard.hit(ip or "-"):
             return 429, {"Content-Type": "text/plain; charset=utf-8", "Retry-After": "60"}, TOO_MANY.encode()
         if method == "GET":
+            if u in ("/", "/index.html") or u.lstrip("/") in self.static or u == "/api/poll":
+                with self.lock:
+                    self._fresh()
             if u in ("/", "/index.html"):
                 return 200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache",
                              "Content-Security-Policy": CSP}, self.page.encode()

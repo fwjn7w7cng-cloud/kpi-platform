@@ -90,7 +90,7 @@ def reply_json(r, files=None):
                 files[fid] = (name, data)
                 d["files"].append([name, f"/api/file/{fid}"])
     if r.upload:
-        d["upload"] = 1
+        d["upload"] = r.upload if isinstance(r.upload, str) else 1     # "image" — картинка (логотип), иначе отчёты 1С
     rows = [[[b.label, b.to or _ext(b)] + ([b.info] if getattr(b, "info", "") else []) for b in row if b.to != "home" and (b.to or _ext(b))]
             for row in r.buttons]
     d["buttons"] = [row for row in rows if row]

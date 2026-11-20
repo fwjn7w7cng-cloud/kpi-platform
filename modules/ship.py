@@ -25,7 +25,7 @@ from core.ui.registry import menu, screen
 from core.ui.views import View
 from modules import acc as A
 
-M = "stock"
+M = "ship"
 WH = "wh"
 LOAD_T = {"": ("погрузить", ""), "on": ("✓ погружено", "good"), "no": ("✕ не погружен", "bad")}
 

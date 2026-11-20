@@ -18,7 +18,7 @@ from core.ui.views import View
 from modules import acc as A
 from modules import ship as SH
 
-M = "stock"
+M = "opt_sale"
 DUE = [["7", "7 дн"], ["14", "14 дн"], ["30", "30 дн"], ["d", "своя дата"]]
 PAY = [["debt", "💳 В долг"], ["paid", "💵 Оплачено сразу"], ["part", "Частично"]]
 

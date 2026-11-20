@@ -349,7 +349,7 @@ def shop_home(ctx, v, team=None):
     live.hero(v, f"{shop_name(ctx.cfg, team)} · {month_title(ctx.month).lower()}", money(s.fact),
               f"план {money(s.plan)} · нужно к сегодня {pct(s.need)}" if s.plan else "",
               p=s.pct if s.plan else None, need=s.need if s.plan else None, md=True, ident=f"rts{team}",
-              acts=[["🧾 Продажа", "sale"], ["📋 Продажи сегодня", "sll"]] if ctx.duty == "shop" and ctx.can("stock") else [],
+              acts=[["🧾 Продажа", "sale"], ["📋 Продажи сегодня", "sll"]] if ctx.duty == "shop" and ctx.can("shop_sale") else [],
               pairs=[("Чеков", str(n), ""), ("Средний чек", money(tot / n) if n else "—", ""),
                      ("Позиций в чеке", f"{pos / n:.1f}".replace(".", ",") if n else "—", "")])
     rows = []
@@ -400,7 +400,7 @@ def seller_home(ctx, v):
     live.hero(v, f"Мой план · {month_title(ctx.month).lower()}", pct(s.pct) if s.plan else money(s.fact),
               (f"{money(s.fact)} из {money(s.plan)} · в смену по {money(left / left_sh)}" if left else "план выполнен 🎉") if s.plan else "",
               p=s.pct if s.plan else None, need=s.need if s.plan else None, pairs=pairs, ident="sel",
-              acts=[["🧾 Продажа", "sale"], ["📋 Продажи сегодня", "sll"]] if ctx.can("stock") else [])
+              acts=[["🧾 Продажа", "sale"], ["📋 Продажи сегодня", "sll"]] if ctx.can("shop_sale") else [])
     if p and p.rows:
         live.explain(v, p, "Из чего зарплата")
     mine = sorted(open_orders(ctx.db, seller=e["id"]), key=lambda o: o["deliv"])

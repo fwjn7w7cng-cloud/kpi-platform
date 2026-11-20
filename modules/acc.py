@@ -20,7 +20,7 @@ from core.ui.kit import Button, Reply, money, pct
 from core.ui.registry import menu, screen
 from core.ui.views import View
 
-M = "stock"
+M = "goods"
 OPEN_MIN = 30           # поддержка открывает закрытые цифры на 30 минут
 LOG_EVERY = 60          # один и тот же просмотр одного человека — в журнал не чаще раза в час
 LOCK = "🔒"

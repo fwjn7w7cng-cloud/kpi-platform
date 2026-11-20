@@ -51,6 +51,22 @@ def state(ctx):
     return ctx.office.get(KEY) or {}
 
 
+def acc_upgrade(cfg, office):
+    """Учёт в Алапе стал отдельными функциями (Адам 20.11). У клиента с учётом в Алапе, созданного раньше, — один раз
+    включить их, чтобы ничего не закрылось замком. Возвращает состояние оплаты (billing)."""
+    b = office.get(KEY) or {}
+    if (cfg.source or {}).get("kind") != "alapa" or office.get("acc_v1"):
+        return b
+    from core.ui.tariff import funcs_of
+    fs = set(b["functions"]) if isinstance(b.get("functions"), list) else set(funcs_of(cfg))
+    seg = cfg.segment or "opt"
+    fs |= {"goods", "ship"} | ({"shop_sale"} if seg != "opt" else set()) | ({"opt_sale"} if seg != "retail" else set())
+    b = {**b, "functions": sorted(fs)}
+    office.put(KEY, b)
+    office.put("acc_v1", True)
+    return b
+
+
 def today_(ctx):
     """Какой день смотрим: у клиента — сегодня; в демо можно листать дни (Адам 01.11: «посмотреть, что к чему»)."""
     if ctx.demo:
@@ -105,6 +121,9 @@ def people(ctx, st=None):
 def counts_for(ctx, n):
     """Люди по отделам для расчёта, когда всего людей n: разница ложится на первый подключённый отдел."""
     from core.ui.tariff import counts_of
+    st = state(ctx)                                     # люди по отделам из пульта (Адам 20.11), пока сходятся с итогом
+    if isinstance(st.get("counts"), dict) and sum(int(v or 0) for v in st["counts"].values()) == n:
+        return {k: int(st["counts"].get(k) or 0) for k in E.DEPT_CODES}
     c = dict(counts_of(ctx))
     diff = n - sum(c.values())
     pk = E.packages_of(funcs(ctx), ctx.cfg.depts or ())
