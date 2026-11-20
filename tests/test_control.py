@@ -300,6 +300,25 @@ class Pult(Control):
         app.db().c.execute("UPDATE employees SET tg_id = 900 WHERE id = ?", (owner["id"],))
         self.assertEqual(app.ctx(900).shops_only, {"s1", "s2"})                 # владелец видит только свои магазины
 
+    def test_hire_tool_by_names(self):
+        """tools/hire.py: те же люди по названиям магазинов, складов, должностей."""
+        self.demo.press(1, "mnw:new")
+        for x in ("mnp:s:company", "mnp:d:stock", "mnp:d:logistics", "mnp:d:office", "mnp:src:alapa", "mnp:seg:mix"):
+            self.demo.press(1, x)
+        self.demo.press(1, "mns", form={"name": "Сеть В", "shops": "Барт\nФаида", "whs": "Склад 1\nСклад Фаида"})
+        from core import hire as H
+        from core import control as K
+        c = K.cctx(self.demo.ctx(1), "set_v")
+        data = {"shops": {"Барт": {"Продавец": 2, "Водитель": 1}, "Фаида": {"Продавец": 1, "Кладовщик": 1}},
+                "warehouses": {"Склад 1": 2}, "wh_head": 1, "depts": {"Общий опт": {"Менеджер опта": 2}},
+                "leaders": [["head", ["Фаида"]], ["owner", ["Барт", "Фаида"]]]}
+        form, errs = H.form_from_names(c, data)
+        self.assertEqual(errs, [])
+        made, errs = H.apply(c, form)
+        self.assertEqual((made, errs), (12, []))
+        bad, errs = H.form_from_names(c, {"shops": {"Нет такого": {"Продавец": 1}}})
+        self.assertTrue(errs)
+
     def test_new_app_shops(self):
         """Адам 20.11: сеть магазинов с учётом в Алапе — магазины, склады, загрузка товаров из отчёта «Остатки» 1С."""
         self.demo.press(1, "mnw:new")

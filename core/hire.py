@@ -164,3 +164,69 @@ def apply(ctx, form):
 def paid_people(ctx):
     """Сколько людей в приложении за деньги (без владельца и администратора)."""
     return sum(1 for e in ctx.db.employees() if e["role"] not in ("owner", "admin"))
+
+
+def sync_billing(ctx):
+    """После заведения людей: «люди по отделам» в оплате — настоящие из приложения."""
+    from core import billing as B
+    st = B.state(ctx)
+    rows = B.people_rows(ctx)
+    st["dcounts"] = {k: n for k, _, _, n in rows}
+    st["people"] = sum(st["dcounts"].values())
+    st.pop("counts", None)
+    B.save(ctx, st)
+    return st["people"]
+
+
+def form_from_names(ctx, data):
+    """Форма по названиям (tools/hire.py): {"shops": {магазин: {должность: n}}, "warehouses": {склад: n}, "wh_head": n,
+    "depts": {отдел: {должность: n}}, "leaders": [["head"|"owner", [магазины]]]} → (форма, ошибки)."""
+    norm = lambda t: " ".join(str(t).lower().replace("ё", "е").split())
+    from modules.ship import whs
+    sids = {norm(n): s for s, n in shops(ctx.cfg)}
+    wids = {norm(n): w for w, n in whs(ctx)}
+    pos_by_name = {norm(p["name"]): p["id"] for p in ctx.cfg.positions}
+    dept_by_name = {norm(d.name): d.id for d in ctx.cfg.departments}
+    keys = {k for _t, rows in plan(ctx) for k, *_ in rows}
+    form, errs = {k: "0" for k in keys}, []
+
+    def put(key, n, what):
+        if key not in keys:
+            errs.append(f"нет такого места в форме: {what}")
+        else:
+            form[key] = str(int(n))
+    for sname, ps in (data.get("shops") or {}).items():
+        sid = sids.get(norm(sname))
+        if not sid:
+            errs.append(f"нет магазина «{sname}» — есть: {', '.join(n for _, n in shops(ctx.cfg))}")
+            continue
+        for pname, n in ps.items():
+            pid = pos_by_name.get(norm(pname))
+            if not pid:
+                errs.append(f"нет должности «{pname}» — есть: {', '.join(p['name'] for p in ctx.cfg.positions)}")
+                continue
+            put(f"s|{sid}|{pid}", n, f"{sname} · {pname}")
+    keeper = next((k.split("|")[2] for k in keys if k.startswith("w|")), None)
+    for wname, n in (data.get("warehouses") or {}).items():
+        wid = wids.get(norm(wname))
+        if not wid:
+            errs.append(f"нет склада «{wname}» — есть: {', '.join(n_ for _, n_ in whs(ctx))}")
+            continue
+        put(f"w|{wid}|{keeper}", n, f"{wname} (общий склад)")
+    if data.get("wh_head"):
+        k = next((k for k in keys if k.startswith("wa|")), None)
+        put(k or "wa|?", data["wh_head"], "завсклад общих складов")
+    for dname, ps in (data.get("depts") or {}).items():
+        did = dept_by_name.get(norm(dname))
+        if not did:
+            errs.append(f"нет отдела «{dname}» — есть: {', '.join(d.name for d in ctx.cfg.departments)}")
+            continue
+        for pname, n in ps.items():
+            put(f"d|{did}|{pos_by_name.get(norm(pname), '?')}", n, f"{dname} · {pname}")
+    for i, (role, ss) in enumerate(data.get("leaders") or []):
+        bad = [x for x in ss if norm(x) not in sids]
+        if bad or role not in ("head", "owner") or i >= LEADERS:
+            errs.append(f"руководитель {i + 1}: {role} {ss}")
+            continue
+        form[f"L{i}r"], form[f"L{i}s"] = role, ",".join(sids[norm(x)] for x in ss)
+    return form, errs

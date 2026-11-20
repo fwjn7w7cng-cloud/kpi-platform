@@ -200,14 +200,9 @@ def hire_save(ctx, code):
     if errs:
         return hire_screen(ctx, code, note="Не заведено: " + "; ".join(errs[:5]), form=form)
     c = K.cctx(ctx, code)
-    st = B.state(c)                                  # люди по отделам — теперь настоящие из приложения
-    rows = B.people_rows(c)
-    st["dcounts"] = {k: n for k, _, _, n in rows}
-    st["people"] = sum(st["dcounts"].values())
-    st.pop("counts", None)
-    B.save(c, st)
-    add_hist(c, f"Заведено людей по ролям: {made}, всего за деньги {st['people']}", who(ctx))
-    return K.card(ctx, code, f"✅ Заведено {made} чел. Всего за деньги {st['people']}. Имена и ссылки — в его приложении «👥 Сотрудники».")
+    paid = H.sync_billing(c)                         # люди по отделам — теперь настоящие из приложения
+    add_hist(c, f"Заведено людей по ролям: {made}, всего за деньги {paid}", who(ctx))
+    return K.card(ctx, code, f"✅ Заведено {made} чел. Всего за деньги {paid}. Имена и ссылки — в его приложении «👥 Сотрудники».")
 
 
 # ---------- как считаем зарплату (Адам 20.11) ----------
