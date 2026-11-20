@@ -380,15 +380,24 @@ def receipts(ctx):
 
 
 def _suppliers(db):
-    return sorted({r["supplier"] for r in db.q("SELECT DISTINCT supplier FROM goods") if r["supplier"]})
+    return sorted({r["supplier"] for r in db.q("SELECT DISTINCT supplier FROM goods UNION SELECT DISTINCT supplier FROM receipts")
+                   if r["supplier"]})
 
 
 def receipt_form(ctx, r=None, err=""):
     names = _names(ctx.db)
     lines = "\n".join(f"{names.get(c, c)}; {_num(n)}; {_num(p)}" for c, n, p, g in _lines(r)) if r else ""
     sup = _suppliers(ctx.db)
-    fields = [
-        {"k": "supplier", "t": "seg", "l": "Поставщик", "v": (r or {}).get("supplier") or (sup[0] if sup else ""), "opts": [[x, x] for x in sup], "req": 1},
+    cur = (r or {}).get("supplier") or ""
+    fields = ([{"k": "supplier", "t": "seg", "l": "Поставщик", "v": cur if cur in sup else (sup[0] if sup else ""), "opts": [[x, x] for x in sup]}]
+              if sup else []) + [
+        {"k": "sup_new", "t": "text", "l": "Новый поставщик" if sup else "Поставщик", "v": "" if cur in sup else cur,
+         "ph": "впишите, если его нет в списке" if sup else "название поставщика", "req": 0 if sup else 1}]
+    from modules import ship as SH
+    if len(SH.whs(ctx)) > 1:                              # у сети несколько складов — на какой пришло
+        w0 = (r or {}).get("wh") or SH.main_wh(ctx)
+        fields.append({"k": "wh", "t": "seg", "l": "На какой склад", "v": w0, "opts": [[w, n] for w, n in SH.whs(ctx)]})
+    fields += [
         {"k": "no", "t": "text", "l": "Номер накладной поставщика", "v": (r or {}).get("no", ""), "ph": "№ 2231"},
         {"k": "day", "t": "date", "l": "Дата", "v": (r or {}).get("day") or ctx.today.isoformat(),
          "quick": [[ctx.today.isoformat(), "Сегодня"], [(ctx.today - timedelta(days=1)).isoformat(), "Вчера"]]},
@@ -459,14 +468,16 @@ def receipt_save(ctx, rid=None):
         return receipts(ctx)
     f = ctx.form or {}
     r = ctx.db.one("SELECT * FROM receipts WHERE id = ? AND status = 'draft'", int(rid)) if rid and str(rid).isdigit() else None
-    sup = str(f.get("supplier", "")).strip()[:80]
+    sup = (str(f.get("sup_new", "")).strip() or str(f.get("supplier", "")).strip())[:80]
+    from modules import ship as SH
+    wh = str(f.get("wh") or "") if str(f.get("wh") or "") in SH.wh_ids(ctx) else SH.main_wh(ctx)
     try:
         day = date.fromisoformat(str(f.get("day", ""))[:10])
     except ValueError:
         day = None
     lines, errs = parse_lines(ctx.db, f.get("lines", ""))
-    if sup not in _suppliers(ctx.db):
-        errs.insert(0, "выберите поставщика")
+    if len(sup) < 2:
+        errs.insert(0, "выберите или впишите поставщика")
     if not day or day > ctx.today or day < ctx.today - timedelta(days=120):
         errs.insert(0, "дата — не позже сегодня и не раньше 120 дней назад")
     if errs:
@@ -478,12 +489,12 @@ def receipt_save(ctx, rid=None):
                         fl["v"] = str(f[fl["k"]])[:4000]
         return rep
     pay = "paid" if f.get("pay") == "paid" else "debt"
-    data = (str(f.get("no", "")).strip()[:30], day.isoformat(), sup, pay, json.dumps(lines))
+    data = (str(f.get("no", "")).strip()[:30], day.isoformat(), sup, pay, json.dumps(lines), wh)
     if r:
-        ctx.db.x("UPDATE receipts SET no = ?, day = ?, supplier = ?, pay = ?, lines = ? WHERE id = ?", *data, r["id"])
+        ctx.db.x("UPDATE receipts SET no = ?, day = ?, supplier = ?, pay = ?, lines = ?, wh = ? WHERE id = ?", *data, r["id"])
         rid = r["id"]
     else:
-        rid = ctx.db.x("INSERT INTO receipts (no, day, supplier, pay, lines, author, author_id, ts) VALUES (?,?,?,?,?,?,?,?)",
+        rid = ctx.db.x("INSERT INTO receipts (no, day, supplier, pay, lines, wh, author, author_id, ts) VALUES (?,?,?,?,?,?,?,?,?)",
                        *data, _who(ctx), (ctx.me or {}).get("id"), datetime.now().isoformat(timespec="seconds"))
     log(ctx, f"завёл приход №{rid} с ценами закупки", force=True)
     return receipt_card(ctx, rid)
@@ -578,9 +589,11 @@ def receipt_done(ctx, rid=None):
             cost = (q0 * c0 + x * p) / (q0 + x) if q0 + x else p          # средняя цена всех приходов
             ctx.db.x("UPDATE goods SET qty = qty + ?, cost = ?, ts = ? WHERE code = ?", x, round(cost, 2),
                      datetime.now().isoformat(timespec="seconds"), c)
-            if ctx.db.one("SELECT 1 AS x FROM stock_loc LIMIT 1"):          # учёт по местам: приход — на склад (modules/ship.py)
-                ctx.db.x("INSERT INTO stock_loc (code, loc, qty, smp) VALUES (?, 'wh', ?, 0) "
-                         "ON CONFLICT(code, loc) DO UPDATE SET qty = qty + ?", c, x, x)
+            from modules import ship as SH
+            if SH.has_locs(ctx.db) or ctx.cfg.warehouses:              # учёт по местам: приход — на склад прихода (modules/ship.py)
+                w = r["wh"] if r["wh"] in SH.wh_ids(ctx) else SH.main_wh(ctx)
+                ctx.db.x("INSERT INTO stock_loc (code, loc, qty, smp) VALUES (?, ?, ?, 0) "
+                         "ON CONFLICT(code, loc) DO UPDATE SET qty = qty + ?", c, w, x, x)
         if x < n:
             shorts.append(f"{names.get(c, c)} — {_num(n - x)} шт")
     note = str(f.get("note", "")).strip()[:200]

@@ -492,6 +492,73 @@ def build_raw(c):
         for p in raw["positions"]:
             if p["id"] in ("buyer", "buy_head"):
                 p["pay"] = "buyer"
+    apply_shops(raw, s)
+    return raw
+
+
+SHOP_SCHEMES = {          # стандартные цифры для магазинов — уточнить с клиентом
+    "shop": [{"type": "salary", "amount": "50 000"}, {"type": "sales_percent", "rate": "0,5%", "scope": "team"},
+             {"type": "plan_bonus", "metric": "sales", "scope": "team", "mode": "steps", "steps": [["90%", "10 000"], ["100%", "20 000"]]},
+             {"type": "timesheet"}],
+    "seller": [{"type": "per_unit", "unit": "shifts", "price": "1 500", "name": "Оклад за смены"},
+               {"type": "sales_percent", "rate": "3%"},
+               {"type": "per_unit", "unit": "inst", "price": "500", "name": "Рассрочка оформлена"},
+               {"type": "timesheet"}],
+}
+
+
+def shop_list(text):
+    """Магазины из поля «каждый с новой строки» (или через запятую): без пустых и повторов, до 30, по 40 знаков."""
+    out = []
+    for x in str(text or "").replace(";", "\n").replace(",", "\n").splitlines():
+        x = " ".join(x.split())[:40]
+        if x and x.lower() not in {y.lower() for y in out}:
+            out.append(x)
+    return out[:30]
+
+
+def apply_shops(raw, s):
+    """Адам 20.11: сеть магазинов из пульта — сегмент, учёт в Алапе, магазины командами во всех отделах, общий опт.
+    s.segment opt | mix | retail; s.source 1c | alapa; s.shops [названия магазинов]; s.whs [названия складов учёта]."""
+    seg = s.get("segment") or "opt"
+    shops = list(s.get("shops") or [])
+    if s.get("source") == "alapa":
+        raw["source"] = {"kind": "alapa"}
+        whs = list(s.get("whs") or [])
+        if whs:
+            raw["warehouses"] = [{"id": "wh" if i == 0 else f"wh{i + 1}", "name": n} for i, n in enumerate(whs)]
+    for p in raw["positions"]:                                   # водитель — «Мой день» и маршрутный лист
+        if p["id"] == "driver":
+            p.setdefault("duty", "driver")
+    if seg == "opt" or not shops:
+        return raw
+    raw["company"]["segment"] = seg
+    line = next(iter(raw["lines"]))
+    if seg == "retail":                                          # только магазины: отдела продаж опта нет
+        raw["departments"] = [d for d in raw["departments"] if d["id"] != "sales"]
+        raw["positions"] = [p for p in raw["positions"] if p["dept"] != "sales"]
+        raw["teams"] = [t for t in raw["teams"] if t["dept"] != "sales"]
+    else:                                                        # опт над магазинами — одной командой
+        for d in raw["departments"]:
+            if d["id"] == "sales":
+                d["name"] = "Общий опт"
+        raw["teams"] = [t for t in raw["teams"] if t["dept"] != "sales"] + [{"id": "opt", "name": "Опт", "dept": "sales", "line": line}]
+    raw["departments"].append({"id": "shops", "name": "Магазины", "kind": "sales"})
+    ids = [f"s{i + 1}" for i in range(len(shops))]
+    raw["teams"] += [{"id": i, "name": n, "dept": "shops", "line": line} for i, n in zip(ids, shops)]
+    for d in raw["departments"]:                                 # склад, логистика, офис — те же магазины командами
+        if d["kind"] in ("warehouse", "logistics", "office"):
+            raw["teams"] += [{"id": f"{d['id']}_{i}", "name": n, "dept": d["id"]} for i, n in zip(ids, shops)]
+            if d["kind"] == "warehouse" and seg == "mix":
+                d["name"] = "Склад · общий опт"
+    raw["positions"] += [
+        {"id": "shops_head", "name": "Руководитель магазинов", "dept": "shops", "role": "head", "pay": "rop"},
+        {"id": "shop_head", "name": "Директор магазина", "dept": "shops", "role": "sv", "pay": "shop", "duty": "shop"},
+        {"id": "shop_admin", "name": "Администратор магазина", "dept": "shops", "role": "staff", "pay": "salary"},
+        {"id": "seller", "name": "Продавец", "dept": "shops", "role": "rep", "pay": "seller", "duty": "seller"}]
+    for k, v in SHOP_SCHEMES.items():
+        raw["pay_schemes"].setdefault(k, v)
+    raw["pay_schemes"].setdefault("rop", [{"type": "salary", "amount": "60 000"}, {"type": "timesheet"}])
     return raw
 
 

@@ -205,4 +205,7 @@ CREATE TABLE moves (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, loc
   status TEXT NOT NULL DEFAULT 'ask', author TEXT NOT NULL DEFAULT '', author_id INTEGER, ts TEXT NOT NULL, go_ts TEXT, done_ts TEXT,
   note TEXT NOT NULL DEFAULT '');
 """),
+    (11, "📥 учёт в Алапе: приход на выбранный склад (у сети их несколько), загрузки товаров из Excel", """
+ALTER TABLE receipts ADD COLUMN wh TEXT NOT NULL DEFAULT '';
+"""),
 ]

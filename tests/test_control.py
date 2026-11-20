@@ -187,6 +187,57 @@ class Pult(Control):
         bad = self.demo.press(1, "mns", form={"name": ""})
         self.assertIn("название", text_of(bad[0]))
 
+    def test_new_app_shops(self):
+        """Адам 20.11: сеть магазинов с учётом в Алапе — магазины, склады, загрузка товаров из отчёта «Остатки» 1С."""
+        self.demo.press(1, "mnw:new")
+        for x in ("mnp:s:company", "mnp:d:stock", "mnp:d:logistics", "mnp:d:office", "mnp:src:alapa", "mnp:seg:mix"):
+            self.demo.press(1, x)
+        bad = self.demo.press(1, "mns", form={"name": "Сеть Барт"})
+        self.assertIn("магазины", text_of(bad[0]).lower())
+        out = self.demo.press(1, "mns", form={"name": "Сеть Барт", "shops": "Барт\nБарт Премиум\nФаида",
+                                              "whs": "Склад Гойты 1\nСклад Курчалой"})
+        self.assertIn("Создано", text_of(out[0]))
+        app = App("set_bart", today=DAY, admins=[1], data_dir=self.data)
+        self.assertEqual(app.cfg.segment, "mix")
+        self.assertEqual(app.cfg.source["kind"], "alapa")
+        self.assertEqual([n for _, n in app.cfg.warehouses], ["Склад Гойты 1", "Склад Курчалой"])
+        from core.ui import retail as RT
+        self.assertEqual([n for _, n in RT.shops(app.cfg)], ["Барт", "Барт Премиум", "Фаида"])
+        self.assertEqual(app.ctx(1).segment, "mix")
+        # загрузка товаров: отчёт «Остатки» из 1С как есть (места хранения — строки-суммы)
+        import openpyxl, io
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        for r in [["Место хранения", "Свободный остаток"], ["Номенклатура", None], ["магазин", 5], ["диван ASTON", 3], ["стол CORVETTE", 2],
+                  ["СКЛАД ГОЙТЫ 1", 7], ["диван ASTON", 4], ["стул JULIAN", 3], ["СКЛАД АТАГИ", 1], ["пуф", 1], ["Итого", 13]]:
+            ws.append(r)
+        buf = io.BytesIO()
+        wb.save(buf)
+        app.press(1, "gdu")
+        app.upload(1, "Остатки барт.xlsx", buf.getvalue())
+        pend = app.db().get("goods_import")
+        self.assertEqual(pend["places"], ["магазин", "СКЛАД ГОЙТЫ 1", "СКЛАД АТАГИ"])
+        self.assertEqual(len(pend["items"]), 4)                                  # диван ASTON в двух местах — один товар
+        self.assertEqual(pend["map"]["СКЛАД ГОЙТЫ 1"], "wh")
+        self.assertEqual(pend["map"]["СКЛАД АТАГИ"], "new")
+        self.assertEqual(pend["map"]["магазин"], "")                              # не угадать — выбирает человек
+        out = app.press(1, "gdy", form={"p0": "", "p1": "wh", "p2": "new"})
+        self.assertIn("куда", text_of(out[0]))
+        out = app.press(1, "gdy", form={"p0": "s1", "p1": "wh", "p2": "new"})
+        self.assertIn("Новых товаров", text_of(out[0]))
+        db = app.db()
+        self.assertEqual(db.one("SELECT COUNT(*) AS n FROM goods")["n"], 4)
+        sofa = db.one("SELECT code, qty FROM goods WHERE name = 'диван ASTON'")
+        self.assertEqual(sofa["qty"], 7)
+        self.assertEqual(db.one("SELECT qty FROM stock_loc WHERE code = ? AND loc = 's1'", sofa["code"])["qty"], 3)
+        from modules import ship as SH
+        self.assertIn("СКЛАД АТАГИ", [n for _, n in SH.whs(app.ctx(1))])
+        app.press(1, "gdu")
+        app.upload(1, "Остатки барт.xlsx", buf.getvalue())                       # второй раз — те же товары, не дубли
+        app.press(1, "gdy", form={"p0": "s1", "p1": "wh", "p2": "new"})
+        self.assertEqual(db.one("SELECT COUNT(*) AS n FROM goods")["n"], 4)
+        self.assertEqual(db.one("SELECT qty FROM goods WHERE name = 'диван ASTON'")["qty"], 7)
+
 
 class Panel(Control):
     """Отдельное приложение управления (admin.<домен>): тот же демо-процесс, свой значок, только для администратора."""

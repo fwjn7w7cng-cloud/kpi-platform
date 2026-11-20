@@ -44,6 +44,9 @@ def log_result(db, name, res, who):
 def receive(ctx, name, data):
     """Принять один файл: проверить права и размер, прогнать конвейер, записать в журнал. → [Reply]."""
     name = (name or "файл").replace("/", "_").replace("\\", "_")[:120]
+    if ctx.session.get("upto") == "gdu":                     # «📥 Товары из Excel» (modules/goodsio.py), не отчёт 1С
+        from modules import goodsio
+        return goodsio.receive(ctx, name, data)
     if ctx.demo:
         return [Reply(text="В демо цифры выдуманы — загружать некуда. У настоящего клиента здесь принимаются отчёты 1С.")]
     if not may(ctx):
@@ -87,6 +90,8 @@ def _months(ctx):
 
 @screen("up")
 def upload_screen(ctx):
+    ctx.session["upto"] = "up"                               # файлы отсюда — отчёты 1С (а не товары из Excel)
+    ctx.save()
     if not may(ctx):
         return Reply(text="Отчёты загружают администратор, руководитель и бухгалтер.")
     v = View("📥 Отчёты 1С", ctx.cfg.name)

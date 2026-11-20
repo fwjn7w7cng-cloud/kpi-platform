@@ -23,6 +23,7 @@ from core import control as K
 from core.access import editions as E
 from core.access import pricing as P
 from core.calendar import shift_month
+from core.config import SEGMENTS
 from core.ui.kit import Button, Reply, money
 from core.ui.registry import screen, text_input
 from core.ui.views import View
@@ -527,6 +528,8 @@ def _nw(ctx, fresh=None):
 
 def _nw_funcs(d):
     fs = set(E.preset_functions(d["size"]))
+    if d.get("src") == "alapa":                      # учёт в Алапе: товары, приходы, продажа — функции склада и закупок
+        d["depts"] = [x for x in E.DEPT_CODES if x in set(d["depts"]) | {"stock"}]
     fs = {f for f in fs if E.FUNCS[f][0] in ("all", "max") or E.FUNCS[f][0] in d["depts"]}
     for dep in d["depts"]:
         if dep != "sales":
@@ -562,7 +565,21 @@ def new_app(ctx, src=None, note=None):
         v.note(note)
     v.ui("choice", {"items": [[E.SIZE_NAMES[k][0] + " · " + E.SIZE_NAMES[k][1], f"mnp:s:{k}", d["size"] == k] for k in E.PRESETS]}, "Размер")
     v.ui("choice", {"items": [[E.FUNC_GROUPS[k][1], f"mnp:d:{k}", k in d["depts"]] for k in E.DEPT_CODES]}, "Отделы")
-    v.ui("form", {"fields": [{"k": "name", "l": "Название фирмы", "ph": "Например: Стройторг", "v": d.get("name", ""), "w": True}],
+    v.ui("choice", {"items": [["📊 Из 1С", "mnp:src:1c", d.get("src", "1c") == "1c"],
+                              ["📦 Учёт в Алапе", "mnp:src:alapa", d.get("src") == "alapa"]]}, "Откуда цифры")
+    seg = d.get("seg", "opt")
+    v.ui("choice", {"items": [[t, f"mnp:seg:{k}", seg == k] for k, t in SEGMENTS.items()]}, "Как продают")
+    fields = [{"k": "name", "l": "Название фирмы", "ph": "Например: Стройторг", "v": d.get("name", ""), "w": True}]
+    if seg != "opt":
+        fields.append({"k": "shops", "l": "Магазины — каждый с новой строки", "area": True, "w": True, "v": d.get("shops", ""),
+                       "ph": "Барт\nБарт Премиум\nФаида"})
+    if d.get("src") == "alapa":
+        fields.append({"k": "whs", "l": "Склады — каждый с новой строки (пусто — один «Склад»)", "area": True, "w": True,
+                       "v": d.get("whs", ""), "ph": "Склад Гойты 1\nСклад Курчалой"})
+    if seg != "opt":
+        v.note("🏢 Филиалы со своим логотипом — скоро. Пока магазины — команды под общим логотипом; склад, логистика и офис "
+               "тоже делятся по магазинам.")
+    v.ui("form", {"fields": fields,
                   "send": ["Создать приложение", "mns"],
                   "hint": f"{len(fs)} функций · {q['people']} чел. → {money(q['monthly'])} в месяц, подключение {money(q['setup'])}"
                           + (f" (акция −{P.fmt(q['promo']['pct'])}%)" if q.get("promo") else "")
@@ -581,6 +598,10 @@ def new_app_pick(ctx, kind="", value=""):
     d = _nw(ctx)
     if kind == "s" and value in E.PRESETS:
         d["size"] = value
+    elif kind == "src" and value in ("1c", "alapa"):
+        d["src"] = value
+    elif kind == "seg" and value in SEGMENTS:
+        d["seg"] = value
     elif kind == "d" and value in E.DEPT_CODES:
         ds = set(d["depts"]) ^ {value}
         d["depts"] = [x for x in E.DEPT_CODES if x in ds] or ["sales"]
@@ -597,12 +618,19 @@ def new_app_create(ctx):
     from core import onboard as O
     from core.ui.tariff import quote_of
     d = _nw(ctx)
-    name = str((getattr(ctx, "form", None) or {}).get("name", "")).strip()[:80]
+    form = getattr(ctx, "form", None) or {}
+    name = str(form.get("name", "")).strip()[:80]
     d["name"] = name
-    if len(name) < 2:
+    d["shops"], d["whs"] = str(form.get("shops", ""))[:2000], str(form.get("whs", ""))[:2000]
+    shops, whs = O.shop_list(d["shops"]), O.shop_list(d["whs"])
+    seg = d.get("seg", "opt")
+    bad = ("Впишите название фирмы." if len(name) < 2 else
+           "Впишите магазины — каждый с новой строки." if seg != "opt" and not shops else
+           "Магазин и склад не могут называться одинаково." if {x.lower() for x in shops} & {x.lower() for x in whs} else "")
+    if bad:
         ctx.session["nw"] = d
         ctx.save()
-        return new_app(ctx, note="Впишите название фирмы.")
+        return new_app(ctx, note=bad)
     fs, counts = _nw_funcs(d), _nw_counts(d)
     q = quote_of(ctx, fs, year=False, counts=counts, depts=set(d["depts"]))
     reqs = ctx.office.get("tariff_req") or []
@@ -613,7 +641,8 @@ def new_app_create(ctx):
         return new_app(ctx, note=f"По этой заявке приложение уже есть: {c['client']['url']}.")
     c["f"]["company"] = name
     c["set"] = {**(c.get("set") or {}), "packages": E.packages_of(fs, set(d["depts"])), "functions": sorted(fs), "depts": list(d["depts"]),
-                "counts": counts, "people": sum(counts.values()), "monthly": q["monthly"], "setup": q["setup"]}
+                "counts": counts, "people": sum(counts.values()), "monthly": q["monthly"], "setup": q["setup"],
+                "segment": seg, "source": d.get("src", "1c"), "shops": shops if seg != "opt" else [], "whs": whs}
     info, problems = O.create(c, who(ctx), O.domain(ctx))
     if problems:
         return new_app(ctx, note="Не получилось: " + "; ".join(problems[:4]))

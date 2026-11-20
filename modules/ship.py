@@ -41,8 +41,57 @@ def active(ctx):
     return getattr(ctx, "segment", "mix") != "opt" and has_locs(ctx.db)
 
 
-def locs(cfg):
-    return [(WH, "Склад")] + RT.shops(cfg)
+WH_KEY = "warehouses"     # склады, добавленные в приложении (загрузка остатков из Excel): [[id, название]]
+
+
+def _cfg(src):
+    return getattr(src, "cfg", src)
+
+
+def whs(src):
+    """Склады учёта (Адам 20.11: у сети их несколько): из анкеты (warehouses) + добавленные в приложении; нет — один «Склад».
+    src — ctx (с базой) или анкета."""
+    out = [tuple(w) for w in (getattr(_cfg(src), "warehouses", None) or [])]
+    db = getattr(src, "db", None)
+    if db is not None:
+        have = {w for w, _ in out}
+        out += [tuple(w) for w in (db.get(WH_KEY) or []) if w[0] not in have]
+    return out or [(WH, "Склад")]
+
+
+def add_wh(db, name):
+    """Новый склад из приложения → его id (тот же, если склад с таким названием уже есть)."""
+    ws = db.get(WH_KEY) or []
+    for w, n in ws:
+        if n.lower() == name.lower():
+            return w
+    wid = f"w{len(ws) + 1}"
+    db.put(WH_KEY, ws + [[wid, name[:40]]])
+    return wid
+
+
+def wh_ids(src):
+    return {w for w, _ in whs(src)}
+
+
+def main_wh(src):
+    return whs(src)[0][0]
+
+
+def locs(src):
+    return whs(src) + RT.shops(_cfg(src))
+
+
+def free_wh(db, cfg, code, res=None):
+    """Свободно по всем складам вместе."""
+    res = reserved(db) if res is None else res
+    return sum(free(db, code, w, res) for w in wh_ids(cfg))
+
+
+def pick_wh(db, cfg, code, n, res=None):
+    """Склад, где свободно не меньше n (первый по списку), или None."""
+    res = reserved(db) if res is None else res
+    return next((w for w, _ in whs(cfg) if free(db, code, w, res) >= n), None)
 
 
 def loc_name(cfg, loc):
@@ -88,10 +137,10 @@ def loc_rows(ctx, code):
     """Таблица «Где лежит» для карточки товара: есть / образец / резерв / свободно."""
     res = reserved(ctx.db)
     rows = []
-    for loc, name in locs(ctx.cfg):
+    for loc, name in locs(ctx):
         q, s = stock_at(ctx.db, code, loc)
         r = res.get((code, loc), 0)
-        if not q and not r and loc != WH:
+        if not q and not r and loc not in wh_ids(ctx):
             continue
         f = max(q - s - r, 0)
         rows.append({"n": name + (" · образец" if s else ""), "cells": [[A._num(q), ""], [A._num(r) if r else "—", ""],
@@ -217,7 +266,7 @@ def loading(ctx, act=None, drv=None, oid=None):
     items = []
     for o in mine:
         lab, tone = LOAD_T.get(o.get("load", ""), LOAD_T[""])
-        what = ", ".join(f"{names.get(c, c)} × {A._num(n)} ({'склад' if src == WH else loc_name(ctx.cfg, src)})" for c, n, src in o["lines"])
+        what = ", ".join(f"{names.get(c, c)} × {A._num(n)} ({loc_name(ctx, src).lower() if src in wh_ids(ctx) else loc_name(ctx, src)})" for c, n, src in o["lines"])
         items.append({"t": f"№{o['id']} · {o['client']}", "s": f"{what} · менеджер {_short(ctx.db, o.get('seller'))}"
                       + (f" · {o.get('no_why')}" if o.get("load") == "no" else ""),
                       "chip": [lab, f"ld:t:{cur}:{o['id']}" if cur else "", tone]})
@@ -228,7 +277,7 @@ def loading(ctx, act=None, drv=None, oid=None):
          "Без водителя — назначит менеджер" if not cur else "Заказы этого водителя")
     mv = ctx.db.q("SELECT * FROM moves WHERE status = 'ask' ORDER BY id")
     if mv:
-        v.ui("rows", {"items": [{"t": f"→ {loc_name(ctx.cfg, m['loc'])} · перемещение №{m['id']}", "s": _lines_txt(ctx, m),
+        v.ui("rows", {"items": [{"t": f"→ {loc_name(ctx, m['loc'])} · перемещение №{m['id']}", "s": _lines_txt(ctx, m),
                                  "chip": ["отгрузить", f"mvo:{m['id']}", "warn"]} for m in mv]}, "В салоны")
     v.ui("rows", {"items": [], "empty": "✓ — положили в машину, ✕ — не влез или нет товара (останется на складе в резерве, менеджеру "
                                         "уведомление). «Машина ушла» — маршрутный лист только из погруженного, товар спишется со склада."}, "")
@@ -355,7 +404,7 @@ def moves(ctx):
         q, a = q + " WHERE loc = ?", [ctx.me["team"]]
     rs = ctx.db.q(q + " ORDER BY CASE status WHEN 'ask' THEN 0 WHEN 'go' THEN 1 ELSE 2 END, id DESC LIMIT 30", *a)
     v = View("🔁 Перемещения", "склад → салоны")
-    v.ui("rows", {"items": [{"t": f"№{m['id']} · → {loc_name(ctx.cfg, m['loc'])}", "s": f"{RT._dm(m['day'])} · {_lines_txt(ctx, m)}",
+    v.ui("rows", {"items": [{"t": f"№{m['id']} · → {loc_name(ctx, m['loc'])}", "s": f"{RT._dm(m['day'])} · {_lines_txt(ctx, m)}",
                              "chip": [MV_ST[m["status"]][0], f"mvo:{m['id']}", MV_ST[m["status"]][1]]} for m in rs],
                   "empty": "Перемещений нет", "foot": [["➕ Заявка: привезти в салон", "mvn"]] if ctx.duty == "shop" else []}, "")
     return Reply(view=v)
@@ -397,8 +446,8 @@ def move_save(ctx):
             errs.append(f"строка {i}: «{parts[0][:30]}» — {'не найден' if not hit else 'подходит несколько, напишите точнее'}")
         elif not n or n != int(n):
             errs.append(f"строка {i}: штук — целое число")
-        elif free(ctx.db, hit[0]["code"], WH) < n:
-            errs.append(f"строка {i}: на складе свободно {A._num(free(ctx.db, hit[0]['code'], WH))}")
+        elif pick_wh(ctx.db, ctx, hit[0]["code"], n) is None:
+            errs.append(f"строка {i}: ни на одном складе столько свободно нет (всего {A._num(free_wh(ctx.db, ctx, hit[0]['code']))})")
         else:
             out.append([hit[0]["code"], int(n), 1 if f.get("smp") == "1" else 0, None])
     if errs or not out:
@@ -414,15 +463,17 @@ def move_card(ctx, mid=None, act=None):
     if not m or not (keeper(ctx) or (ctx.duty == "shop" and ctx.me["team"] == m["loc"])):
         return moves(ctx)
     if act == "go" and m["status"] == "ask" and keeper(ctx):
+        src = {}
         for c, n, smp, _g in json.loads(m["lines"]):
-            if free(ctx.db, c, WH) < n:
-                return Reply(text=f"На складе свободно меньше, чем просят: {A._names(ctx.db).get(c, c)}.", buttons=[[Button("‹", f"mvo:{m['id']}")]])
+            src[c] = pick_wh(ctx.db, ctx, c, n)
+            if src[c] is None:
+                return Reply(text=f"На складах свободно меньше, чем просят: {A._names(ctx.db).get(c, c)}.", buttons=[[Button("‹", f"mvo:{m['id']}")]])
         for c, n, smp, _g in json.loads(m["lines"]):
-            move_qty(ctx.db, c, WH, -n, total=False)                    # в пути: на складе уже нет, в салоне ещё нет
+            move_qty(ctx.db, c, src[c], -n, total=False)                # в пути: на складе уже нет, в салоне ещё нет
         ctx.db.x("UPDATE moves SET status = 'go', go_ts = ? WHERE id = ?", datetime.now().isoformat(timespec="seconds"), m["id"])
         m = ctx.db.one("SELECT * FROM moves WHERE id = ?", m["id"])
     st, tone = MV_ST[m["status"]]
-    v = View(f"🔁 Перемещение №{m['id']}", f"Склад → {loc_name(ctx.cfg, m['loc'])}")
+    v = View(f"🔁 Перемещение №{m['id']}", f"Склад → {loc_name(ctx, m['loc'])}")
     steps = [["Заявка", "done"], ["Едет", "cur" if m["status"] == "go" else "done" if m["status"] == "done" else ""],
              ["Принято в салоне", "done" if m["status"] == "done" else ""]]
     v.ui("rows", {"items": [{"t": f"Заявка {m['author']} · {RT._dm(m['day'])}", "s": _lines_txt(ctx, m), "steps": steps, "chip": [st, "", tone]}]}, "")
@@ -473,7 +524,7 @@ def stock_by_loc(ctx):
     cost = {g["code"]: g["cost"] for g in ctx.db.q("SELECT code, cost FROM goods")}
     res = reserved(ctx.db)
     rows, total, pcs = [], 0, 0
-    for loc, name in locs(ctx.cfg):
+    for loc, name in locs(ctx):
         rs = ctx.db.q("SELECT code, qty, smp FROM stock_loc WHERE loc = ?", loc)
         q = sum(r["qty"] for r in rs)
         c = sum(r["qty"] * cost.get(r["code"], 0) for r in rs)
@@ -481,7 +532,7 @@ def stock_by_loc(ctx):
         pcs += q
         r_ = sum(n for (cd, lc), n in res.items() if lc == loc)
         rows.append({"n": name, "cells": [[A._num(q), ""], [A._num(r_) if r_ else "—", ""]] + ([[A._num(c), ""]] if see else []),
-                     "det": f"образцов в зале {A._num(sum(r['smp'] for r in rs))}" if loc != WH else ""})
+                     "det": f"образцов в зале {A._num(sum(r['smp'] for r in rs))}" if loc not in wh_ids(ctx) else ""})
     way = ctx.db.q("SELECT lines FROM moves WHERE status = 'go'")
     way_c = sum(n * cost.get(c, 0) for m in way for c, n, *_ in json.loads(m["lines"]))
     res_c = sum(n * cost.get(c, 0) for (c, _l), n in res.items())
@@ -500,6 +551,6 @@ def stock_by_loc(ctx):
         att.append({"t": "Продали, а машины нет 2 дня и больше", "s": f"{len(stuck)} заказов · водители: "
                     + ", ".join(sorted({_short(ctx.db, o.get('driver')) for o in stuck})), "chip": [str(len(stuck)), "ld", "bad"]})
     for m in late_mv:
-        att.append({"t": f"Перемещение №{m['id']} не принято 2 дня", "s": f"→ {loc_name(ctx.cfg, m['loc'])}", "chip": ["открыть", f"mvo:{m['id']}", "warn"]})
+        att.append({"t": f"Перемещение №{m['id']} не принято 2 дня", "s": f"→ {loc_name(ctx, m['loc'])}", "chip": ["открыть", f"mvo:{m['id']}", "warn"]})
     v.ui("rows", {"items": att, "empty": "Всё в порядке: машины уходят вовремя, перемещения приняты"}, "Обратите внимание")
     return Reply(view=v)

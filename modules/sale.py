@@ -90,7 +90,7 @@ def sale(ctx, act=None, code=None, err=""):
     items = []
     for g in found:
         if locs:                                             # свободно = есть − образцы − резерв, по местам (modules/ship.py)
-            here, wh = SH.free(ctx.db, g["code"], ctx.me["team"], res), SH.free(ctx.db, g["code"], SH.WH, res)
+            here, wh = SH.free(ctx.db, g["code"], ctx.me["team"], res), SH.free_wh(ctx.db, ctx, g["code"], res)
             can, s_ = here + wh, f"{money(g['price'])} · свободно: тут {A._num(here)} · склад {A._num(wh)}"
             if not here and SH.stock_at(ctx.db, g["code"], ctx.me["team"])[1]:
                 s_ += " · в зале образец"
@@ -157,15 +157,16 @@ def checkout(ctx):
     if SH.has_locs(ctx.db):                                  # откуда отдаём: сам — из этого салона, доставка — со склада (или из салона)
         res, here = SH.reserved(ctx.db), ctx.me["team"]
         for g, n in lines:
-            fh, fw = SH.free(ctx.db, g["code"], here, res), SH.free(ctx.db, g["code"], SH.WH, res)
+            fh, fw = SH.free(ctx.db, g["code"], here, res), SH.free_wh(ctx.db, ctx, g["code"], res)
             if take0 == "self":
                 if fh < n:
                     return _err(ctx, f"«{g['name']}» в этом салоне свободно {A._num(fh)}" + (" (образец не продаётся)" if
                                 SH.stock_at(ctx.db, g["code"], here)[1] else "") + " — со склада только доставкой.", f)
                 srcs[g["code"]] = here
             else:
-                if fw >= n:
-                    srcs[g["code"]] = SH.WH
+                w = SH.pick_wh(ctx.db, ctx, g["code"], n, res)
+                if w:
+                    srcs[g["code"]] = w
                 elif fh >= n:
                     srcs[g["code"]] = here
                 else:

@@ -22,7 +22,9 @@ class Ctx:
         from core.config import SEGMENTS
         from core.ui.retail import has_shops
         seg = self.session.get("segment") if self.demo else None       # Адам 20.11: опт / опт + розница / розница
-        self.segment = seg if seg in SEGMENTS else ("opt" if self.demo or not has_shops(app.cfg) else "mix")
+        if seg not in SEGMENTS:
+            seg = app.cfg.segment if not self.demo and app.cfg.segment in SEGMENTS else None
+        self.segment = seg or ("opt" if self.demo or not has_shops(app.cfg) else "mix")
         self.office = app.office()
         guest = None
         if self.demo and app.demo_gate:              # демо по приглашению: у каждого гостя своя копия фирмы

@@ -33,7 +33,8 @@ INDUSTRIES = {
 SEGMENTS = {"opt": "Опт", "mix": "Опт + розница", "retail": "Розница"}
 
 DEPT_KINDS = {"sales", "warehouse", "logistics", "purchasing", "office"}
-SOURCES = {"seed", "mail", "drive", "api", "folder"}   # folder — папка на нашем сервере (core/ingest/folder.py)
+SOURCES = {"seed", "mail", "drive", "api", "folder", "alapa"}   # folder — папка на нашем сервере (core/ingest/folder.py);
+# alapa — учёт прямо в Алапе (Адам 20.11): товары, приходы и продажи вводятся в приложении, отчёты 1С не нужны
 
 
 class ConfigError(Exception):
@@ -77,6 +78,8 @@ class ClientConfig:
     positions: list = field(default_factory=list)
     raw: dict = field(repr=False, default_factory=dict)
     functions: object = None     # выбранные поштучно функции (31.10) или None — тогда по пакетам
+    segment: str = ""            # opt / mix / retail (Адам 20.11); пусто — по магазинам в анкете
+    warehouses: list = field(default_factory=list)   # [(id, название)] складов учёта в Алапе; пусто — один «Склад» (wh)
     depts: object = None         # включённые отделы (05.11): с функциями и без («только зарплата и табель»)
 
     @property
@@ -281,6 +284,9 @@ def parse(client_id, raw, hooks=None):
     industry = company.get("industry", "")
     if industry not in INDUSTRIES:
         p.append(f"company.industry «{industry}» — допустимо: {', '.join(INDUSTRIES)}")
+    segment = company.get("segment") or ""
+    if segment and segment not in SEGMENTS:
+        p.append(f"company.segment «{segment}» — допустимо: {', '.join(SEGMENTS)}")
     tz = company.get("timezone", "Europe/Moscow")
     try:
         from zoneinfo import ZoneInfo
@@ -323,6 +329,16 @@ def parse(client_id, raw, hooks=None):
             p.append(f"команда «{team.id}»: нет линии «{team.line}» в lines")
         teams.append(team)
     _dupes(p, "команды", [t.id for t in teams])
+
+    warehouses = []                           # склады учёта в Алапе (Адам 20.11: у сети их несколько); пусто — один «Склад»
+    for w in raw.get("warehouses") or []:
+        wid, wname = str((w or {}).get("id", "")), str((w or {}).get("name", "")).strip()
+        if not wid or not wname:
+            p.append("warehouses: у склада нужны id и name")
+        elif wid in {t.id for t in teams}:
+            p.append(f"warehouses: «{wid}» совпадает с кодом команды")
+        warehouses.append((wid, wname))
+    _dupes(p, "склады", [w[0] for w in warehouses])
 
     titles = raw.get("roles") or {}
     for role in titles:
@@ -423,7 +439,7 @@ def parse(client_id, raw, hooks=None):
         id=client_id, name=name, industry=industry, timezone=tz, edition=edition, packages=packages,
         weekend=weekend, salary_days=salary_days, departments=depts, teams=teams, role_titles=titles,
         lines=lines, source=source, pay=pay, holidays={str(k): v for k, v in holidays.items()},
-        positions=positions, raw=raw)
+        positions=positions, raw=raw, segment=segment, warehouses=warehouses)
     if funcs is not None:                     # функции поштучно (31.10) — важнее пакетов
         cfg = cfg.with_functions(funcs, raw.get("depts"))
     return cfg
