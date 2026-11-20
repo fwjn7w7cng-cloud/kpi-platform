@@ -66,7 +66,7 @@ class Ctx:
     def _shops_limit(self):
         """«Видит магазины» (Адам 20.11): у руководителя отмечены не все магазины — видит только их. None — без ограничения."""
         from core.ui.retail import SEES_KEY, limit_to, shops
-        if not self.me or self.role in ("owner", "admin", "accountant"):
+        if not self.me or self.role in ("admin", "accountant"):             # владелец — тоже, если ему отмечены магазины (Адам 20.11)
             return None
         mine = (self.db.get(SEES_KEY) or {}).get(str(self.me["id"]))
         if not mine:

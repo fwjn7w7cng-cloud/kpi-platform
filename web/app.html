@@ -422,7 +422,8 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 @keyframes sglow { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
 @keyframes stilt { 0%,80%,100% { transform: rotate(0); } 88% { transform: rotate(-10deg); } 94% { transform: rotate(8deg); } }
 /* 📌 задания (Адам 19.11): форма одной страницей и доска «неделя» */
-.sform { gap: 4px; } .sfl { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; font-size: 13px; color: var(--ink-2); }
+.sform { gap: 4px; } .sfin{display:flex!important;flex-direction:row!important;align-items:center;justify-content:space-between;gap:10px}.sfin span{flex:1}.sfin input{width:64px!important;flex:0 0 64px;text-align:center}
+.sfl { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; font-size: 13px; color: var(--ink-2); }
 .sfl > span { font-weight: 600; } .sfl small { font-size: 12px; color: var(--ink-2); }
 .sfl textarea, .sfl input:not([type=hidden]):not([type=file]) { box-sizing: border-box; width: 100%; border: 0; box-shadow: 0 0 0 1px var(--line); background: var(--sunk); border-radius: 6px; padding: 10px; font: inherit; font-size: 15px; color: var(--ink); }
 .sfl textarea { min-height: 84px; resize: vertical; } .sfl input[type=date] { width: auto; flex: 1 1 140px; }
@@ -741,6 +742,7 @@ const UI = {
     const fld = f => { const w = f.when ? ` data-when="${esc(f.when[0])}" data-win="${esc(f.when[1].join(","))}"` : "", lab = `<span>${esc(f.l)}${f.req ? " *" : ""}</span>`;
       if (f.t === "head") return `<div class="sfh">${esc(f.l)}</div>`;
       if (f.t === "area") return `<label class="sfl"${w}>${lab}<textarea name="${esc(f.k)}" maxlength="${f.max || 2000}" placeholder="${esc(f.ph || "")}">${esc(f.v || "")}</textarea>${f.hint ? `<small>${esc(f.hint)}</small>` : ""}</label>`;
+      if (f.t === "num" && f.sh) return `<label class="sfl sfin"${w}><span>${esc(f.l)}</span><input name="${esc(f.k)}" value="${esc(f.v || "")}" inputmode="numeric"></label>`;
       if (f.t === "text" || f.t === "num") return `<label class="sfl"${w}>${lab}<input name="${esc(f.k)}" value="${esc(f.v || "")}" placeholder="${esc(f.ph || "")}"${f.t === "num" ? ' inputmode="numeric"' : ""}></label>`;
       if (f.t === "date") return `<div class="sfl"${w}>${lab}<div class="sfrow">${(f.quick || []).map(([v, l]) => `<button type="button" class="pill${v === f.v ? " on" : ""}" data-sfd="${esc(v)}">${esc(l)}</button>`).join("")}<input type="date" name="${esc(f.k)}" value="${esc(f.v || "")}"${f.min ? ` min="${esc(f.min)}"` : ""}></div></div>`;
       if (f.t === "seg" || f.t === "multi") { const on = String(f.v ?? "").split(",");

@@ -228,6 +228,7 @@ def card(ctx, code, note=None):
               ([Button("✖️ Снять отсрочку", f"mca:{code}:x")] if st.get("hold") else []))
     kb.append([Button("✏️ Вписать даты", f"mca:{code}:d")])
     kb.insert(0, [Button("🎨 Бренд: логотип и цвета", f"mcb:{code}")])
+    kb.insert(0, [Button("👥 Завести людей по ролям", f"mch:{code}")])
     if i["wait"]:
         kb.append([Button(f"📨 Заявки ({len(i['wait'])})", "mcr")])
     url = _link(code)

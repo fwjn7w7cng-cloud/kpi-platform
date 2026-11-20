@@ -124,10 +124,12 @@ def people_rows(ctx):
     from core.ui.retail import shop_dept
     sd = shop_dept(ctx.cfg)
     app = {}
+    wh_dept = next((d.id for d in ctx.cfg.departments if d.kind == "warehouse"), None)
     for e in ctx.db.employees():
         if e["role"] in ("owner", "admin"):
             continue
-        k = f"{e['dept']}/{e['team']}" if e["dept"] == sd else e["dept"]
+        ws = (e.get("extra") or {}).get("whs") or []
+        k = f"{e['dept']}/{e['team']}" if e["dept"] == sd else f"{e['dept']}/@{ws[0]}" if e["dept"] == wh_dept and ws else e["dept"]
         app[k] = app.get(k, 0) + 1
     from modules.ship import owners, whs
     places = whs(ctx) if (ctx.cfg.warehouses or ctx.db.get("warehouses")) else []    # склады учёта клиента (Адам 20.11)
@@ -138,7 +140,7 @@ def people_rows(ctx):
 
     def wrow(wid, wname, first):
         return (f"{wh_dept}/@{wid}", wname if wname.lower().startswith("склад") else f"Склад · {wname}", wpkg,
-                app.get(wh_dept, 0) if first else 0)
+                app.get(f"{wh_dept}/@{wid}", 0) + (app.get(wh_dept, 0) if first else 0))
     out = []
     for d in ctx.cfg.departments:
         pkg = E.dept_package(d.kind) or "office"

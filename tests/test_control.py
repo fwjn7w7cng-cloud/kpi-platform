@@ -259,6 +259,47 @@ class Pult(Control):
         bad = self.demo.press(1, "mns", form={"name": ""})
         self.assertIn("название", text_of(bad[0]))
 
+    def test_hire_by_roles(self):
+        """Адам 20.11: завести людей по ролям без имён — магазины, склады магазинов и общие, опт, руководители и владельцы."""
+        self.demo.press(1, "mnw:new")
+        for x in ("mnp:s:company", "mnp:d:stock", "mnp:d:logistics", "mnp:d:office", "mnp:src:alapa", "mnp:seg:mix"):
+            self.demo.press(1, x)
+        self.demo.press(1, "mns", form={"name": "Сеть Б", "shops": "Барт\nФаида\nФаида Беркат", "whs": "Склад 1\nСклад 2\nСклад Фаида"})
+        r = self.demo.press(1, "mch:set_b")[0]
+        f = next(b[1] for k, b in r.view.blocks if k == "ui" and b[0] == "sform")
+        keys = {x["k"]: x for x in f["fields"]}
+        self.assertIn("s|s1|seller", keys)
+        self.assertIn("s|s2|storekeeper", keys)                                  # складской магазина
+        self.assertIn("w|wh|storekeeper", keys)                                  # общий склад
+        self.assertNotIn("w|wh3|storekeeper", keys)                              # «Склад Фаида» — склад магазина, не общий
+        self.assertIn("wa|wh_head", keys)
+        form = {k: "0" for k in keys if "|" in k}
+        form.update({"s|s1|seller": "2", "s|s1|shop_admin": "1", "s|s1|driver": "1", "s|s2|seller": "2", "s|s2|storekeeper": "1",
+                     "w|wh|storekeeper": "2", "w|wh2|storekeeper": "1", "wa|wh_head": "1", "d|sales|rep": "2",
+                     "L0r": "head", "L0s": "s2,s3", "L1r": "owner", "L1s": "s1,s2", "L2r": "head", "L2s": ""})
+        bad = self.demo.press(1, "mchs:set_b", form=form)
+        self.assertIn("Не заведено", text_of(bad[0]))                            # руководителю не отмечены магазины
+        form["L2r"] = ""
+        out = self.demo.press(1, "mchs:set_b", form=form)
+        self.assertIn("Заведено 15", text_of(out[0]))
+        app = App("set_b", today=DAY, admins=[1], data_dir=self.data)
+        es = app.db().employees()
+        self.assertIn("Продавец 1 · Барт", [e["fio"] for e in es])
+        keeper = next(e for e in es if e["extra"].get("auto") == "s|s2|storekeeper")
+        self.assertEqual(keeper["extra"]["whs"], ["wh3"])                        # склад Фаиды
+        self.assertEqual(self.demo.press(1, "mchs:set_b", form=form)[0].view.blocks and
+                         len(App("set_b", today=DAY, admins=[1], data_dir=self.data).db().employees()), 15)   # повтор — без дублей
+        from core import billing as B
+        from core import control as K
+        c = K.cctx(self.demo.ctx(1), "set_b")
+        self.assertEqual(B.people(c), 14)                                        # владелец бесплатно
+        self.assertEqual(B.dcounts(c)[0]["warehouse/@wh"], 2 + 1)                # 2 складских + завсклад
+        owner = next(e for e in es if e["role"] == "owner")
+        from core.ui.retail import SEES_KEY
+        self.assertEqual(app.db().get(SEES_KEY)[str(owner["id"])], ["s1", "s2"])
+        app.db().c.execute("UPDATE employees SET tg_id = 900 WHERE id = ?", (owner["id"],))
+        self.assertEqual(app.ctx(900).shops_only, {"s1", "s2"})                 # владелец видит только свои магазины
+
     def test_new_app_shops(self):
         """Адам 20.11: сеть магазинов с учётом в Алапе — магазины, склады, загрузка товаров из отчёта «Остатки» 1С."""
         self.demo.press(1, "mnw:new")

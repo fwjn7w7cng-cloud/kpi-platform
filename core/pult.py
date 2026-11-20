@@ -164,6 +164,52 @@ def people_save(ctx, code):
     return K.card(ctx, code, f"✅ Люди сохранены: всего {st['people']}.")
 
 
+# ---------- 👥 завести людей по ролям (Адам 20.11, эскиз HP.png) ----------
+
+@screen("mch")
+def hire_screen(ctx, code, note=None, form=None):
+    from core import hire as H
+    no = _deny(ctx)
+    if no or not _known(ctx, code):
+        return no or K.money_screen(ctx)
+    c = K.cctx(ctx, code)
+    v = View(f"👥 Завести людей · {c.cfg.name}", "по ролям, без имён — имена и ссылки для входа потом в его приложении")
+    if note:
+        v.note(note)
+    have = sum(1 for e in c.db.employees() if (e.get("extra") or {}).get("auto"))
+    v.ui("hero", {"label": "Сейчас в приложении", "big": f"{len(c.db.employees())} чел.", "id": f"mch{code}",
+                  "sub": f"за деньги {H.paid_people(c)} — владелец и администратор бесплатно" + (f" · заведено отсюда {have}" if have else ""),
+                  "pairs": []}, fallback=["Завести людей"])
+    fields = H.form_fields(c, form)
+    v.ui("sform", {"fields": fields, "send": ["👥 Завести недостающих", f"mchs:{code}"], "err": "", "top": [],
+                   "note": "Числа — сколько людей должно быть. Повторное нажатие заводит только недостающих; лишних увольняют в его приложении. "
+                           "Администратора Алапы назначьте потом в его приложении: «👥 Сотрудники» → человек → «🎚 Роль»."},
+         "", fallback=[f["l"] for f in fields])
+    return Reply(view=v, buttons=[[Button("‹ Карточка", f"mcc:{code}")]])
+
+
+@screen("mchs")
+def hire_save(ctx, code):
+    from core import hire as H
+    no = _deny(ctx)
+    if no or not _known(ctx, code):
+        return no or K.money_screen(ctx)
+    form = getattr(ctx, "form", None) or {}
+    c = K.cctx(ctx, code)
+    made, errs = H.apply(c, form)
+    if errs:
+        return hire_screen(ctx, code, note="Не заведено: " + "; ".join(errs[:5]), form=form)
+    c = K.cctx(ctx, code)
+    st = B.state(c)                                  # люди по отделам — теперь настоящие из приложения
+    rows = B.people_rows(c)
+    st["dcounts"] = {k: n for k, _, _, n in rows}
+    st["people"] = sum(st["dcounts"].values())
+    st.pop("counts", None)
+    B.save(c, st)
+    add_hist(c, f"Заведено людей по ролям: {made}, всего за деньги {st['people']}", who(ctx))
+    return K.card(ctx, code, f"✅ Заведено {made} чел. Всего за деньги {st['people']}. Имена и ссылки — в его приложении «👥 Сотрудники».")
+
+
 # ---------- как считаем зарплату (Адам 20.11) ----------
 
 @screen("mce")

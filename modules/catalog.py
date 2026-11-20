@@ -328,7 +328,7 @@ def ref_delete(ctx, kind="", key="", act=None):
 # ======================= «видит магазины» =======================
 
 def sees_ok(ctx, e):
-    return boss(ctx) and e and RT.has_shops(ctx.cfg) and e["role"] in ("head", "sv")
+    return boss(ctx) and e and RT.has_shops(ctx.cfg) and e["role"] in ("head", "sv", "owner")
 
 
 @screen("shs", module=M)
