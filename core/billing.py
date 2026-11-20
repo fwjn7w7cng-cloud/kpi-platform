@@ -129,18 +129,31 @@ def people_rows(ctx):
             continue
         k = f"{e['dept']}/{e['team']}" if e["dept"] == sd else e["dept"]
         app[k] = app.get(k, 0) + 1
-    from modules.ship import whs
+    from modules.ship import owners, whs
     places = whs(ctx) if (ctx.cfg.warehouses or ctx.db.get("warehouses")) else []    # склады учёта клиента (Адам 20.11)
     wh_dept = next((d.id for d in ctx.cfg.departments if d.kind == "warehouse"), None)
+    split = wh_dept and len(places) > 1
+    ow = owners(ctx) if split else {}
+    wpkg = E.dept_package("warehouse") or "stock"
+
+    def wrow(wid, wname, first):
+        return (f"{wh_dept}/@{wid}", wname if wname.lower().startswith("склад") else f"Склад · {wname}", wpkg,
+                app.get(wh_dept, 0) if first else 0)
     out = []
     for d in ctx.cfg.departments:
         pkg = E.dept_package(d.kind) or "office"
-        if d.id == wh_dept and len(places) > 1:                  # склад — по каждому складу, который клиент вписал
-            for i, (wid, wname) in enumerate(places):
-                out.append((f"{d.id}/@{wid}", wname if wname.lower().startswith("склад") else f"Склад · {wname}", pkg, app.get(d.id, 0) if i == 0 else 0))
+        if d.id == wh_dept and split:                             # общие склады — здесь, склады магазинов — под своим магазином
+            common = [(w, n) for w, n in places if not ow.get(w)]
+            for i, (wid, wname) in enumerate(common):
+                k, lbl, p_, a_ = wrow(wid, wname, i == 0)
+                out.append((k, f"Общий · {lbl}", p_, a_))
         elif d.id == sd:
             for t in ctx.cfg.teams_of(d.id):
                 out.append((f"{d.id}/{t.id}", f"{d.name} · {t.name}", pkg, app.get(f"{d.id}/{t.id}", 0)))
+                for wid, wname in places:
+                    if split and ow.get(wid) == t.id:
+                        k, lbl, p_, a_ = wrow(wid, wname, False)
+                        out.append((k, f"{t.name} · {lbl}", p_, a_))
         else:
             out.append((d.id, d.name, pkg, app.get(d.id, 0)))
     return out

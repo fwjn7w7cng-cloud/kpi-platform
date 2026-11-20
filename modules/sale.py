@@ -164,7 +164,7 @@ def checkout(ctx):
                                 SH.stock_at(ctx.db, g["code"], here)[1] else "") + " — со склада только доставкой.", f)
                 srcs[g["code"]] = here
             else:
-                w = SH.pick_wh(ctx.db, ctx, g["code"], n, res)
+                w = SH.pick_wh(ctx.db, ctx, g["code"], n, res, shop=here)
                 if w:
                     srcs[g["code"]] = w
                 elif fh >= n:

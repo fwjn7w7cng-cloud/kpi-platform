@@ -281,8 +281,8 @@ class Pult(Control):
         rows = B.people_rows(K.cctx(self.demo.ctx(1), "set_bart"))            # люди — по его отделам, магазины по одному
         self.assertIn("Магазины · Барт Премиум", [lbl for _, lbl, *_ in rows])
         self.assertTrue(B.dcounts(K.cctx(self.demo.ctx(1), "set_bart"))[1])   # пока типовые числа размера
-        self.assertIn("Склад Гойты 1", [lbl for _, lbl, *_ in rows])     # склад — по каждому складу клиента
-        self.assertIn("Склад Курчалой", [lbl for _, lbl, *_ in rows])
+        self.assertIn("Общий · Склад Гойты 1", [lbl for _, lbl, *_ in rows])     # склад — по каждому складу клиента
+        self.assertIn("Общий · Склад Курчалой", [lbl for _, lbl, *_ in rows])
         cb = K.cctx(self.demo.ctx(1), "set_bart")
         self.assertEqual(sum(B.dcounts(cb)[0].values()), B.people(cb))            # поля в сумме = «Всего»
         # загрузка товаров: отчёт «Остатки» из 1С как есть (места хранения — строки-суммы)
@@ -348,6 +348,18 @@ class Pult(Control):
         self.assertEqual([n for _, n in RT.shops(app.ctx(1).cfg)], ["Барт", "Барт Премиум", "Фаида Центр", "Бааев Крым"])
         app.press(1, "rfd:s:s4:ok")
         self.assertNotIn("Бааев Крым", [n for _, n in RT.shops(app.ctx(1).cfg)])
+        # чей склад (Адам 20.11): по названию сам, в справочниках — вручную; продажа магазина берёт сначала свой склад
+        db.put(SH.OWNER_KEY, {})
+        app.press(1, "rfs:w:wh2", form={"name": "Склад Фаида Центр"})
+        db.put(SH.OWNER_KEY, {})
+        self.assertEqual(SH.owners(app.ctx(1))["wh2"], "s3")                       # по названию
+        self.assertEqual(SH.wh_order(app.ctx(1), "s3")[0], "wh2")
+        self.assertEqual(SH.wh_order(app.ctx(1))[0], "wh")                         # опт — сначала общие
+        app.press(1, "rfs:w:wh2", form={"name": "Склад Фаида Центр", "own": "s1"})
+        self.assertEqual(SH.owners(app.ctx(1))["wh2"], "s1")                       # вручную важнее названия
+        lbls = [lbl for _, lbl, *_ in B.people_rows(K.cctx(self.demo.ctx(1), "set_bart"))]
+        self.assertIn("Барт · Склад Фаида Центр", lbls)
+        self.assertEqual(lbls.index("Барт · Склад Фаида Центр"), lbls.index("Магазины · Барт") + 1)
         # 🏬 видит магазины: руководитель магазинов — только отмеченные
         db.add_employee("Руководитель Один", "shops", position="shops_head", role="head", tg_id=900)
         db.add_employee("Продавец Барт", "shops", team="s1", position="seller", role="rep", tg_id=901)

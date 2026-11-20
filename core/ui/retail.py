@@ -349,7 +349,8 @@ def shop_home(ctx, v, team=None):
     live.hero(v, f"{shop_name(ctx.cfg, team)} · {month_title(ctx.month).lower()}", money(s.fact),
               f"план {money(s.plan)} · нужно к сегодня {pct(s.need)}" if s.plan else "",
               p=s.pct if s.plan else None, need=s.need if s.plan else None, md=True, ident=f"rts{team}",
-              acts=[["🧾 Продажа", "sale"], ["📋 Продажи сегодня", "sll"]] if ctx.duty == "shop" and ctx.can("shop_sale") else [],
+              acts=([["🧾 Продажа", "sale"], ["📋 Продажи сегодня", "sll"]] if ctx.duty == "shop" and ctx.can("shop_sale") else [])
+                   + ([["📍 Остатки", "stl"]] if ctx.duty == "shop" and ctx.can("ship") else []),
               pairs=[("Чеков", str(n), ""), ("Средний чек", money(tot / n) if n else "—", ""),
                      ("Позиций в чеке", f"{pos / n:.1f}".replace(".", ",") if n else "—", "")])
     rows = []

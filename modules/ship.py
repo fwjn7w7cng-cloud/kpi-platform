@@ -86,6 +86,43 @@ def wh_ids(src):
     return {w for w, _ in whs(src)}
 
 
+OWNER_KEY = "wh_owner"    # чей склад (Адам 20.11): {id склада: id магазина | ""}; нет записи — по названию (`owner`)
+
+
+def _norm(t):
+    return " ".join(str(t or "").lower().replace("ё", "е").split())
+
+
+def owners(src):
+    """{id склада: id магазина или ""} — общий склад или склад магазина. Вписано в справочниках — так; нет — по названию:
+    «Склад Бааев Аргун» → магазин «Бааев Аргун» (самое длинное совпадение), «Склад 1» → общий."""
+    db = getattr(src, "db", None)
+    fixed = (db.get(OWNER_KEY) if db is not None else None) or {}
+    shops = RT.shops(_cfg(src))
+    out = {}
+    for w, n in whs(src):
+        if w in fixed:
+            out[w] = fixed[w] if fixed[w] in dict(shops) else ""
+            continue
+        nn = _norm(n)
+        hit = sorted((s for s, sn in shops if _norm(sn) and _norm(sn) in nn), key=lambda s: -len(_norm(dict(shops)[s])))
+        out[w] = hit[0] if hit else ""
+    return out
+
+
+def shop_whs(src, shop):
+    """Склады этого магазина."""
+    return [w for w, o in owners(src).items() if o == shop]
+
+
+def wh_order(src, shop=None):
+    """Порядок складов, откуда брать: свои склады магазина → общие → склады других магазинов."""
+    ow = owners(src)
+    ids = [w for w, _ in whs(src)]
+    return ([w for w in ids if shop and ow.get(w) == shop] + [w for w in ids if not ow.get(w)]
+            + [w for w in ids if ow.get(w) and ow.get(w) != shop])
+
+
 def main_wh(src):
     return whs(src)[0][0]
 
@@ -100,10 +137,11 @@ def free_wh(db, cfg, code, res=None):
     return sum(free(db, code, w, res) for w in wh_ids(cfg))
 
 
-def pick_wh(db, cfg, code, n, res=None):
-    """Склад, где свободно не меньше n (первый по списку), или None."""
+def pick_wh(db, cfg, code, n, res=None, shop=None):
+    """Склад, где свободно не меньше n, или None. shop — магазин: сначала его склады, потом общие, потом других магазинов
+    (Адам 20.11); без магазина (опт) — сначала общие."""
     res = reserved(db) if res is None else res
-    return next((w for w, _ in whs(cfg) if free(db, code, w, res) >= n), None)
+    return next((w for w in wh_order(cfg, shop) if free(db, code, w, res) >= n), None)
 
 
 def loc_name(cfg, loc):
@@ -483,7 +521,7 @@ def move_card(ctx, mid=None, act=None):
     if act == "go" and m["status"] == "ask" and keeper(ctx):
         src = {}
         for c, n, smp, _g in json.loads(m["lines"]):
-            src[c] = pick_wh(ctx.db, ctx, c, n)
+            src[c] = pick_wh(ctx.db, ctx, c, n, shop=m["loc"])
             if src[c] is None:
                 return Reply(text=f"На складах свободно меньше, чем просят: {A._names(ctx.db).get(c, c)}.", buttons=[[Button("‹", f"mvo:{m['id']}")]])
         for c, n, smp, _g in json.loads(m["lines"]):
@@ -536,13 +574,24 @@ def move_accept(ctx, mid=None):
 
 @screen("stl", module=M)
 def stock_by_loc(ctx):
+    mine = None
     if ctx.role not in ("owner", "admin", "accountant"):
-        return Reply(text="Остатки по местам видят владелец, админ и бухгалтер.")
-    see = A.can_see(ctx, "остатки по местам с себестоимостью")
+        if ctx.duty != "shop" or not ctx.me:
+            return Reply(text="Остатки по местам видят владелец, админ, бухгалтер и директор магазина (свои).")
+        mine = {ctx.me["team"]} | set(shop_whs(ctx, ctx.me["team"]))      # директор магазина — свой зал и свои склады
+    see = mine is None and A.can_see(ctx, "остатки по местам с себестоимостью")
+    ow = owners(ctx)
+    shop_names = dict(RT.shops(ctx.cfg))
     cost = {g["code"]: g["cost"] for g in ctx.db.q("SELECT code, cost FROM goods")}
     res = reserved(ctx.db)
     rows, total, pcs = [], 0, 0
     for loc, name in locs(ctx):
+        if mine is not None and loc not in mine:
+            continue
+        if ow.get(loc):
+            name = f"{name} · склад магазина «{shop_names.get(ow[loc], ow[loc])}»"
+        elif loc in ow and len(ow) > 1:
+            name = f"{name} · общий"
         rs = ctx.db.q("SELECT code, qty, smp FROM stock_loc WHERE loc = ?", loc)
         q = sum(r["qty"] for r in rs)
         c = sum(r["qty"] * cost.get(r["code"], 0) for r in rs)
@@ -555,12 +604,14 @@ def stock_by_loc(ctx):
     way_c = sum(n * cost.get(c, 0) for m in way for c, n, *_ in json.loads(m["lines"]))
     res_c = sum(n * cost.get(c, 0) for (c, _l), n in res.items())
     v = View("📍 Остатки по местам", "")
-    v.ui("hero", {"label": f"Всё в фирме · по себестоимости {A.LOCK}" if see else "Всё в фирме", "md": True, "id": "stl",
+    v.ui("hero", {"label": f"Всё в фирме · по себестоимости {A.LOCK}" if see else "Мой магазин и его склады" if mine is not None else "Всё в фирме", "md": True, "id": "stl",
                   "big": money(total) if see else f"{A._num(pcs)} шт",
                   "sub": (f"в резерве под заказы {money(res_c)} · в пути {money(way_c)}" if see else "себестоимость закрыта владельцем"),
                   "pairs": [], "acts": []}, fallback=["Остатки по местам"])
     A.support_block(ctx, v)
     v.ui("team", {"head": ["Где", "Штук", "Резерв"] + ([f"Себест. {A.LOCK}"] if see else []), "rows": rows}, "")
+    if mine is not None:
+        return Reply(view=v, buttons=[[Button("🔁 Перемещения", "mv")]])
     t2 = (ctx.today - timedelta(days=2)).isoformat()
     stuck = [o for o in to_load(ctx) if o["deliv"] <= t2]
     late_mv = ctx.db.q("SELECT id, loc FROM moves WHERE status = 'go' AND go_ts < ?", t2)

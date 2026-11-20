@@ -186,7 +186,10 @@ def refs(ctx, note=None):
         items.append({"t": "Без раздела", "s": f"{A._num(nogrp)} товаров — разложить в карточках", "chip": ["список", "gd", "warn"]})
     v.ui("rows", {"items": items, "empty": "Разделов пока нет", "foot": [["➕ Раздел", "rfe:g:new"]]}, "Разделы товаров")
     if boss(ctx):
-        v.ui("rows", {"items": [{"t": n, "s": f"{A._num(_stock_at(ctx.db, w))} шт", "chip": ["✏️ изменить", f"rfe:w:{w}", ""]}
+        ow, sn = SH.owners(ctx), dict(RT.shops(ctx.cfg))
+        v.ui("rows", {"items": [{"t": n, "s": f"{A._num(_stock_at(ctx.db, w))} шт" + (f" · склад магазина «{sn.get(ow[w], ow[w])}»"
+                                                                                  if ow.get(w) else " · общий" if sn else ""),
+                                 "chip": ["✏️ изменить", f"rfe:w:{w}", ""]}
                                 for w, n in SH.whs(ctx)], "foot": [["➕ Склад", "rfe:w:new"]]}, "Склады")
         if RT.has_shops(ctx.cfg):
             v.ui("rows", {"items": [{"t": n, "s": f"{A._num(_stock_at(ctx.db, s))} шт · {len(_people_in(ctx, s))} чел.",
@@ -213,7 +216,11 @@ def ref_edit(ctx, kind="", key="", err=""):
     if key != "new" and cur is None:
         return refs(ctx)
     v = View(f"➕ {KINDS[kind].capitalize()}" if key == "new" else f"✏️ {cur}", "")
-    v.ui("sform", {"fields": [{"k": "name", "t": "text", "l": "Название", "v": cur or "", "req": 1}],
+    fields = [{"k": "name", "t": "text", "l": "Название", "v": cur or "", "req": 1}]
+    if kind == "w" and RT.has_shops(ctx.cfg):                      # чей склад (Адам 20.11): общий или склад магазина
+        fields.append({"k": "own", "t": "seg", "l": "Чей склад", "v": SH.owners(ctx).get(key, "") if cur else "",
+                       "opts": [["", "Общий"]] + [[s_, n_] for s_, n_ in RT.shops(ctx.cfg)]})
+    v.ui("sform", {"fields": fields,
                    "send": ["💾 Сохранить", f"rfs:{kind}:{key}"], "err": err, "top": [], "note": ""}, "", fallback=["Название"])
     kb = [[Button("‹ Справочники", "rf")]]
     if cur is not None:
@@ -247,11 +254,17 @@ def ref_save(ctx, kind="", key=""):
         if cur:
             ws = [(w, name if w == key else n) for w, n in ws]
             SH.set_whs(ctx, ws)
-            note = f"Склад «{cur}» → «{name}»."
+            note = f"Склад «{cur}» → «{name}»." if name != cur else f"Склад «{name}» сохранён."
+            wid = key
         else:
             SH.set_whs(ctx, ws)
-            SH.add_wh(ctx.db, name)
+            wid = SH.add_wh(ctx.db, name)
             note = f"Склад «{name}» добавлен."
+        own = str((ctx.form or {}).get("own", ""))
+        if RT.has_shops(ctx.cfg) and wid and (own == "" or own in dict(RT.shops(ctx.cfg))):
+            o = ctx.db.get(SH.OWNER_KEY) or {}
+            o[wid] = own
+            ctx.db.put(SH.OWNER_KEY, o)
     else:
         e = ctx.db.get(RT.EDIT_KEY) or {}
         if cur:
