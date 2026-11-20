@@ -132,7 +132,7 @@ class Live(unittest.TestCase):
         """Адам 17.11: «в сборке убрал склад — а в фонде он есть». Что в «Собрать» — то и везде: отделы, люди, роли."""
         from core.access import editions as E
         self.app.press(ADMIN, "sw:role:owner")
-        funcs = [f for f, (d, _) in E.FUNCS.items() if d in ("sales", "logistics")]
+        funcs = [f for f, (d, _) in E.FUNCS.items() if d in ("sales", "logistics") and f not in E.ACC_FUNCS]
         self.app.press(ADMIN, "swb:s:q", form={"funcs": funcs, "on": ["sales", "logistics"],
                                                "counts": {"sales": 8, "stock": 0, "logistics": 3, "office": 0}})
         ctx = self.app.ctx(ADMIN)

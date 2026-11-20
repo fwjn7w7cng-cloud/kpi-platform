@@ -118,17 +118,73 @@ def people(ctx, st=None):
     return int(st["people"]) if st.get("people") is not None else sum(counts_of(ctx).values())
 
 
-def counts_for(ctx, n):
-    """Люди по отделам для расчёта, когда всего людей n: разница ложится на первый подключённый отдел."""
+def people_rows(ctx):
+    """Отделы клиента для «👥 Люди» в пульте (Адам 20.11: «по его отделам»): [(ключ, подпись, пакет, в приложении)].
+    Отдел магазинов — по каждому магазину (ключ «<отдел>/<магазин>»). Директор и админ клиента не считаются (бесплатно)."""
+    from core.ui.retail import shop_dept
+    sd = shop_dept(ctx.cfg)
+    app = {}
+    for e in ctx.db.employees():
+        if e["role"] in ("owner", "admin"):
+            continue
+        k = f"{e['dept']}/{e['team']}" if e["dept"] == sd else e["dept"]
+        app[k] = app.get(k, 0) + 1
+    out = []
+    for d in ctx.cfg.departments:
+        pkg = E.dept_package(d.kind) or "office"
+        if d.id == sd:
+            for t in ctx.cfg.teams_of(d.id):
+                out.append((f"{d.id}/{t.id}", f"{d.name} · {t.name}", pkg, app.get(f"{d.id}/{t.id}", 0)))
+        else:
+            out.append((d.id, d.name, pkg, app.get(d.id, 0)))
+    return out
+
+
+def dcounts(ctx, st=None):
+    """Люди по отделам клиента: (числа {ключ: n}, типовые ли). Вписаны в пульте — они; нет — сколько есть в приложении,
+    а пустое приложение — типовые числа размера, разложенные на первый отдел каждого раздела (с пометкой «типовые»)."""
+    st = state(ctx) if st is None else st
+    rows = people_rows(ctx)
+    if isinstance(st.get("dcounts"), dict):
+        return {k: int(st["dcounts"].get(k) or 0) for k, *_ in rows}, False
+    real = {k: n for k, _, _, n in rows}
+    if sum(real.values()):
+        return real, False
     from core.ui.tariff import counts_of
-    st = state(ctx)                                     # люди по отделам из пульта (Адам 20.11), пока сходятся с итогом
-    if isinstance(st.get("counts"), dict) and sum(int(v or 0) for v in st["counts"].values()) == n:
-        return {k: int(st["counts"].get(k) or 0) for k in E.DEPT_CODES}
-    c = dict(counts_of(ctx))
-    diff = n - sum(c.values())
+    old = st.get("counts") if isinstance(st.get("counts"), dict) else None
+    base = dict(old) if old else {}
+    if not base:
+        n = people(ctx, st)
+        pk = E.packages_of(funcs(ctx), ctx.cfg.depts or ())
+        base = {next((k for k in E.DEPT_CODES if pk.get(k)), "sales"): n}
+    out = {k: 0 for k, *_ in rows}
+    for pkg, n in base.items():
+        k = next((k for k, _, p, _ in rows if p == pkg), None) or (rows[0][0] if rows else None)
+        if k:
+            out[k] += int(n or 0)
+    return out, True
+
+
+def counts_for(ctx, n):
+    """Люди по разделам цены (продажи / склад / логистика / офис), когда всего людей n: разница — на первый подключённый."""
+    from core.ui.tariff import counts_of
+    st = state(ctx)
     pk = E.packages_of(funcs(ctx), ctx.cfg.depts or ())
-    key = next((k for k in ("sales", "stock", "logistics", "office") if pk.get(k)), "sales")
-    c[key] = max(0, c.get(key, 0) + diff)
+    if isinstance(st.get("dcounts"), dict):                   # вписаны в пульте по отделам клиента (Адам 20.11)
+        c = {k: 0 for k in E.DEPT_CODES}
+        for key, _, pkg, _ in people_rows(ctx):
+            c[pkg if pkg in c else "office"] += int(st["dcounts"].get(key) or 0)
+    elif isinstance(st.get("counts"), dict):
+        c = {k: int(st["counts"].get(k) or 0) for k in E.DEPT_CODES}
+    else:
+        c = dict(counts_of(ctx))
+    first = next((k for k in E.DEPT_CODES if pk.get(k)), "sales")
+    for k in E.DEPT_CODES:                                    # люди в неподключённом разделе — в первый подключённый
+        if k != first and c.get(k) and not pk.get(k):
+            c[first] = c.get(first, 0) + c.pop(k)
+            c[k] = 0
+    diff = n - sum(c.values())
+    c[first] = max(0, c.get(first, 0) + diff)
     return c
 
 

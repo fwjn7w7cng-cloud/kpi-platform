@@ -134,14 +134,20 @@ class Pult(Control):
         self.assertIn("branding", self.acme.ctx(700).cfg.modules)
         self.assertNotIn("custom", E.FUNCS)
         base = B.monthly(self.acme.ctx(700))
-        self.demo.press(1, "mcps:acme", form={"sales": "10", "stock": "3", "logistics": "0", "office": "2"})
+        c = self.acme.ctx(700)
+        rows = B.people_rows(c)                                             # отделы клиента, не разделы цены
+        self.assertEqual([k for k, *_ in rows], [d.id for d in c.cfg.departments])
+        dc, typical = B.dcounts(c)
+        self.assertFalse(typical)                                           # в приложении уже есть торговый
+        form = {k: "0" for k, *_ in rows}
+        form.update({"sales": "10", "warehouse": "3", "office": "2"})
+        self.demo.press(1, "mcps:acme", form=form)
         c = self.acme.ctx(700)
         self.assertEqual(B.people(c), 15)
-        self.assertEqual(B.counts_for(c, 15)["stock"], 3)
-        self.demo.press(1, "mcp:acme:sales:1")
-        c = self.acme.ctx(700)
-        self.assertEqual(B.counts_for(c, B.people(c))["sales"], 11)
+        self.assertEqual(B.dcounts(c)[0]["warehouse"], 3)
         self.assertNotEqual(B.monthly(c), base)
+        bad = self.demo.press(1, "mcps:acme", form={**form, "sales": "много"})
+        self.assertIn("Не сохранил", text_of(bad[0]))
         # зарплата: ставка торгового 0,4% → 0,5%
         r = self.demo.press(1, "mce:acme:rep")[0]
         f = next(b[1] for k, b in r.view.blocks if k == "ui" and b[0] == "form")
@@ -189,6 +195,7 @@ class Pult(Control):
             self.assertIn(f, E.FUNCS)
         self.assertFalse(set(E.ACC_FUNCS) & E.functions_of(E.PRESETS["max"]["packages"]))   # в готовые наборы не входят
         self.assertEqual(E.toggle_function(set(), "opt_sale"), {"opt_sale", "goods"})
+        self.assertEqual({E.FUNCS[f][0] for f in E.ACC_FUNCS}, {"sales", "stock"})           # в своих отделах (Адам 20.11)
         self.assertTrue(set(E.ACC_FUNCS) <= self.demo.ctx(1).cfg.modules)                   # в демо видны
 
     def test_discounts(self):
@@ -269,6 +276,11 @@ class Pult(Control):
         from core.ui import retail as RT
         self.assertEqual([n for _, n in RT.shops(app.cfg)], ["Барт", "Барт Премиум", "Фаида"])
         self.assertEqual(app.ctx(1).segment, "mix")
+        from core import billing as B
+        from core import control as K
+        rows = B.people_rows(K.cctx(self.demo.ctx(1), "set_bart"))            # люди — по его отделам, магазины по одному
+        self.assertIn("Магазины · Барт Премиум", [lbl for _, lbl, *_ in rows])
+        self.assertTrue(B.dcounts(K.cctx(self.demo.ctx(1), "set_bart"))[1])   # пока типовые числа размера
         # загрузка товаров: отчёт «Остатки» из 1С как есть (места хранения — строки-суммы)
         import openpyxl, io
         wb = openpyxl.Workbook()

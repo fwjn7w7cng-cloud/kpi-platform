@@ -80,15 +80,14 @@ def card_blocks(v, ctx, code, c):
                   "pairs": [["Функций", f"{len(fs)} из {len(E.FUNCS)}", ""], ["Людей", str(n), ""],
                             ["Было бы без скидок", money(q["monthly"]), ""] if ds else ["Подключение", money(B.setup_sum(c, st)), ""]]},
          fallback=[f"В месяц: {money(total)}", how])
-    cn = B.counts_for(c, n)
-    ditems = []
-    for dcode in E.DEPT_CODES:
-        icon, title = E.FUNC_GROUPS[dcode]
-        k = int(cn.get(dcode) or 0)
-        ditems.append({"t": f"{icon} {title}", "v": f"{k} чел.",
-                       "chips": [["−", f"mcp:{code}:{dcode}:-1", ""], ["＋", f"mcp:{code}:{dcode}:1", "good"]]})
-    v.ui("rows", {"items": ditems, "right": f"всего {n}", "foot": [["✏️ Вписать числа", f"mcpe:{code}"]]}, "👥 Люди по отделам",
-         fallback=[f"{x['t']}: {x['v']}" for x in ditems])
+    dc, typical = B.dcounts(c, st)
+    fields = [{"k": key, "l": label + (f" · в приложении {app}" if app else ""), "v": str(dc.get(key, 0)), "num": True}
+              for key, label, _, app in B.people_rows(c)]
+    hint = f"Всего {n} · {n} × {money(pr['user'])} = {money(n * pr['user'])} в месяц. Директор и админ клиента — бесплатно."
+    if typical:
+        hint = "⚠️ Типовые числа размера, не настоящие — впишите, сколько людей в каждом отделе. " + hint
+    v.ui("form", {"fields": fields, "send": ["Сохранить", f"mcps:{code}"], "hint": hint}, "👥 Люди по отделам",
+         fallback=[f"{f['l']}: {f['v']}" for f in fields])
     from core import payedit as PE
     uses = PE.who_uses(c.cfg)
     sch = PE.schemes(c.cfg)
@@ -142,61 +141,27 @@ def toggle_func(ctx, code, f=""):
 
 # ---------- люди по отделам (Адам 20.11: «не могу менять количество людей в отделах») ----------
 
-def _set_counts(c, counts, by):
-    st = B.state(c)
-    counts = {k: max(0, min(5000, int(counts.get(k) or 0))) for k in E.DEPT_CODES}
-    st["counts"], st["people"] = counts, sum(counts.values())
-    B.save(c, st)
-    add_hist(c, "Люди по отделам: " + ", ".join(f"{E.FUNC_GROUPS[k][1]} {counts[k]}" for k in E.DEPT_CODES if counts[k])
-             + f" — всего {st['people']}", by)
-
-
-@screen("mcp")
-def people_step(ctx, code, dept="", step="0"):
-    no = _deny(ctx)
-    if no or not _known(ctx, code) or dept not in E.DEPT_CODES:
-        return no or K.money_screen(ctx)
-    c = K.cctx(ctx, code)
-    cn = dict(B.counts_for(c, B.people(c)))
-    try:
-        cn[dept] = max(0, int(cn.get(dept) or 0) + int(step))
-    except ValueError:
-        pass
-    _set_counts(c, cn, who(ctx))
-    return K.card(ctx, code)
-
-
-@screen("mcpe")
-def people_edit(ctx, code, note=None):
-    no = _deny(ctx)
-    if no or not _known(ctx, code):
-        return no or K.money_screen(ctx)
-    c = K.cctx(ctx, code)
-    cn = B.counts_for(c, B.people(c))
-    v = View(f"👥 Люди · {c.cfg.name}", "сколько людей в каждом отделе — сумма в месяц пересчитается сразу")
-    if note:
-        v.note(note)
-    v.ui("form", {"fields": [{"k": k, "l": f"{E.FUNC_GROUPS[k][0]} {E.FUNC_GROUPS[k][1]}", "v": str(int(cn.get(k) or 0)), "num": True}
-                             for k in E.DEPT_CODES],
-                  "send": ["Сохранить", f"mcps:{code}"], "hint": "Директор и админ клиента — бесплатно, их не считаем."}, "По отделам")
-    return Reply(view=v, buttons=[[Button("‹ Назад", f"mcc:{code}")]])
-
-
 @screen("mcps")
 def people_save(ctx, code):
     no = _deny(ctx)
     if no or not _known(ctx, code):
         return no or K.money_screen(ctx)
     form = getattr(ctx, "form", None) or {}
-    cn = {}
-    for k in E.DEPT_CODES:
-        x = str(form.get(k, "0")).replace(" ", "").strip() or "0"
-        if not x.isdigit() or int(x) > 5000:
-            return people_edit(ctx, code, note=f"{E.FUNC_GROUPS[k][1]}: нужно целое число от 0 до 5 000.")
-        cn[k] = int(x)
     c = K.cctx(ctx, code)
-    _set_counts(c, cn, who(ctx))
-    return K.card(ctx, code, "✅ Люди по отделам сохранены.")
+    rows = B.people_rows(c)
+    dc = {}
+    for key, label, _, _ in rows:
+        x = str(form.get(key, "0")).replace(" ", "").strip() or "0"
+        if not x.isdigit() or int(x) > 5000:
+            return K.card(ctx, code, f"Не сохранил: «{label}» — нужно целое число от 0 до 5 000.")
+        dc[key] = int(x)
+    st = B.state(c)
+    st["dcounts"], st["people"] = dc, sum(dc.values())
+    st.pop("counts", None)
+    B.save(c, st)
+    add_hist(c, "Люди по отделам: " + ", ".join(f"{label} {dc[k]}" for k, label, _, _ in rows if dc[k]) + f" — всего {st['people']}",
+             who(ctx))
+    return K.card(ctx, code, f"✅ Люди сохранены: всего {st['people']}.")
 
 
 # ---------- как считаем зарплату (Адам 20.11) ----------

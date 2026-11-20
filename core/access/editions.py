@@ -262,7 +262,7 @@ def upgrade(packages, code):
 # ---------- функции (Адам 31.10: платим только за функции; отдел — папка, настройки внутри функции — бесплатно) ----------
 # код модуля: (отдел для группировки, цена по умолчанию ₽/мес). Отдел подключён, если в нём выбрана хоть одна функция.
 FUNC_GROUPS = {"all": ("💰", "Все отделы"), "sales": ("📈", "Продажи"), "stock": ("📦", "Склад и закупки"),
-               "logistics": ("🚚", "Логистика"), "office": ("👤", "Кадры и офис"), "acc": ("🧾", "Учёт в Алапе — без 1С"),
+               "logistics": ("🚚", "Логистика"), "office": ("👤", "Кадры и офис"),
                "max": ("⭐", "Дополнительно")}
 FUNCS = {
     "payroll": ("all", 3000), "approval": ("all", 1000), "tasks": ("all", 2000),
@@ -271,7 +271,7 @@ FUNCS = {
     "forecast": ("sales", 1000), "call_today": ("sales", 1000), "watchdog": ("sales", 1000), "formulas": ("sales", 2000),
     "stock": ("stock", 3000), "warehouse": ("stock", 2000), "returns": ("stock", 1000),
     "logistics": ("logistics", 3000), "fuel": ("logistics", 1000),
-    "goods": ("acc", 3000), "ship": ("acc", 2000), "shop_sale": ("acc", 2000), "opt_sale": ("acc", 3000),
+    "goods": ("stock", 3000), "ship": ("stock", 2000), "shop_sale": ("sales", 2000), "opt_sale": ("sales", 3000),
     "hr": ("office", 2000),
     "branches": ("max", 10000), "processes": ("max", 5000),
 }
