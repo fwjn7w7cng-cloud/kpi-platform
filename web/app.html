@@ -211,6 +211,13 @@ nav.tabs { display: flex; background: var(--surface); border-top: 1px solid var(
 .uchip.ink { background: var(--ink); color: var(--bg); }
 .ubar { height: 6px; border-radius: 3px; background: var(--sunk); overflow: hidden; flex-basis: 100%; } .ubar i { display: block; height: 100%; border-radius: 3px; background: var(--ink); }
 .ubar.good i { background: var(--good); } .ubar.warn i { background: var(--warn); } .ubar.bad i { background: var(--bad); }
+.ugd { border-top: 1px solid var(--line); } .ugd:first-child { border-top: 0; }
+.ugd > button { width: 100%; border: 0; background: none; padding: 12px 0; display: flex; gap: 10px; align-items: center; text-align: left; cursor: pointer; color: var(--ink); }
+.ugd .no { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12.5px; font-weight: 700; display: grid; place-items: center; }
+.ugd .nm { flex: 1; min-width: 0; } .ugd .nm b { display: block; font-size: 14.5px; } .ugd .nm small { color: var(--ink-2); font-size: 12.5px; }
+.ugd .ar { color: var(--ink-2); font-size: 12px; } .ugd .bd { padding: 0 0 12px 34px; font-size: 13.5px; line-height: 1.5; }
+.ugd .bd p { margin: 0 0 8px; } .ugd .bd ol { margin: 0 0 8px; padding-left: 20px; } .ugd .bd li { margin: 0 0 5px; }
+.ugd .bd .tl { color: var(--ink-2); font-size: 12.5px; } .ugd .ubtns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .upl2 { border-top: 1px solid var(--line); } .upl2:first-child { border-top: 0; }
 .upl2 > button { width: 100%; border: 0; background: none; padding: 11px 0; display: flex; gap: 10px; align-items: baseline; text-align: left; cursor: pointer; color: var(--ink); }
 .upl2 .nm { flex: 1; font-size: 14px; min-width: 0; } .upl2 .sm { font-weight: 700; font-variant-numeric: tabular-nums; } .upl2 .sm.neg { color: var(--bad); }
@@ -694,6 +701,10 @@ const UI = {
     (x.bar ? `<div class="ubar ${x.bar[1] || ""}"><i style="width:${Math.max(2, Math.min(100, x.bar[0] * 100)).toFixed(1)}%"></i></div>` : "") +
     (x.steps ? `<div class="ustp">${x.steps.map(([l, st]) => `<span class="${st || ""}">${esc(l)}</span>`).join("")}</div>` : "") + `</div>`).join("") ||
     `<div class="urow"><div class="tx"><span>${esc(d.empty || "Пусто")}</span></div></div>`}${d.foot ? `<div class="urow">${(d.foot || []).map(([l, to]) => `<button class="ub pri" style="flex:1"${uTo(to)}>${esc(l)}</button>`).join("")}</div>` : ""}</div>`; },
+  guide(d, t) { return uHead(t) + `<div class="ubox">${(d.items || []).map((x, i) => { const id = "g" + (++UID), op = i === d.open;
+    return `<div class="ugd"><button data-tog="${id}"><span class="no">${i + 1}</span><span class="nm"><b>${esc(x.t)}</b>${x.s ? `<small>${esc(x.s)}</small>` : ""}</span><span class="ar">${op ? "▴" : "▾"}</span></button>` +
+      `<div class="bd" id="${id}"${op ? "" : " hidden"}>${(x.p || []).map(p => `<p>${esc(p)}</p>`).join("")}${(x.steps || []).length ? `<ol>${x.steps.map(p => `<li>${esc(p)}</li>`).join("")}</ol>` : ""}` +
+      `${(x.tail || []).map(p => `<p class="tl">${esc(p)}</p>`).join("")}${(x.go || []).length ? `<div class="ubtns">${x.go.map(([l, to], j) => `<button class="ub${j ? "" : " pri"}"${uTo(to)}>${esc(l)} ›</button>`).join("")}</div>` : ""}</div></div>`; }).join("")}</div>`; },
   explain(d, t) { return uHead(t) + `<div class="ubox">${(d.items || []).map(([n, v, why, neg]) => { const id = "x" + (++UID);
     return `<div class="upl2"><button data-tog="${id}"><span class="nm">${esc(n)}</span><span class="sm${neg ? " neg" : ""}">${esc(v)}</span><span class="ar">${why ? "▾" : ""}</span></button>${why ? `<div class="why" id="${id}" hidden>${esc(why)}</div>` : ""}</div>`; }).join("")}` +
     (d.total ? `<div class="utot"><span>${esc(d.total[0])}</span><b>${esc(d.total[1])}</b></div>` : "") + `</div>`; },

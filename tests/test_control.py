@@ -343,6 +343,24 @@ class Pult(Control):
         self.assertIn("t|t1|rep", keys)
         self.assertIn("t|t2|sv", keys)
 
+    def test_admin_guide(self):
+        """Адам 20.11: инструкция администратора прямо в приложении — разделы, «Открыть ›» на настоящие экраны, PDF."""
+        from core import adminguide as AG
+        from core.ui import registry as REG
+        v = self.acme.press(700, "fs")[0].view
+        self.assertIn("ag", str(v.blocks))
+        out = self.acme.press(700, "ag")
+        g = next(b[1] for k, b in out[0].view.blocks if k == "ui" and b[0] == "guide")
+        self.assertGreaterEqual(len(g["items"]), 4)
+        screens = getattr(REG, "SCREENS", None) or getattr(REG, "_screens", {})
+        for x in g["items"]:
+            for _, to in x.get("go", []):
+                self.assertIn(to.split(":")[0], screens, to)
+        self.assertNotIn("Барт", str(g))
+        self.assertTrue(self.acme.press(700, "agp")[0].files[0][1].startswith(b"%PDF"))
+        self.assertIn("администратора", self.acme.press(701, "ag")[0].text)   # торговому нельзя
+        self.assertTrue(AG.sections(self.acme.ctx(700)))
+
     def test_client_admin_settings(self):
         """Адам 20.11: админ клиента сам — имена, «где работает», логотип; ⚙️ Настройки внизу у владельца и админа."""
         from core.ui import screens as S

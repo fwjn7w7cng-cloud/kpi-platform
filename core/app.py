@@ -80,6 +80,7 @@ class App:
         importlib.import_module("core.onboard")
         importlib.import_module("core.people")
         importlib.import_module("core.firm")              # ⚙️ настройки фирмы у админа клиента (Адам 20.11)
+        importlib.import_module("core.adminguide")        # 📘 инструкция администратора в приложении (Адам 20.11)
         importlib.import_module("core.reports")
         importlib.import_module("core.onec_link")
         importlib.import_module("core.paybuilder")

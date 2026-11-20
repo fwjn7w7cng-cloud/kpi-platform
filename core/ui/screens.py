@@ -1113,6 +1113,9 @@ HELP = {
 
 @screen("help")
 def help_screen(ctx):
+    from core import adminguide
+    if (ctx.role == "admin" or ctx.admin) and adminguide.ok(ctx):     # администратору — инструкция по шагам (Адам 20.11)
+        return adminguide.guide(ctx)
     role = "rep" if ctx.role == "newbie" else ctx.role
     v = View("❓ Как пользоваться", ctx.cfg.role_title(role) if role in R.ROLES else "Администратор")
     dept = HELP_DEPT.get((ctx.duty, "")) if ctx.role == "staff" and ctx.duty else HELP_DEPT.get((ctx.role, ctx.dept_kind))
