@@ -93,7 +93,7 @@ def quote_view(ctx, q, title, sub):
     srows = [Row([a, money(b, "")]) for a, b in q["setup_lines"]]
     srows.append(Row([Cell("Итого подключение", bold=True), Cell(money(q["setup"], ""), bold=True)]))
     v.table(["Подключение — платится один раз", "₽"], srows)
-    lines = [f"Первые {q['trial_days']} дней — бесплатно: смотрите и решайте." if q["trial_days"] else "",
+    lines = ["В день запуска — подключение (вторая половина) и первый месяц, дальше — каждый месяц в число запуска.",
              "Платите за выбранные функции и за людей; директор и администратор — бесплатно.",
              f"Оплата за год — минус {P.fmt(pr['disc_year'])}%: {money(q['monthly_year'])} в месяц, {money(q['year_total'])} за год.",
              f"Все четыре отдела — скидка {P.fmt(pr['disc_all'])}% уже учтена." if q["discount"] else
@@ -501,9 +501,9 @@ def on_price(ctx, text, data):
     except ValueError:
         return ctx.ask("price", "Нужно число, например 5 000 или 15.", data, buttons=[[Button("✖️ Отмена", "pr")]])
     code = data["code"]
-    if x < 0 or (code.startswith("disc_") and x > 90) or (code == "trial_days" and x > 365) or x > 10_000_000 \
+    if x < 0 or (code.startswith("disc_") and x > 90) or x > 10_000_000 \
             or (code == "setup_mult" and not 0.5 <= x <= 10):
-        return ctx.ask("price", "Так не бывает: скидка до 90%, пробный период до 365 дней, подключение — от 0,5 до 10 месяцев, "
+        return ctx.ask("price", "Так не бывает: скидка до 90%, подключение — от 0,5 до 10 месяцев, "
                                 "цена не меньше нуля.", data,
                        buttons=[[Button("✖️ Отмена", "pr")]])
     P.set_price(ctx.office, code, int(x) if x == int(x) else x, who=ctx.author())

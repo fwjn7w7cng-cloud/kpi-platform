@@ -455,8 +455,7 @@ def more(ctx, note=None):
     v.ui("rows", {"items": [{"t": "За человека в приложении", "v": money(pr["user"])},
                             {"t": "Подключение", "s": f"не меньше {money(pr['setup_min'])}", "v": f"месяц × {P.fmt(pr['setup_mult'])}"},
                             {"t": "Скидка за оплату на год", "v": f"{P.fmt(pr['disc_year'])}%"},
-                            {"t": "Скидка за все четыре отдела", "v": f"{P.fmt(pr['disc_all'])}%"},
-                            {"t": "Бесплатные дни", "v": f"{P.fmt(pr['trial_days'])}"}],
+                            {"t": "Скидка за все четыре отдела", "v": f"{P.fmt(pr['disc_all'])}%"}],
                   "foot": [["✏️ Изменить", "pr"]]}, "Общие цены")
     kb = [[Button("📘 Моя инструкция", "adi"), Button("📘 Инструкция партнёра", "ptm")]]
     if act:

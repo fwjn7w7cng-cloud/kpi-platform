@@ -1,4 +1,4 @@
-"""📄 Правила и оплата (Адам 01.11): даты, бесплатные дни, счета, окно «добавить / убрать» с ценой, одобрение админом."""
+"""📄 Правила и оплата (Адам 01.11, оплата в число запуска — 20.11): даты, счета, окно «добавить / убрать» с ценой, одобрение админом."""
 import logging
 import shutil
 import tempfile
@@ -40,62 +40,72 @@ class BillingClient(unittest.TestCase):
     def at(self, day):
         return App("_template", today=day, admins=[1], data_dir=self.tmp)
 
-    def test_dates_trial_and_bills(self):
+    def test_dates_and_bills_on_launch_day(self):
+        """Адам 20.11: бесплатных дней нет; в день запуска — подключение и месяц, дальше каждый месяц в число запуска."""
         r = self.app.press(700, "bl")[0]
         self.assertIn("Ещё не договорились", texts(r))
         self.app.press(1, "blm:d")
         self.app.text(1, "16.11.2026 20.11.2026")
-        app = self.at(date(2026, 11, 25))
-        r = app.press(700, "bl")[0]
-        self.assertEqual(tiles(r)["Бесплатно, дней"], "9")                       # бесплатно до 3 декабря
-        self.assertIn("Счёт 4 декабря", tiles(r))
-        m = tiles(r)["В месяц"]
-        self.assertEqual(m, "16 600 ₽")
-        self.assertEqual(tiles(r)["Счёт 4 декабря"], "15 000 ₽")              # 16 600 × 28 / 31
-        self.assertIn("Бесплатно ещё 9", texts(app.press(700, "home")[0]))
-        app = self.at(date(2026, 12, 11))
-        self.assertIn("не оплачен", texts(app.press(700, "bl")[0]))                        # срок был 9 декабря
+        r = self.at(date(2026, 11, 18)).press(700, "bl")[0]
+        self.assertEqual(tiles(r)["Оплата 20 ноября"], "29 100 ₽")                # 12 500 подключения + 16 600 месяц
+        self.assertNotIn("Бесплатно", texts(r))
+        app = self.at(date(2026, 11, 20))
+        self.assertIn("оплатить сегодня, 20 ноября", texts(app.press(700, "bl")[0]))
+        app.press(1, "blm:p")
+        r = self.at(date(2026, 11, 25)).press(700, "bl")[0]
+        self.assertEqual(tiles(r)["Оплачено до"], "19 декабря")
+        self.assertEqual(tiles(r)["Оплата 20 декабря"], "16 600 ₽")
+        app = self.at(date(2026, 12, 21))
+        self.assertIn("не оплачен. С 25 декабря — только просмотр", texts(app.press(700, "bl")[0]))
         app.press(1, "blm:p")
         r = app.press(700, "bl")[0]
-        self.assertIn("Декабрь оплачен", texts(r))
-        self.assertIn("Счёт 1 января", tiles(r))
+        self.assertEqual(tiles(r)["Оплачено до"], "19 января")
+        self.assertIn("Оплата 20 января", tiles(r))
+
+    def test_launch_on_31st(self):
+        from core import billing as B
+        launch = date(2026, 1, 31)
+        self.assertEqual(B.pday(launch, "2026-02"), date(2026, 2, 28))
+        self.assertEqual(B.pday(launch, "2026-03"), date(2026, 3, 31))
+        self.assertEqual(B.period(launch, "2026-02"), (date(2026, 2, 28), date(2026, 3, 30)))
+        self.assertEqual(B.period_of(launch, date(2026, 3, 15)), "2026-02")
 
     def test_partial_payment_shows_rest(self):
         self.app.press(1, "blm:d")
         self.app.text(1, "01.10.2026 05.10.2026")
-        app = self.at(date(2026, 11, 3))
-        app.press(1, "blm:p")                                        # октябрь (19–31) — оплачен весь
+        app = self.at(date(2026, 11, 5))
+        app.press(1, "blm:p")                                        # 5 октября: подключение + месяц — весь
         app.press(1, "blm:s")
-        app.text(1, "10 000")                                         # ноябрь — только часть
+        app.text(1, "10 000")                                         # 5 ноября — только часть
         r = app.press(700, "bl")[0]
         self.assertIn("оплачено 10 000 ₽ из 16 600 ₽, осталось 6 600 ₽", texts(r))
         app.press(1, "blm:s")
         app.text(1, "6 600")
-        self.assertIn("Ноябрь оплачен", texts(app.press(700, "bl")[0]))
+        self.assertIn("Оплачено до 4 декабря", texts(app.press(700, "bl")[0]))
         app.press(1, "blm:u")                                         # сняли последнюю отметку — снова остаток
         self.assertIn("осталось 6 600", texts(app.press(700, "bl")[0]))
 
-    def test_add_function_needs_approval_and_bills_rest_of_month(self):
+    def test_add_function_needs_approval_and_bills_days_to_next_payment(self):
         self.app.press(1, "blm:d")
         self.app.text(1, "01.10.2026 05.10.2026")
         app = self.at(date(2026, 11, 16))
-        app.press(1, "blm:p")                                        # октябрь и ноябрь оплачены
+        app.press(1, "blm:p")                                        # 5 октября и 5 ноября оплачены
         app.press(1, "blm:p")
         app.press(700, "blc")
         r = app.press(700, "blc:t:stock")[0]
         t = texts(r)
-        self.assertIn("С декабря каждый месяц + 3 000 ₽", t)
-        self.assertIn("Сейчас, за остаток ноября (15 дн.) + 1 500 ₽", t)
-        self.assertEqual(tiles(r)["Счёт 1 декабря, итого"], "21 100 ₽")                   # 19 600 + 1 500
+        self.assertIn("С 5 декабря каждый месяц + 3 000 ₽", t)
+        self.assertIn("Сейчас, за дни до оплаты 5 декабря (19 дн.) + 1 900 ₽", t)        # 3 000 × 19 / 30
+        self.assertEqual(tiles(r)["Оплата 5 декабря, итого"], "21 500 ₽")                  # 19 600 + 1 900
         out = app.press(700, "blc:ok")
         self.assertTrue(any(x.to == 1 and "Одобрить" in str([b.label for b in x.all_buttons()]) for x in out))
         self.assertNotIn("stock", app.ctx(700).cfg.functions or set())                      # до одобрения — не включено
         out = app.press(1, "bly:1")
-        self.assertTrue(any(x.to == 700 and "Включено" in x.text for x in out))
+        self.assertTrue(any(x.to == 700 and "Включено" in x.text and "С 5 декабря" in x.text for x in out))
         self.assertIn("stock", app.ctx(700).cfg.modules)
         r = app.press(700, "bl")[0]
-        self.assertEqual(tiles(r)["Счёт 1 декабря"], "21 100 ₽")
-        self.assertIn("доплата за ноябрь", texts(r))
+        self.assertEqual(tiles(r)["Оплата 5 декабря"], "21 500 ₽")
+        self.assertIn("доплата за дни до оплаты", texts(r))
 
     def test_reject_with_reason(self):
         self.app.press(700, "blc")
@@ -124,19 +134,19 @@ class BillingClient(unittest.TestCase):
 
     def test_unpaid_steps_and_hold(self):
         self.app.press(1, "blm:d")
-        self.app.text(1, "01.10.2026 05.10.2026")                    # первый счёт 19 октября, оплатить до 24 октября
-        app = self.at(date(2026, 10, 26))
+        self.app.text(1, "01.10.2026 05.10.2026")                    # первая оплата — в день запуска, 5 октября
+        app = self.at(date(2026, 10, 6))
         self.assertIsNone(app.press(701, "home")[0].text or None)       # напоминание — всё работает
-        app = self.at(date(2026, 10, 30))
+        app = self.at(date(2026, 10, 10))
         self.assertIn("только просмотр", app.text(701, "что-то")[0].text)
         self.assertTrue(app.press(701, "home")[0].view)                 # смотреть можно
-        app = self.at(date(2026, 11, 4))
+        app = self.at(date(2026, 10, 15))
         self.assertIn("недоступно", app.press(701, "home")[0].text)
         self.assertTrue(app.press(700, "bl")[0].view)                   # директор видит «Правила и оплата»
         self.assertTrue(app.press(1, "home")[0].view)                   # администратор платформы — всегда
         app.press(1, "blm:h")                                           # ⏳ отсрочка на 7 дней
         self.assertTrue(app.press(701, "home")[0].view)
-        self.assertIn("отсрочка до 11 ноября", texts(app.press(700, "bl")[0]))
+        self.assertIn("отсрочка до 22 октября", texts(app.press(700, "bl")[0]))
 
 
 class BillingDemo(unittest.TestCase):
@@ -146,18 +156,20 @@ class BillingDemo(unittest.TestCase):
             app = App("demo", today=date(2026, 11, 1), admins=[1], data_dir=tmp)
             app.press(5, "sw:role:owner")
             r = app.press(5, "bl")[0]
-            self.assertEqual(tiles(r)["Бесплатно, дней"], "4")
+            self.assertEqual(tiles(r)["Оплачено до"], "21 ноября")          # запуск 22 октября, первый месяц оплачен
             app.press(5, "blc")
             app.press(5, "blc:t:processes")
             r = app.press(5, "blc:ok")[-1]
             self.assertIn("bly:1", [b.to for b in r.all_buttons()])
             app.press(5, "bly:1")
             self.assertIn("processes", app.ctx(5).cfg.functions)
-            for _ in range(2):
-                r = app.press(5, "blt:7")[0]                         # листаем до 15 ноября — счёт не оплачен
+            for _ in range(3):
+                r = app.press(5, "blt:7")[0]                         # листаем до 22 ноября — день оплаты
+            self.assertIn("оплатить сегодня, 22 ноября", texts(r))
+            r = app.press(5, "blt:7")[0]                             # 29 ноября — не оплачен
             self.assertIn("не оплачен", texts(r))
             self.assertIn("Пример: даты и суммы выдуманы", texts(r))
-            self.assertIn("Бесплатно, дней", tiles(app.press(5, "blt:0")[0]))
+            self.assertIn("Оплачено до", tiles(app.press(5, "blt:0")[0]))
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

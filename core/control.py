@@ -3,7 +3,7 @@
 Видит всех настоящих клиентов (папки clients/<код>/, кроме шаблонов и показов) и ведёт их оплату — то же, что «🛠 Даты и оплата» в
 приложении клиента (core/billing), но для всех сразу:
   mc            💰 Деньги: сколько ждём в этом месяце, сколько пришло, кто должен; плитки по состояниям
-  mcl:<что>     список клиентов (all / setup / trial / due / late)
+  mcl:<что>     список клиентов (all / setup / due / late / ok)
   mcc:<код>     карточка: даты, сумма, счета по месяцам, кнопки mca:<код>:<действие> (c, l, p, s, u, h, x, d)
   mcr           заявки «добавить / убрать» всех клиентов: mcy:<код>:<№> одобрить, mcn:<код>:<№> отказать (с причиной)
   mcw           неделя вперёд по дням
@@ -24,9 +24,9 @@ from core.ui.views import Card, Cell, Row, View
 
 log = logging.getLogger("kpi")
 ADMIN = -1                      # от чьего имени пульт действует в приложении клиента (там он — администратор платформы)
-BUCKETS = [("setup", "🛠 Настраиваем", None), ("trial", "🎁 Бесплатные дни", "good"), ("due", "💳 Ждут оплаты", "warn"),
+BUCKETS = [("setup", "🛠 Настраиваем", None), ("due", "💳 Ждут оплаты", "warn"),
            ("late", "⚠️ Просрочка", "bad"), ("ok", "✅ Оплачено", "good")]
-DOT = {"setup": "🛠", "trial": "🎁", "due": "💳", "late": "⚠️", "ok": "✅"}
+DOT = {"setup": "🛠", "due": "💳", "late": "⚠️", "ok": "✅"}
 
 
 def _deny(ctx):
@@ -73,9 +73,6 @@ def all_clients(app, today):
 def bucket(c, st):
     if not st.get("launch"):
         return "setup"
-    fp = B.first_paid(c, st)
-    if c.today < fp:
-        return "trial"
     if B.due_bills(c, st):
         return "late" if B.level(c, st) != "ok" or c.today > B.due_bills(c, st)[0][1][1] else "due"
     return "ok"
@@ -89,8 +86,6 @@ def info(code, c):
     owe = sum(x[1][2] - B.got(st, x[0]) for x in due)
     if b == "setup":
         when = "договорились " + B.dm(B._d(st["contract"])) if st.get("contract") else "ещё не договорились"
-    elif b == "trial":
-        when = f"бесплатно до {B.dm(B.first_paid(c, st) - timedelta(days=1))}"
     elif due:
         when = f"должен {money(owe)}, срок {B.dm(due[0][1][1])}"
     else:
@@ -169,7 +164,7 @@ def clients_list(ctx, which="all"):
         items = [x for x in items if x[0]["b"] == which]
     title = dict((k, t) for k, t, _ in BUCKETS).get(which, "🏢 Клиенты")
     v = View(title, f"{len(items)} клиент(ов)")
-    tone = {"late": "bad", "due": "warn", "trial": "good", "ok": "good", "setup": ""}
+    tone = {"late": "bad", "due": "warn", "ok": "good", "setup": ""}
     rows_ = []
     for i, c in items:
         st = B.state(c)
@@ -373,16 +368,14 @@ def events(c, st, start, days=7):
     out = []
     end = start + timedelta(days=days - 1)
     fp = B.first_paid(c, st)
-    if fp and start <= fp - timedelta(days=1) <= end:
-        out.append((fp - timedelta(days=1), "последний бесплатный день"))
     if fp:
-        mo = B.first_bill_month(fp)
+        mo = max(B.month_of(fp), B.shift_month(B.month_of(start), -1))
         for _ in range(4):
             b = B.bill(c, st, mo)
             if b and not B.is_paid(st, mo, b):
                 if start <= b[0] <= end:
                     out.append((b[0], f"счёт {money(b[2])}"))
-                if start <= b[1] <= end:
+                if start <= b[1] <= end and b[1] != b[0]:
                     out.append((b[1], f"срок оплаты {money(b[2] - B.got(st, mo))}"))
             mo = B.shift_month(mo, 1)
     lim = B.limit_dates(c, st)

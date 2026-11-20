@@ -28,7 +28,6 @@ PRICES = _func_prices() + [
     ("setup_min",           "Подключение — не меньше",          20000, "₽ один раз"),
     ("disc_all",            "Скидка за все четыре отдела",      0,     "%"),   # Адам 17.11: по умолчанию без скидки, надо — пропишет сам
     ("disc_year",           "Скидка при оплате за год",         10,    "%"),
-    ("trial_days",          "Пробный период",                   14,    "дней"),
 ]
 DEFAULT = {code: value for code, _, value, _ in PRICES}
 TITLES = {code: (title, unit) for code, title, _, unit in PRICES}
@@ -127,6 +126,6 @@ def quote(sel, counts, pr, year=False, depts=()):
                            (f"Минимум (месяц × {fmt(pr['setup_mult'])} = {fmt(rnd(raw))})", setup))
     return {"lines": lines, "dept_sum": dept_sum, "discount": discount, "all_depts": all_depts, "monthly": monthly,
             "monthly_year": monthly_year, "year": bool(year), "year_total": monthly_year * 12, "setup_lines": setup_lines,
-            "setup": setup, "people": people, "packages": p, "functions": funcs, "trial_days": int(pr["trial_days"]),
+            "setup": setup, "people": people, "packages": p, "functions": funcs,
             "empty": not funcs and not people}
 

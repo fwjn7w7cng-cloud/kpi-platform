@@ -46,7 +46,7 @@ class Quote(unittest.TestCase):
     def test_round_numbers_by_default(self):
         for code, value in P.DEFAULT.items():
             if code != "setup_mult":
-                self.assertEqual(value % (1 if code in ("disc_all", "disc_year", "trial_days") else 100), 0, code)
+                self.assertEqual(value % (1 if code in ("disc_all", "disc_year") else 100), 0, code)
         self.assertEqual({c for c in P.DEFAULT if c.startswith("f_")}, {f"f_{f}" for f in E.FUNCS})   # цена у каждой функции
 
 
