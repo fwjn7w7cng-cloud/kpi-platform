@@ -33,7 +33,7 @@ RESET = {"home", "mon"}          # главная и смена месяца: п
 REPLACE = {"pb", "rating", "blt", "swb", "tasks"}       # вкладки внизу одного экрана (должность в конструкторе, показатель рейтинга) — не копят шаги «Назад»
 STEPLESS = {"qzs", "qza"}
 # Действия пульта меняют базы клиентов (не базу демо) — «Назад» не должен их повторять (Адам 17.11)
-ACTIONS = {"mca", "mcy", "mcn", "mcf", "mfc", "mfp", "mdp", "mdv", "mdx", "mnp", "mns", "mpm", "mcps", "mcev", "mcex", "mcbs", "mcbx", "mchs", "mnsv", "mnf"}        # прохождение теста: вопросы не копятся в путь, «‹ Назад» — к списку тестов
+ACTIONS = {"mca", "mcy", "mcn", "mcf", "mfc", "mfp", "mdp", "mdv", "mdx", "mnp", "mns", "mpm", "mcps", "mcev", "mcex", "mcbs", "mcbx", "mchs", "mnsv", "mnf", "pnms", "pwhs", "fbrs"}        # прохождение теста: вопросы не копятся в путь, «‹ Назад» — к списку тестов
 
 
 def window_of(r):
@@ -79,6 +79,7 @@ class App:
         importlib.import_module("core.pult")              # пульт: функции клиентов, скидки, каталог, доступы, новые приложения (Адам 17.11)
         importlib.import_module("core.onboard")
         importlib.import_module("core.people")
+        importlib.import_module("core.firm")              # ⚙️ настройки фирмы у админа клиента (Адам 20.11)
         importlib.import_module("core.reports")
         importlib.import_module("core.onec_link")
         importlib.import_module("core.paybuilder")

@@ -324,6 +324,8 @@ def bottom_rows(ctx):
         items = []                                    # отдел не подключён — только главная и «не работает»
     if ctx.role == "owner" and ctx.can("hr"):
         items = items + [("👤 Кадры", "hr")]
+    if ctx.role in ("owner", "admin") and not ctx.app.panel:          # Адам 20.11: всё, что админ клиента меняет сам
+        items = items + [("⚙️ Настройки", "fs")]
     if ctx.role == "newbie":
         items = [("🎓 Обучение", "qz")] + items[:3]
     fb = ("💬 Отзывы", "fbl") if ctx.role == "admin" else \

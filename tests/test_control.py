@@ -139,6 +139,8 @@ class Pult(Control):
         self.assertEqual([k for k, *_ in rows], [d.id for d in c.cfg.departments])
         dc, typical = B.dcounts(c)
         self.assertFalse(typical)                                           # в приложении уже есть торговый
+        self.assertEqual(B.people(c), 1)                                    # люди заведены — счёт по ним
+        self.acme.db().c.execute("UPDATE employees SET active = 0 WHERE tg_id = 701")   # людей ещё нет — числа вписывают руками
         form = {k: "0" for k, *_ in rows}
         form.update({"sales": "10", "warehouse": "3", "office": "2"})
         self.demo.press(1, "mcps:acme", form=form)
@@ -293,7 +295,8 @@ class Pult(Control):
         from core import control as K
         c = K.cctx(self.demo.ctx(1), "set_b")
         self.assertEqual(B.people(c), 14)                                        # владелец бесплатно
-        self.assertEqual(B.dcounts(c)[0]["warehouse/@wh"], 2 + 1)                # 2 складских + завсклад
+        self.assertEqual(B.dcounts(c)[0]["warehouse/@wh"], 2)                    # 2 складских
+        self.assertEqual(B.dcounts(c)[0]["warehouse/head"], 1)                   # завсклад — своей строкой
         owner = next(e for e in es if e["role"] == "owner")
         from core.ui.retail import SEES_KEY
         self.assertEqual(app.db().get(SEES_KEY)[str(owner["id"])], ["s1", "s2"])
@@ -339,6 +342,30 @@ class Pult(Control):
         keys = {f["k"] for f in ui(out, "sform")[0]["fields"]}
         self.assertIn("t|t1|rep", keys)
         self.assertIn("t|t2|sv", keys)
+
+    def test_client_admin_settings(self):
+        """Адам 20.11: админ клиента сам — имена, «где работает», логотип; ⚙️ Настройки внизу у владельца и админа."""
+        from core.ui import screens as S
+        self.assertIn(("⚙️ Настройки", "fs"), [x for row in S.bottom_rows(self.acme.ctx(700)) for x in row])
+        self.assertTrue(self.acme.press(700, "fs")[0].view)
+        rep = next(e for e in self.acme.db().employees() if e["tg_id"] == 701)
+        self.acme.press(700, f"pnms:{rep['id']}", form={"fio": "Петров Иван"})
+        self.assertEqual(self.acme.db().employee(rep["id"])["fio"], "Петров Иван")
+        self.acme.press(700, f"pwhs:{rep['id']}", form={"team": "south"})
+        self.assertEqual(self.acme.db().employee(rep["id"])["team"], "south")
+        bad = self.acme.press(700, f"pwhs:{rep['id']}", form={"team": "нет"})
+        self.assertIn("нет такого", text_of(bad[0]))
+        self.assertIn("Петров Иван", text_of(self.acme.press(700, "pw")[0]))
+        self.assertIn("владельца", self.acme.press(701, "fs")[0].text)         # торговому нельзя
+        from PIL import Image
+        import io
+        buf = io.BytesIO()
+        Image.new("RGB", (40, 40), (10, 90, 30)).save(buf, "PNG")
+        self.acme.press(700, "fbr")
+        out = self.acme.upload(700, "logo.png", buf.getvalue())
+        self.assertIn("Логотип стоит", text_of(out[0]))
+        from core import brand as BR
+        self.assertTrue(BR.get(self.acme.db()).get("logo"))
 
     def test_hire_tool_by_names(self):
         """tools/hire.py: те же люди по названиям магазинов, складов, должностей."""

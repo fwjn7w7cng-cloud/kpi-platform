@@ -212,9 +212,8 @@ def card(ctx, emp_id):
     kb.append([Button(f"💰 Оклад: {money(e['salary']) if e.get('salary') is not None else 'как у должности'} — изменить",
                       f"pas:{e['id']}", info="Свой оклад человека. Работает, если в конструкторе зарплаты у оклада стоит "
                                              "«у каждого свой». 0 — вернуть «как у должности».")])
+    kb.append([Button("✏️ Имя", f"pnm:{e['id']}"), Button("📍 Где работает: " + where(ctx, e), f"pwh:{e['id']}")])
     row = [Button("✏️ Должность", f"pap:{e['id']}")]
-    if d and d.kind == "sales" and ctx.cfg.teams_of(d.id):
-        row.append(Button("👥 Команда", f"pat:{e['id']}"))
     if full(ctx):
         row.append(Button("🎚 Роль", f"par:{e['id']}"))
     kb.append(row)
@@ -231,6 +230,119 @@ def card(ctx, emp_id):
         pass
     kb.append([Button("‹ Сотрудники", f"pa:{e['dept']}"), Button("📊 Показатели", f"emp:{e['id']}")])
     return Reply(view=v, buttons=kb)
+
+
+# ---------- имя и «где работает» (Адам 20.11: админ клиента сам вписывает имена и переводит людей) ----------
+
+def _whs(ctx):
+    try:
+        from modules.ship import whs
+        return whs(ctx) if (ctx.cfg.warehouses or ctx.db.get("warehouses")) else []
+    except ImportError:
+        return []
+
+
+def where(ctx, e):
+    """Где работает словами: магазин / команда и склады."""
+    team = next((t.name for t in ctx.cfg.teams if t.id == e["team"]), "")
+    ws = dict(_whs(ctx))
+    names = [ws.get(w, w) for w in (e.get("extra") or {}).get("whs") or []]
+    return " · ".join(x for x in [team, ", ".join(names)] if x) or "—"
+
+
+@screen("pnm")
+def name_screen(ctx, emp_id, err=""):
+    e = _emp(ctx, emp_id)
+    if not e:
+        return people_access(ctx)
+    v = View(f"✏️ Имя · {e['fio']}", "как человека зовут — так его видят все")
+    v.ui("sform", {"fields": [{"k": "fio", "t": "text", "l": "Фамилия Имя", "v": e["fio"], "req": 1}],
+                   "send": ["💾 Сохранить", f"pnms:{e['id']}"], "err": err, "top": [], "note": ""}, "", fallback=["Имя"])
+    return Reply(view=v, buttons=[[Button("‹ Карточка", f"pae:{e['id']}")]])
+
+
+@screen("pnms")
+def name_save(ctx, emp_id):
+    e = _emp(ctx, emp_id)
+    if not e:
+        return people_access(ctx)
+    fio = " ".join(str((ctx.form or {}).get("fio", "")).split())[:80]
+    if len(fio) < 2:
+        return name_screen(ctx, e["id"], "впишите имя")
+    if fio != e["fio"]:
+        ctx.db.c.execute("UPDATE employees SET fio = ? WHERE id = ?", (fio, e["id"]))
+        ctx.db.audit(_who(ctx), "name", f"{e['fio']} → {fio}")
+    return card(ctx, e["id"])
+
+
+@screen("pwh")
+def where_screen(ctx, emp_id, err=""):
+    e = _emp(ctx, emp_id)
+    if not e:
+        return people_access(ctx)
+    d = ctx.cfg.dept(e["dept"])
+    teams = ctx.cfg.teams_of(e["dept"])
+    v = View(f"📍 {e['fio']}", f"где работает · {d.name if d else e['dept']}")
+    f = []
+    if teams:
+        f.append({"k": "team", "t": "seg", "l": "Магазин / команда", "v": e["team"] or "", "opts": [["", "—"]] + [[t.id, t.name] for t in teams]})
+    ws = _whs(ctx)
+    if d and d.kind == "warehouse" and len(ws) > 1:
+        f.append({"k": "whs", "t": "multi", "l": "Склады — можно несколько", "v": ",".join((e.get("extra") or {}).get("whs") or []),
+                  "opts": [[w, n] for w, n in ws]})
+    if not f:
+        v.note("В этом отделе нет магазинов, команд и складов — менять нечего. Перевести в другой отдел — «✏️ Должность».")
+        return Reply(view=v, buttons=[[Button("‹ Карточка", f"pae:{e['id']}")]])
+    v.ui("sform", {"fields": f, "send": ["💾 Сохранить", f"pwhs:{e['id']}"], "err": err, "top": [],
+                   "note": "Перевели — человек сразу видит свой магазин и склад, счёт и зарплата считаются по новому месту."}, "",
+         fallback=[x["l"] for x in f])
+    return Reply(view=v, buttons=[[Button("‹ Карточка", f"pae:{e['id']}")]])
+
+
+@screen("pwhs")
+def where_save(ctx, emp_id):
+    import json
+    e = _emp(ctx, emp_id)
+    if not e:
+        return people_access(ctx)
+    form = ctx.form or {}
+    teams = {t.id for t in ctx.cfg.teams_of(e["dept"])}
+    team = str(form.get("team", e["team"] or ""))
+    if team and team not in teams:
+        return where_screen(ctx, e["id"], "нет такого магазина / команды")
+    extra = dict(e.get("extra") or {})
+    if "whs" in form:
+        ids = {w for w, _ in _whs(ctx)}
+        extra["whs"] = [w for w in str(form.get("whs", "")).split(",") if w in ids]
+    ctx.db.c.execute("UPDATE employees SET team = ?, extra = ? WHERE id = ?", (team, json.dumps(extra, ensure_ascii=False), e["id"]))
+    ctx.db.audit(_who(ctx), "where", f"{e['fio']}: {where(ctx, {**e, 'team': team, 'extra': extra})}")
+    return card(ctx, e["id"])
+
+
+@screen("pw")
+def where_list(ctx):
+    """📍 Кто где работает — по местам (магазины, склады, отделы), человек → «📍 Где работает»."""
+    if not manages(ctx):
+        return Reply(text="Где работают люди, видят и меняют владелец, администратор и начальники отделов.")
+    from core import billing as B
+    v = View("📍 Кто где работает", ctx.cfg.name)
+    by = {}
+    for e in ctx.db.employees():
+        if manages(ctx, e):
+            by.setdefault(B.place_of(ctx, e), []).append(e)
+    seen = set()
+    for key, label, _pkg, _n in B.people_rows(ctx):
+        es = by.get(key) or []
+        seen.add(key)
+        if es:
+            v.ui("rows", {"items": [{"t": e["fio"], "s": (ctx.cfg.position(e["position"]) or {}).get("name", ""),
+                                     "chip": ["📍", f"pwh:{e['id']}", ""]} for e in es]}, f"{label} · {len(es)}",
+                 fallback=[e["fio"] for e in es])
+    rest = [e for k, es in by.items() if k not in seen for e in es]
+    if rest:
+        v.ui("rows", {"items": [{"t": e["fio"], "s": ctx.cfg.role_title(e["role"]), "chip": ["›", f"pae:{e['id']}", ""]} for e in rest]},
+             f"Прочие · {len(rest)}", fallback=[e["fio"] for e in rest])
+    return Reply(view=v, buttons=[[Button("👥 Сотрудники", "pa")]])
 
 
 @screen("pai")

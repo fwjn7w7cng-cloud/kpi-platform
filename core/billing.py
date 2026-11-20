@@ -115,50 +115,82 @@ def funcs(ctx):
 def people(ctx, st=None):
     from core.ui.tariff import counts_of
     st = state(ctx) if st is None else st
+    if not ctx.demo:                                               # люди заведены — счёт по ним сам (Адам 20.11)
+        n = real_people(ctx)
+        if n:
+            return n
     return int(st["people"]) if st.get("people") is not None else sum(counts_of(ctx).values())
+
+
+def place_of(ctx, e):
+    """Строка «Люди по отделам», где числится сотрудник (ключ people_rows)."""
+    from core.ui.retail import shop_dept, shops
+    sd = shop_dept(ctx.cfg)
+    wd = next((d.id for d in ctx.cfg.departments if d.kind == "warehouse"), None)
+    ws = (e.get("extra") or {}).get("whs") or []
+    if e["dept"] == sd:
+        return f"{sd}/{e['team']}"
+    if e["dept"] == wd:
+        if e["role"] == "head":
+            return f"{wd}/head"
+        if ws:
+            return f"{wd}/@{ws[0]}"
+        sid = next((s for s, _ in shops(ctx.cfg) if e["team"] == f"{wd}_{s}"), None)
+        if sid:
+            return f"{wd}/s:{sid}"                                 # складской магазина без своего склада
+    return e["dept"]
 
 
 def people_rows(ctx):
     """Отделы клиента для «👥 Люди» в пульте (Адам 20.11: «по его отделам»): [(ключ, подпись, пакет, в приложении)].
-    Отдел магазинов — по каждому магазину (ключ «<отдел>/<магазин>»). Директор и админ клиента не считаются (бесплатно)."""
+    Магазины — по одному; общие склады — по складу, склад магазина (или складской магазина без своего склада) — под магазином,
+    завсклад — своей строкой. Директор и админ клиента не считаются (бесплатно)."""
     from core.ui.retail import shop_dept
+    from modules.ship import owners, whs
     sd = shop_dept(ctx.cfg)
     app = {}
-    wh_dept = next((d.id for d in ctx.cfg.departments if d.kind == "warehouse"), None)
     for e in ctx.db.employees():
         if e["role"] in ("owner", "admin"):
             continue
-        ws = (e.get("extra") or {}).get("whs") or []
-        k = f"{e['dept']}/{e['team']}" if e["dept"] == sd else f"{e['dept']}/@{ws[0]}" if e["dept"] == wh_dept and ws else e["dept"]
+        k = place_of(ctx, e)
         app[k] = app.get(k, 0) + 1
-    from modules.ship import owners, whs
     places = whs(ctx) if (ctx.cfg.warehouses or ctx.db.get("warehouses")) else []    # склады учёта клиента (Адам 20.11)
     wh_dept = next((d.id for d in ctx.cfg.departments if d.kind == "warehouse"), None)
     split = wh_dept and len(places) > 1
     ow = owners(ctx) if split else {}
     wpkg = E.dept_package("warehouse") or "stock"
 
-    def wrow(wid, wname, first):
-        return (f"{wh_dept}/@{wid}", wname if wname.lower().startswith("склад") else f"Склад · {wname}", wpkg,
-                app.get(f"{wh_dept}/@{wid}", 0) + (app.get(wh_dept, 0) if first else 0))
+    def wlabel(wname):
+        return wname if wname.lower().startswith("склад") else f"Склад · {wname}"
     out = []
     for d in ctx.cfg.departments:
         pkg = E.dept_package(d.kind) or "office"
         if d.id == wh_dept and split:                             # общие склады — здесь, склады магазинов — под своим магазином
-            common = [(w, n) for w, n in places if not ow.get(w)]
-            for i, (wid, wname) in enumerate(common):
-                k, lbl, p_, a_ = wrow(wid, wname, i == 0)
-                out.append((k, f"Общий · {lbl}", p_, a_))
+            for wid, wname in places:
+                if not ow.get(wid):
+                    out.append((f"{wh_dept}/@{wid}", f"Общий · {wlabel(wname)}", wpkg, app.get(f"{wh_dept}/@{wid}", 0)))
+            out.append((f"{wh_dept}/head", "Завсклад · все общие склады", wpkg, app.get(f"{wh_dept}/head", 0)))
+            rest = app.get(wh_dept, 0)
+            if rest:
+                out.append((wh_dept, f"{d.name} · без склада", wpkg, rest))
         elif d.id == sd:
             for t in ctx.cfg.teams_of(d.id):
                 out.append((f"{d.id}/{t.id}", f"{d.name} · {t.name}", pkg, app.get(f"{d.id}/{t.id}", 0)))
-                for wid, wname in places:
-                    if split and ow.get(wid) == t.id:
-                        k, lbl, p_, a_ = wrow(wid, wname, False)
-                        out.append((k, f"{t.name} · {lbl}", p_, a_))
+                own = [(w, n) for w, n in places if split and ow.get(w) == t.id]
+                for wid, wname in own:
+                    out.append((f"{wh_dept}/@{wid}", f"{t.name} · {wlabel(wname)}", wpkg, app.get(f"{wh_dept}/@{wid}", 0)))
+                if wh_dept and app.get(f"{wh_dept}/s:{t.id}"):
+                    out.append((f"{wh_dept}/s:{t.id}", f"{t.name} · складской", wpkg, app[f"{wh_dept}/s:{t.id}"]))
         else:
-            out.append((d.id, d.name, pkg, app.get(d.id, 0)))
+            n = app.get(d.id, 0) + (app.get(f"{d.id}/head", 0) if d.id == wh_dept else 0) + \
+                sum(v for k, v in app.items() if d.id == wh_dept and (k.startswith(f"{wh_dept}/@") or k.startswith(f"{wh_dept}/s:")))
+            out.append((d.id, d.name, pkg, n))
     return out
+
+
+def real_people(ctx):
+    """Люди в приложении клиента за деньги (без владельца и администратора). 0 — людей ещё не заводили."""
+    return sum(1 for e in ctx.db.employees() if e["role"] not in ("owner", "admin"))
 
 
 def dcounts(ctx, st=None):
@@ -166,9 +198,11 @@ def dcounts(ctx, st=None):
     а пустое приложение — типовые числа размера, разложенные на первый отдел каждого раздела (с пометкой «типовые»)."""
     st = state(ctx) if st is None else st
     rows = people_rows(ctx)
+    real = {k: n for k, _, _, n in rows}
+    if not ctx.demo and sum(real.values()):                        # люди заведены — считаем по ним (Адам 20.11)
+        return real, False
     if isinstance(st.get("dcounts"), dict):
         return {k: int(st["dcounts"].get(k) or 0) for k, *_ in rows}, False
-    real = {k: n for k, _, _, n in rows}
     if sum(real.values()):
         return real, False
     from core.ui.tariff import counts_of
@@ -195,10 +229,11 @@ def counts_for(ctx, n):
     from core.ui.tariff import counts_of
     st = state(ctx)
     pk = E.packages_of(funcs(ctx), ctx.cfg.depts or ())
-    if isinstance(st.get("dcounts"), dict):                   # вписаны в пульте по отделам клиента (Адам 20.11)
+    if not ctx.demo and real_people(ctx) or isinstance(st.get("dcounts"), dict):   # по людям / по отделам клиента (Адам 20.11)
+        dc, _ = dcounts(ctx, st)
         c = {k: 0 for k in E.DEPT_CODES}
         for key, _, pkg, _ in people_rows(ctx):
-            c[pkg if pkg in c else "office"] += int(st["dcounts"].get(key) or 0)
+            c[pkg if pkg in c else "office"] += int(dc.get(key) or 0)
     elif isinstance(st.get("counts"), dict):
         c = {k: int(st["counts"].get(k) or 0) for k in E.DEPT_CODES}
     else:
@@ -1141,7 +1176,7 @@ def order_pdf(ctx):
 
 def people_limit(ctx):
     """Новый сотрудник сверх тарифа (Адам 01.11: добавлять людей — только после одобрения) → Reply с объяснением, иначе None."""
-    if ctx.demo:
+    if ctx.demo or True:                 # Адам 20.11: счёт идёт по настоящим людям — добавлять можно, сумма меняется сама
         return None
     st = state(ctx)
     if st.get("people") is None:

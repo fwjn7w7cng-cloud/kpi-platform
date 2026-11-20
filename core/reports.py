@@ -47,6 +47,9 @@ def receive(ctx, name, data):
     if ctx.session.get("upto") == "gdu":                     # «📥 Товары из Excel» (modules/goodsio.py), не отчёт 1С
         from modules import goodsio
         return goodsio.receive(ctx, name, data)
+    if ctx.session.get("upto") == "brandme":                  # свой логотип из «⚙️ Настройки фирмы» (core/firm.py)
+        from core import firm
+        return firm.receive(ctx, name, data)
     if ctx.session.get("upto") == "nwlogo":                   # логотип в черновик «Нового приложения» (core/pult.py)
         from core import pult
         return pult.nw_logo(ctx, name, data)

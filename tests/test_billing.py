@@ -122,7 +122,9 @@ class BillingClient(unittest.TestCase):
         self.app.press(1, "blm:p")
         self.app.press(1, "blm:p")
         r = self.app.press(700, "pad")[0]
-        self.assertIn("По тарифу 2 чел.", r.text)
+        self.assertNotIn("По тарифу", r.text or "")          # Адам 20.11: счёт по настоящим людям — добавлять можно сразу
+        from core import billing as B
+        self.assertEqual(B.people(self.app.ctx(700)), B.real_people(self.app.ctx(700)))
 
     def test_rep_and_pdf(self):
         self.assertIn("директор", self.app.press(701, "bl")[0].text)

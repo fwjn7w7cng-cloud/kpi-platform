@@ -81,13 +81,21 @@ def card_blocks(v, ctx, code, c):
                             ["Было бы без скидок", money(q["monthly"]), ""] if ds else ["Подключение", money(B.setup_sum(c, st)), ""]]},
          fallback=[f"В месяц: {money(total)}", how])
     dc, typical = B.dcounts(c, st)
-    fields = [{"k": key, "l": label + (f" · в приложении {app}" if app else ""), "v": str(dc.get(key, 0)), "num": True}
-              for key, label, _, app in B.people_rows(c)]
-    hint = f"Всего {n} · {n} × {money(pr['user'])} = {money(n * pr['user'])} в месяц. Директор и админ клиента — бесплатно."
-    if typical:
-        hint = "⚠️ Типовые числа размера, не настоящие — впишите, сколько людей в каждом отделе. " + hint
-    v.ui("form", {"fields": fields, "send": ["Сохранить", f"mcps:{code}"], "hint": hint}, "👥 Люди по отделам",
-         fallback=[f"{f['l']}: {f['v']}" for f in fields])
+    rows = B.people_rows(c)
+    if B.real_people(c):                              # люди заведены — счёт по ним сам, вписывать нечего (Адам 20.11)
+        items = [{"t": label, "v": f"{app} чел."} for key, label, _, app in rows if app]
+        v.ui("rows", {"items": items, "right": f"за деньги {n}",
+                      "foot": [["👥 Завести ещё по ролям", f"mch:{code}"]]}, "👥 Люди по отделам — как в приложении",
+             fallback=[f"{x['t']}: {x['v']}" for x in items])
+        v.note(f"Счёт идёт по людям в приложении: {n} × {money(pr['user'])} = {money(n * pr['user'])} в месяц. "
+               "Админ клиента добавил или уволил человека — сумма поменяется сама. Владелец и администратор — бесплатно.")
+    else:
+        fields = [{"k": key, "l": label, "v": str(dc.get(key, 0)), "num": True} for key, label, _, app in rows]
+        hint = f"Всего {n} · {n} × {money(pr['user'])} = {money(n * pr['user'])} в месяц. Директор и админ клиента — бесплатно."
+        if typical:
+            hint = "⚠️ Типовые числа размера, не настоящие — впишите, сколько людей в каждом отделе. " + hint
+        v.ui("form", {"fields": fields, "send": ["Сохранить", f"mcps:{code}"], "hint": hint + " Когда людей заведут — счёт пойдёт по ним."},
+             "👥 Люди по отделам", fallback=[f"{f['l']}: {f['v']}" for f in fields])
     from core import payedit as PE
     uses = PE.who_uses(c.cfg)
     sch = PE.schemes(c.cfg)
