@@ -281,6 +281,10 @@ class Pult(Control):
         rows = B.people_rows(K.cctx(self.demo.ctx(1), "set_bart"))            # люди — по его отделам, магазины по одному
         self.assertIn("Магазины · Барт Премиум", [lbl for _, lbl, *_ in rows])
         self.assertTrue(B.dcounts(K.cctx(self.demo.ctx(1), "set_bart"))[1])   # пока типовые числа размера
+        self.assertIn("Склад Гойты 1", [lbl for _, lbl, *_ in rows])     # склад — по каждому складу клиента
+        self.assertIn("Склад Курчалой", [lbl for _, lbl, *_ in rows])
+        cb = K.cctx(self.demo.ctx(1), "set_bart")
+        self.assertEqual(sum(B.dcounts(cb)[0].values()), B.people(cb))            # поля в сумме = «Всего»
         # загрузка товаров: отчёт «Остатки» из 1С как есть (места хранения — строки-суммы)
         import openpyxl, io
         wb = openpyxl.Workbook()

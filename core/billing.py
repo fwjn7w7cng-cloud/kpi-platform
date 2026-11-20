@@ -129,10 +129,16 @@ def people_rows(ctx):
             continue
         k = f"{e['dept']}/{e['team']}" if e["dept"] == sd else e["dept"]
         app[k] = app.get(k, 0) + 1
+    from modules.ship import whs
+    places = whs(ctx) if (ctx.cfg.warehouses or ctx.db.get("warehouses")) else []    # склады учёта клиента (Адам 20.11)
+    wh_dept = next((d.id for d in ctx.cfg.departments if d.kind == "warehouse"), None)
     out = []
     for d in ctx.cfg.departments:
         pkg = E.dept_package(d.kind) or "office"
-        if d.id == sd:
+        if d.id == wh_dept and len(places) > 1:                  # склад — по каждому складу, который клиент вписал
+            for i, (wid, wname) in enumerate(places):
+                out.append((f"{d.id}/@{wid}", wname if wname.lower().startswith("склад") else f"Склад · {wname}", pkg, app.get(d.id, 0) if i == 0 else 0))
+        elif d.id == sd:
             for t in ctx.cfg.teams_of(d.id):
                 out.append((f"{d.id}/{t.id}", f"{d.name} · {t.name}", pkg, app.get(f"{d.id}/{t.id}", 0)))
         else:
@@ -162,6 +168,10 @@ def dcounts(ctx, st=None):
         k = next((k for k, _, p, _ in rows if p == pkg), None) or (rows[0][0] if rows else None)
         if k:
             out[k] += int(n or 0)
+    diff = people(ctx, st) - sum(out.values())                     # поля всегда в сумме дают «Всего»
+    if rows and diff:
+        k = next((k for k in out if out[k]), rows[0][0])
+        out[k] = max(0, out[k] + diff)
     return out, True
 
 
