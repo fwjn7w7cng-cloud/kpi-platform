@@ -280,6 +280,32 @@ class Pult(Control):
         self.assertIn("Продавец Барт", seen)
         self.assertNotIn("Продавец Фаида", seen)
         self.assertIn("2 магазина", text_of(app.press(900, "home")[0]))
+        # 🧾 продажа оптом: менеджер опта → накладная в долг → выдача водителю клиента → долг → оплата (Адам 20.11)
+        db.add_employee("Менеджер Опта", "sales", team="opt", position="rep", role="rep", tg_id=910)
+        db.add_employee("Кладовщик Один", "warehouse", position="storekeeper", role="staff", tg_id=911)
+        db.add_employee("Продавец Два", "shops", team="s2", position="seller", role="rep", tg_id=912)
+        db.x("UPDATE goods SET price_opt = 5000 WHERE name = 'стул JULIAN'")
+        chair = db.one("SELECT code FROM goods WHERE name = 'стул JULIAN'")["code"]
+        self.assertIn("Оптом продают", text_of(app.press(912, "os")[0]))               # продавец магазина оптом не продаёт
+        app.press(910, "ocn", form={"name": "Мебель-Юг"})
+        app.press(910, f"os:a:{chair}")
+        app.press(910, f"os:a:{chair}")
+        out = app.press(910, "os:ok", form={"pay": "part", "paid": "4000", "due": "14", "driver": "Исмаилов Р."})
+        self.assertIn("ждёт выдачи", text_of(out[0]))
+        self.assertTrue(any(r.to == 911 for r in out))                           # кладовщику — «ждёт выдачи»
+        self.assertEqual(SH.reserved(db).get((chair, "wh")), 2)
+        out = app.press(911, "owy:1", form={"l0": "1"})                          # выдали 1 из 2
+        self.assertTrue(any(r.to == 910 and "Не выдали" in r.text for r in out))
+        self.assertEqual(db.one("SELECT total FROM opt_orders WHERE id = 1")["total"], 5000)
+        self.assertEqual(db.one("SELECT qty FROM stock_loc WHERE code = ? AND loc = 'wh'", chair)["qty"], 2)
+        from modules import opt as OP
+        debt, late, b, _ = OP.ledger(db, 1, DAY)
+        self.assertEqual((debt, late), (1000, 0))
+        self.assertEqual(db.one('SELECT total FROM debts WHERE batch = 0 AND client = ?', "O1")["total"], 1000)
+        self.assertTrue(db.one("SELECT 1 AS x FROM sales WHERE batch = 0 AND client = 'O1' AND amount = 5000"))
+        app.press(910, "opy:1", form={"sum": "1000", "how": "нал"})
+        self.assertEqual(OP.ledger(db, 1, DAY)[0], 0)
+        self.assertIsNone(db.one('SELECT 1 AS x FROM debts WHERE batch = 0 AND client = ?', "O1"))
 
 
 class Panel(Control):

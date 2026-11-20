@@ -542,6 +542,8 @@ def apply_shops(raw, s):
         for d in raw["departments"]:
             if d["id"] == "sales":
                 d["name"] = "Общий опт"
+        for p in raw["positions"]:                               # опт продаёт по оптовым ценам (modules/opt.py)
+            p["name"] = {"rep": "Менеджер опта", "sv": "Старший менеджер опта", "rop": "Руководитель опта"}.get(p["id"], p["name"])
         raw["teams"] = [t for t in raw["teams"] if t["dept"] != "sales"] + [{"id": "opt", "name": "Опт", "dept": "sales", "line": line}]
     raw["departments"].append({"id": "shops", "name": "Магазины", "kind": "sales"})
     ids = [f"s{i + 1}" for i in range(len(shops))]

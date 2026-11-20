@@ -213,7 +213,7 @@ def finish(ctx, lines, total, disc, pay, take, buyer, dday, addr, prepay, months
     db, me, day = ctx.db, ctx.me, ctx.today.isoformat()
     now = datetime.now().isoformat(timespec="seconds")
     gcode = {r["name"]: r["code"] for r in db.q("SELECT code, name FROM groups")}
-    key = (db.one("SELECT key FROM emp_keys WHERE emp_id = ? ORDER BY since DESC LIMIT 1", me["id"]) or {}).get("key", "")
+    key = A.emp_key(db, me["id"])
     rows = [[g["code"], n, round(g["price"] * (1 - disc), 2), g["cost"]] for g, n in lines]
     by_g = {}
     for g, n in lines:

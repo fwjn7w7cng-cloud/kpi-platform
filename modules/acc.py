@@ -308,7 +308,8 @@ def goods_card(ctx, code=None):
     sold = ctx.db.one("SELECT SUM(qty) AS q FROM item_sales WHERE code = ? AND day >= ?", code, ctx.month + "-01")["q"] or 0
     v = View(g["name"], f"код {g['code']} · {g['grp'] or 'без раздела'}" + (" · в архиве" if g["off"] else ""))
     v.ui("hero", {"label": "Цена розничная", "big": money(g["price"]),
-                  "sub": f"оптовая {money(g['price_opt'])} · код {g['code']}" + (f" · {g['supplier']}" if g["supplier"] else ""), "id": f"gdi{code}",
+                  "sub": (f"оптовая {money(g['price_opt'])} · " if ctx.duty not in ("seller", "shop") else "") + f"код {g['code']}"
+                  + (f" · {g['supplier']}" if g["supplier"] else ""), "id": f"gdi{code}",
                   "pairs": [["На складе", f"{_num(g['qty'])} {g['unit']}", "bad" if g["qty"] <= 0 else ""],
                             ["Продано за месяц", _num(sold), ""]], "acts": []},
          fallback=[f"Цена: {money(g['price'])}", f"На складе: {_num(g['qty'])}"])
@@ -350,6 +351,18 @@ def _dm(iso):
 
 def _lines(r):
     return json.loads(r["lines"] or "[]")
+
+
+def emp_key(db, emp_id):
+    """Ключ сотрудника в данных ядра (строки продаж, оплат, рейсов). В учёте Алапы людей заводят без 1С — ключа может не быть:
+    тогда даём свой «alapa <id>» (Адам 20.11: продажи из приложения должны идти в план и зарплату)."""
+    if not emp_id:
+        return ""
+    r = db.one("SELECT key FROM emp_keys WHERE emp_id = ? ORDER BY since DESC LIMIT 1", emp_id)
+    if r:
+        return r["key"]
+    db.bind_key(f"alapa {emp_id}", emp_id)
+    return f"alapa {emp_id}"
 
 
 def _names(db):

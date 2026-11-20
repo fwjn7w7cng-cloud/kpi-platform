@@ -17,7 +17,7 @@ from core.calendar import Month, first_day, last_day, month_of, shift_month
 from core.data.model import (Client, Dataset, Debt, Group, ItemSale, Payment, Return, Sale, Stock, Trip, TripStop,
                              Visit)
 
-VERSION = 7          # поменялся наполнитель — поднять: демо-базы пересоздадутся сами при следующем открытии (20.11: склад и салоны, листы)
+VERSION = 8          # поменялся наполнитель — поднять: демо-базы пересоздадутся сами при следующем открытии (20.11: склад и салоны, листы)
 
 # команда → (сколько торговых, характеры: множитель темпа к плану)
 TEAMS = {"north": [1.22, 1.06, 0.98, 0.93, 0.74], "south": [1.12, 1.01, 0.95, 0.88, 0.79], "key": [1.04, 0.97]}
@@ -409,6 +409,7 @@ def _accounting(db, R, today, k=1):
         goods.append((x["code"], x["name"], x["name"].split(" · ")[0], p, cost, qty, x["supplier"]))
     db.c.executemany("INSERT OR REPLACE INTO goods (code, name, grp, price, cost, qty, supplier, ts) VALUES (?,?,?,?,?,?,?,?)",
                      [(*g, on) for g in goods])
+    db.c.execute("UPDATE goods SET price_opt = ROUND((price + cost) / 2, -1)")      # оптовая — между закупочной и розничной (20.11)
     es = db.employees()
     pos = lambda p: [e for e in es if e["position"] == p]                   # noqa: E731
     short = lambda e: f"{e['fio'].split()[0]} {e['fio'].split()[1][0]}." if e else ""   # noqa: E731

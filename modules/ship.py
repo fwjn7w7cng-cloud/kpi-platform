@@ -128,6 +128,12 @@ def reserved(db):
             continue
         for c, n, src in o["lines"]:
             out[(c, src)] = out.get((c, src), 0) + n
+    try:                                                 # оптовые накладные, ждущие выдачи (modules/opt.py)
+        for r in db.q("SELECT lines FROM opt_orders WHERE status = 'wait'"):
+            for c, n, _p, src in json.loads(r["lines"]):
+                out[(c, src)] = out.get((c, src), 0) + n
+    except Exception:                                    # noqa: BLE001 — старая база без таблицы
+        pass
     return out
 
 
@@ -307,7 +313,7 @@ def truck_gone(ctx, drv):
     now = datetime.now()
     sid = ctx.db.x("INSERT INTO route_sheets (day, driver, ts_out, orders, by) VALUES (?,?,?,?,?)", ctx.today.isoformat(), drv,
                    now.isoformat(timespec="seconds"), json.dumps([o["id"] for o in on]), A._who(ctx))
-    key = (ctx.db.one("SELECT key FROM emp_keys WHERE emp_id = ? ORDER BY since DESC LIMIT 1", drv) or {}).get("key", f"emp{drv}")
+    key = A.emp_key(ctx.db, int(drv))
     out = []
     for o in on:
         for c, n, src in o["lines"]:
