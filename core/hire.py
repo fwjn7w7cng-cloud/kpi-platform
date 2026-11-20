@@ -55,12 +55,22 @@ def plan(ctx):
     for d in cfg.departments:
         if d.id in done:
             continue
-        own = [t.id for t in cfg.teams_of(d.id) if not any(t.id == f"{d.id}_{s}" for s, _ in shops(cfg))]
-        rows = [(f"d|{d.id}|{p['id']}", p["name"], p["id"], d.id, own[0] if own else "", [])
-                for p in cfg.positions if p["dept"] == d.id and p["role"] not in ("owner",)
-                and not (d.id == wd and common and p["id"] in {(keeper or {}).get("id"), (whead or {}).get("id")})]
+        own = [t for t in cfg.teams_of(d.id) if not any(t.id == f"{d.id}_{s}" for s, _ in shops(cfg))]
+        ps = [p for p in cfg.positions if p["dept"] == d.id and p["role"] not in ("owner",)
+              and not (d.id == wd and common and p["id"] in {(keeper or {}).get("id"), (whead or {}).get("id")})]
+        if len(own) > 1 and d.kind == "sales":                   # несколько команд (опт): люди — по команде, руководитель отдела — один раз
+            for t in own:
+                rows = [(f"t|{t.id}|{p['id']}", p["name"], p["id"], d.id, t.id, []) for p in ps if p["role"] != "head"]
+                if rows:
+                    out.append((f"{d.name} · {t.name}", rows))
+            rows = [(f"d|{d.id}|{p['id']}", p["name"], p["id"], d.id, "", []) for p in ps if p["role"] == "head"]
+        else:
+            rows = [(f"d|{d.id}|{p['id']}", p["name"], p["id"], d.id, own[0].id if own else "", []) for p in ps]
         if rows:
             out.append((d.name, rows))
+    owner = next((p for p in cfg.positions if p["role"] == "owner"), None)
+    if owner:                                                    # владелец без ограничения — видит всё (бесплатно)
+        out.append(("👔 Владелец", [(f"o|{owner['id']}", f"{owner['name']} · видит всё (бесплатно)", owner["id"], owner["dept"], "", [])]))
     return out
 
 
@@ -90,7 +100,7 @@ def form_fields(ctx, form=None):
             fields.append({"k": key, "t": "num", "sh": 1, "l": label + (f" · уже {have[key]}" if have.get(key) else ""),
                            "v": str(form.get(key, have.get(key, 0)))})
     head, owner = lead_positions(ctx.cfg)
-    if shops(ctx.cfg) and (head or owner):
+    if len(shops(ctx.cfg)) > 1 and (head or owner):
         fields.append({"k": "hL", "t": "head", "l": "👔 Руководители и владельцы — кто какие магазины видит"})
         roles = [["", "—"]] + ([["head", head["name"]]] if head else []) + ([["owner", "Владелец (бесплатно)"]] if owner else [])
         for i in range(LEADERS):
@@ -134,8 +144,10 @@ def apply(ctx, form):
     wn = dict(whs(ctx))
     sn = dict(shops(ctx.cfg))
     for key, label, pos, dept, team, whs_, n in want:
+        tn = {t.id: t.name for t in ctx.cfg.teams}
         place = sn.get(key.split("|")[1]) if key.startswith("s|") else wn.get(whs_[0]) if key.startswith("w|") else \
-            "общие склады" if key.startswith("wa|") else next((d.name for d in ctx.cfg.departments if d.id == dept), dept)
+            "общие склады" if key.startswith("wa|") else tn.get(team, team) if key.startswith("t|") else \
+            ctx.cfg.name if key.startswith("o|") else next((d.name for d in ctx.cfg.departments if d.id == dept), dept)
         role = next((p["role"] for p in ctx.cfg.positions if p["id"] == pos), "staff")
         for i in range(have.get(key, 0), n):
             db.add_employee(f"{names.get(pos, pos)} {i + 1} · {place}", dept, team=team, position=pos, role=role,
@@ -230,3 +242,18 @@ def form_from_names(ctx, data):
             continue
         form[f"L{i}r"], form[f"L{i}s"] = role, ",".join(sids[norm(x)] for x in ss)
     return form, errs
+
+
+def admin_options(ctx):
+    """Кого сделать администратором клиента: [[ключ строки формы, подпись]] — первый заведённый на этой строке."""
+    return [[key, f"{title.replace('🏬 ', '').replace('📦 ', '').replace('👔 ', '')} · {label}"] for title, rows in plan(ctx) for key, label, *_ in rows
+            if not key.startswith("o|")]
+
+
+def make_admin(ctx, key):
+    """Первый заведённый на строке формы key — администратор клиента (бесплатно). → ФИО или None."""
+    e = next((x for x in ctx.db.employees() if (x.get("extra") or {}).get("auto") == key and (x.get("extra") or {}).get("n") == 1), None)
+    if e:
+        ctx.db.c.execute("UPDATE employees SET role = 'admin' WHERE id = ?", (e["id"],))
+        return e["fio"]
+    return None

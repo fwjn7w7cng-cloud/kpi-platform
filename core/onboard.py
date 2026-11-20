@@ -493,6 +493,11 @@ def build_raw(c):
             if p["id"] in ("buyer", "buy_head"):
                 p["pay"] = "buyer"
     apply_shops(raw, s)
+    names = [n for n in (s.get("teams") or []) if n]               # команды опта (Адам 20.11, «Новое приложение»)
+    if names and any(d["id"] == "sales" for d in raw["departments"]):
+        line = next(iter(raw["lines"]))
+        raw["teams"] = [t for t in raw["teams"] if t["dept"] != "sales"] + \
+            [{"id": f"t{i + 1}", "name": n, "dept": "sales", "line": line} for i, n in enumerate(names)]
     return raw
 
 

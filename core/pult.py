@@ -789,6 +789,65 @@ def _nw_counts(d):
     return out
 
 
+# «Новое приложение» по шагам (Адам 20.11, эскиз WZ.png): всё, что доводили у первого клиента, — до кнопки «Создать».
+# Черновик — session.nw: размер, отделы, src, seg, name, shops, whs, teams (текст), wo {склад: магазин|""}, people (поля hire),
+# adm (строка hire → администратор клиента), icon, logo/c1/c2 (бренд), fx (функции, None — по выбору).
+# Шаги показываются по ответам: магазинов нет — нет магазинов и складов-магазинов, один магазин — нет «кто какие видит».
+
+class _StubDB:
+    def __init__(self, d):
+        self._d = d
+
+    def get(self, k, default=None):
+        from modules.ship import OWNER_KEY
+        if k == OWNER_KEY:
+            return dict(self._d.get("wo") or {})
+        return default
+
+    def employees(self, *a, **kw):
+        return []
+
+
+class _Stub:
+    """Будущий клиент — анкета из черновика, пустая база: для формы людей (core/hire) и складов (modules/ship)."""
+    def __init__(self, cfg, d):
+        self.cfg, self.db = cfg, _StubDB(d)
+
+
+def _nw_card(d, fs=None, counts=None):
+    from core import onboard as O
+    seg = d.get("seg", "opt")
+    return {"uid": "nw", "by": "", "f": {"company": d.get("name") or "Новый клиент"}, "notes": [],
+            "set": {"packages": E.packages_of(fs if fs is not None else _nw_funcs(d), set(d["depts"])),
+                    "functions": sorted(fs if fs is not None else _nw_funcs(d)), "depts": list(d["depts"]),
+                    "counts": counts or {}, "segment": seg, "source": d.get("src", "1c"),
+                    "shops": O.shop_list(d.get("shops", "")) if seg != "opt" else [], "whs": O.shop_list(d.get("whs", "")),
+                    "teams": O.shop_list(d.get("teams", "")) if seg != "retail" else []}}
+
+
+def _nw_cfg(d):
+    """Анкета будущего клиента из черновика или (None, ошибки)."""
+    from core import config as C
+    from core import onboard as O
+    raw = O.build_raw(_nw_card(d, _nw_fx(d)))
+    try:
+        return C.parse(raw["id"], raw), []
+    except C.ConfigError as e:
+        return None, list(e.problems)
+
+
+def _nw_fx(d):
+    return set(d["fx"]) if isinstance(d.get("fx"), list) else _nw_funcs(d)
+
+
+def _nw_paid(d, stub):
+    """Сколько людей за деньги: всё из формы людей минус владельцы и администратор."""
+    from core import hire as H
+    want, leads, _ = H.parse(stub, d.get("people") or {})
+    n = sum(x[-1] for x in want if not x[0].startswith("o|")) + sum(1 for r, _ in leads if r == "head")
+    return max(0, n - (1 if d.get("adm") else 0)), sum(x[-1] for x in want) + len(leads)
+
+
 @screen("mnw")
 def new_app(ctx, src=None, note=None):
     no = _deny(ctx)
@@ -800,37 +859,137 @@ def new_app(ctx, src=None, note=None):
         d = _nw(ctx, {"size": "business", "depts": ["sales"], "req": int(src[1:]), "name": (r.get("who") or "").split(",")[0].strip()})
     else:
         d = _nw(ctx, {"size": "business", "depts": ["sales"], "req": None}) if src == "new" else _nw(ctx)
-    fs = _nw_funcs(d)
+    ctx.session["upto"] = "nwlogo"
+    ctx.save()
+    from core import hire as H
     from core.ui.tariff import quote_of
-    q = quote_of(ctx, fs, year=False, counts=_nw_counts(d), depts=set(d["depts"]))
-    v = View("＋ Новое приложение", "одна страница — и через минуту у клиента своё приложение")
+    seg, alapa = d.get("seg", "opt"), d.get("src") == "alapa"
+    v = View("＋ Новое приложение", "всё, что нужно клиенту, — до кнопки «Создать»")
     if note:
         v.note(note)
-    v.ui("choice", {"items": [[E.SIZE_NAMES[k][0] + " · " + E.SIZE_NAMES[k][1], f"mnp:s:{k}", d["size"] == k] for k in E.PRESETS]}, "Размер")
-    v.ui("choice", {"items": [[E.FUNC_GROUPS[k][1], f"mnp:d:{k}", k in d["depts"]] for k in E.DEPT_CODES]}, "Отделы")
-    v.ui("choice", {"items": [["📊 Из 1С", "mnp:src:1c", d.get("src", "1c") == "1c"],
-                              ["📦 Учёт в Алапе", "mnp:src:alapa", d.get("src") == "alapa"]]}, "Откуда цифры")
-    seg = d.get("seg", "opt")
+    # 1 · Фирма — выборы кнопками (страница пересобирается)
+    v.ui("choice", {"items": [["📊 Из 1С", "mnp:src:1c", not alapa], ["📦 Учёт в Алапе", "mnp:src:alapa", alapa]]}, "1 · Откуда цифры")
     v.ui("choice", {"items": [[t, f"mnp:seg:{k}", seg == k] for k, t in SEGMENTS.items()]}, "Как продают")
-    fields = [{"k": "name", "l": "Название фирмы", "ph": "Например: Стройторг", "v": d.get("name", ""), "w": True}]
+    v.ui("choice", {"items": [[E.FUNC_GROUPS[k][1], f"mnp:d:{k}", k in d["depts"]] for k in E.DEPT_CODES]}, "Отделы")
+    v.ui("choice", {"items": [[E.SIZE_NAMES[k][0], f"mnp:s:{k}", d["size"] == k] for k in E.PRESETS]}, "Набор функций для начала")
+    cfg, problems = _nw_cfg(d)
+    stub = _Stub(cfg, d) if cfg else None
+    # 2–6 · одна форма: фирма, магазины, склады, команды, люди, руководители, администратор, название на значке
+    f = [{"k": "h1", "t": "head", "l": "Фирма"},
+         {"k": "name", "t": "text", "l": "Название фирмы", "v": d.get("name", ""), "ph": "Например: Стройторг", "req": 1}]
     if seg != "opt":
-        fields.append({"k": "shops", "l": "Магазины — каждый с новой строки", "area": True, "w": True, "v": d.get("shops", ""),
-                       "ph": "Барт\nБарт Премиум\nФаида"})
-    if d.get("src") == "alapa":
-        fields.append({"k": "whs", "l": "Склады — каждый с новой строки (пусто — один «Склад»)", "area": True, "w": True,
-                       "v": d.get("whs", ""), "ph": "Склад Гойты 1\nСклад Курчалой"})
-    if seg != "opt":
-        v.note("🏢 Филиалы со своим логотипом — скоро. Пока магазины — команды под общим логотипом; склад, логистика и офис "
-               "тоже делятся по магазинам.")
-    v.ui("form", {"fields": fields,
-                  "send": ["Создать приложение", "mns"],
-                  "hint": f"{len(fs)} функций · {q['people']} чел. → {money(q['monthly'])} в месяц, подключение {money(q['setup'])}"
-                          + (f" (акция −{P.fmt(q['promo']['pct'])}%)" if q.get("promo") else "")
-                          + ". Функции и людей поправите потом в карточке клиента."}, "Фирма")
+        f += [{"k": "h2", "t": "head", "l": "2 · Магазины"},
+              {"k": "shops", "t": "area", "l": "Каждый с новой строки (один магазин — одна строка)", "v": d.get("shops", ""), "ph": "Барт\nБарт Премиум"}]
+    if alapa:
+        f += [{"k": "h3", "t": "head", "l": "3 · Склады"},
+              {"k": "whs", "t": "area", "l": "Каждый с новой строки. Пусто — один «Склад». Склад при магазине назовите с его именем: «Склад Фаида»",
+               "v": d.get("whs", ""), "ph": "Склад 1\nСклад Фаида"}]
+    if seg != "retail" and "sales" in d["depts"]:
+        f += [{"k": "h3b", "t": "head", "l": "Команды опта"},
+              {"k": "teams", "t": "area", "l": "Каждая с новой строки. Пусто — одна команда", "v": d.get("teams", ""), "ph": "Команда 1\nКоманда 2"}]
+    if stub:
+        from modules.ship import owners, whs
+        from core.ui.retail import shops as shop_list
+        shs = shop_list(cfg)
+        if alapa and shs and len(whs(stub)) > 1:
+            ow = owners(stub)
+            f.append({"k": "h3c", "t": "head", "l": "Чьи склады — бот понял по названию, можно поправить"})
+            f += [{"k": f"wo|{w}", "t": "seg", "l": n, "v": ow.get(w, ""), "opts": [["", "Общий"]] + [[x, y] for x, y in shs]}
+                  for w, n in whs(stub)]
+        f.append({"k": "h4", "t": "head", "l": "4 · Люди по ролям — сколько на каждом месте"})
+        f += [dict(x, l="5 · " + x["l"]) if x["k"] == "hL" else x for x in H.form_fields(stub, d.get("people") or {})]
+        f.append({"k": "h6", "t": "head", "l": "6 · Администратор клиента — вписывает имена и раздаёт ссылки (бесплатно)"})
+        f.append({"k": "adm", "t": "seg", "l": "Первый заведённый на месте:", "v": d.get("adm", ""),
+                  "opts": [["", "назначу потом"]] + H.admin_options(stub)})
+    f += [{"k": "h7", "t": "head", "l": "7 · Бренд"},
+          {"k": "icon", "t": "text", "l": "Название на значке телефона", "v": d.get("icon", "") or d.get("name", "")}]
+    v.ui("sform", {"fields": f, "send": ["💾 Сохранить и пересчитать", "mnsv"], "err": "; ".join(problems[:3]), "top": [],
+                   "note": "Поменяли магазины, склады или команды — нажмите «Сохранить»: появятся поля людей по ним."}, "",
+         fallback=[x["l"] for x in f])
+    files = []
+    if d.get("logo"):
+        from core import brand as BR
+        files = [("значок.png", BR.icon(512, {"logo": d["logo"]}))]
+        v.note(f"🎨 Логотип есть · цвета {d.get('c1')} и {d.get('c2')} (поправить — после создания, «🎨 Бренд»).")
+    else:
+        v.note("🎨 Логотип — кнопка «Выбрать логотип» внизу (можно и потом в карточке клиента).")
+    # 8 · Функции и цена
+    fs = _nw_fx(d)
+    for g in GROUPS:
+        icon, title = E.FUNC_GROUPS[g]
+        items = [{"t": E.FUNC_SHORT[x], "s": f"{money(P.prices(ctx.office)[f'f_{x}'])} в месяц",
+                  "chip": ["вкл" if x in fs else "выкл", f"mnf:{x}", "good" if x in fs else ""]}
+                 for x, (grp, _) in E.FUNCS.items() if grp == g]
+        if items:
+            v.ui("rows", {"items": items, "right": f"{sum(x in fs for x, (gg, _) in E.FUNCS.items() if gg == g)} из {len(items)}"},
+                 f"8 · {icon} {title}" if g == GROUPS[0] else f"{icon} {title}", fallback=[i["t"] for i in items])
+    paid, total = _nw_paid(d, stub) if stub else (0, 0)
+    q = quote_of(ctx, fs, year=False, counts={next((k for k in E.DEPT_CODES if k in d["depts"]), "sales"): paid}, depts=set(d["depts"]))
+    v.ui("hero", {"label": f"{d.get('name') or 'Новый клиент'} · в месяц", "big": money(q["monthly"]), "id": "mnwq",
+                  "sub": f"{len(fs)} функций + {paid} чел. × {money(P.prices(ctx.office)['user'])} · людей заводим {total}, бесплатно — владельцы и администратор",
+                  "pairs": [["Подключение", money(q["setup"]), ""]] + ([["Акция", f"−{P.fmt(q['promo']['pct'])}%", ""]] if q.get("promo") else [])},
+         fallback=[f"В месяц {money(q['monthly'])}"])
     if d.get("req") is not None and d["req"] < len(reqs):
         r = reqs[d["req"]]
         v.note(f"По заявке «Хочу так»: {r.get('who', '')} · {r.get('set', '')}")
-    return Reply(view=v)
+    return Reply(view=v, buttons=[[Button("🚀 Создать приложение", "mns")]], upload="image", files=files)
+
+
+def _nw_take_form(ctx, d):
+    """Поля формы → черновик."""
+    form = getattr(ctx, "form", None) or {}
+    for k in ("name", "shops", "whs", "teams", "icon", "adm"):
+        if k in form:
+            d[k] = str(form.get(k, ""))[:2000]
+    d["name"] = d.get("name", "").strip()[:80]
+    wo = {k[3:]: str(x) for k, x in form.items() if k.startswith("wo|")}
+    if wo:
+        d["wo"] = wo
+    ppl = {k: str(x) for k, x in form.items() if "|" in k and not k.startswith("wo|") or k[:1] == "L" and k[1:-1].isdigit()}
+    if ppl:
+        d["people"] = {**(d.get("people") or {}), **ppl}
+    ctx.session["nw"] = d
+    ctx.save()
+    return d
+
+
+@screen("mnsv")
+def new_app_save(ctx):
+    no = _deny(ctx)
+    if no:
+        return no
+    _nw_take_form(ctx, _nw(ctx))
+    return new_app(ctx, note="💾 Сохранено.")
+
+
+@screen("mnf")
+def new_app_func(ctx, f=""):
+    no = _deny(ctx)
+    if no:
+        return no
+    d = _nw(ctx)
+    if f in E.FUNCS:
+        d["fx"] = sorted(E.toggle_function(_nw_fx(d), f))
+        ctx.session["nw"] = d
+        ctx.save()
+    return new_app(ctx)
+
+
+def nw_logo(ctx, name, data):
+    """Логотип в черновик нового приложения (reports.receive по session.upto = nwlogo)."""
+    import base64
+    from core import brand as BR
+    if _deny(ctx):
+        return [Reply(text="Только администратор платформы.")]
+    png, err = BR.prepare(data or b"")
+    if err:
+        return [new_app(ctx, note=err)]
+    d = _nw(ctx)
+    d["c1"], d["c2"] = BR.colors(png)
+    d["logo"] = base64.b64encode(png).decode()
+    ctx.session["nw"] = d
+    ctx.save()
+    return [new_app(ctx, note=f"✅ Логотип в черновике. Цвета: {d['c1']} и {d['c2']}.")]
 
 
 @screen("mnp")
@@ -848,6 +1007,7 @@ def new_app_pick(ctx, kind="", value=""):
     elif kind == "d" and value in E.DEPT_CODES:
         ds = set(d["depts"]) ^ {value}
         d["depts"] = [x for x in E.DEPT_CODES if x in ds] or ["sales"]
+    d.pop("fx", None)                                      # выбор поменялся — функции снова по выбору
     ctx.session["nw"] = d
     ctx.save()
     return new_app(ctx)
@@ -859,22 +1019,26 @@ def new_app_create(ctx):
     if no:
         return no
     from core import onboard as O
+    from core import hire as H
     from core.ui.tariff import quote_of
-    d = _nw(ctx)
-    form = getattr(ctx, "form", None) or {}
-    name = str(form.get("name", "")).strip()[:80]
-    d["name"] = name
-    d["shops"], d["whs"] = str(form.get("shops", ""))[:2000], str(form.get("whs", ""))[:2000]
-    shops, whs = O.shop_list(d["shops"]), O.shop_list(d["whs"])
-    seg = d.get("seg", "opt")
+    d = _nw_take_form(ctx, _nw(ctx))
+    name, seg = d.get("name", ""), d.get("seg", "opt")
+    shops, whs_ = O.shop_list(d.get("shops", "")), O.shop_list(d.get("whs", ""))
     bad = ("Впишите название фирмы." if len(name) < 2 else
            "Впишите магазины — каждый с новой строки." if seg != "opt" and not shops else
-           "Магазин и склад не могут называться одинаково." if {x.lower() for x in shops} & {x.lower() for x in whs} else "")
+           "Магазин и склад не могут называться одинаково." if {x.lower() for x in shops} & {x.lower() for x in whs_} else "")
+    cfg, problems = _nw_cfg(d)
+    if not bad and problems:
+        bad = "Не получилось: " + "; ".join(problems[:4])
+    stub = _Stub(cfg, d) if cfg else None
+    if not bad and stub and d.get("people"):
+        _, _, errs = H.parse(stub, d["people"])
+        bad = "Люди: " + "; ".join(errs[:3]) if errs else ""
     if bad:
-        ctx.session["nw"] = d
-        ctx.save()
         return new_app(ctx, note=bad)
-    fs, counts = _nw_funcs(d), _nw_counts(d)
+    fs = _nw_fx(d)
+    paid, total = _nw_paid(d, stub) if d.get("people") else (0, 0)
+    counts = _nw_counts(d) if not d.get("people") else {next((k for k in E.DEPT_CODES if k in d["depts"]), "sales"): paid}
     q = quote_of(ctx, fs, year=False, counts=counts, depts=set(d["depts"]))
     reqs = ctx.office.get("tariff_req") or []
     r = reqs[d["req"]] if d.get("req") is not None and d["req"] < len(reqs) else None
@@ -882,10 +1046,9 @@ def new_app_create(ctx):
     c = O.ensure(ctx, uid) if r and r.get("uid") else {"uid": uid, "by": "", "f": {}, "set": {}, "notes": [], "created": _stamp()}
     if c.get("client"):
         return new_app(ctx, note=f"По этой заявке приложение уже есть: {c['client']['url']}.")
+    card = _nw_card(d, fs, counts)
     c["f"]["company"] = name
-    c["set"] = {**(c.get("set") or {}), "packages": E.packages_of(fs, set(d["depts"])), "functions": sorted(fs), "depts": list(d["depts"]),
-                "counts": counts, "people": sum(counts.values()), "monthly": q["monthly"], "setup": q["setup"],
-                "segment": seg, "source": d.get("src", "1c"), "shops": shops if seg != "opt" else [], "whs": whs}
+    c["set"] = {**(c.get("set") or {}), **card["set"], "people": sum(counts.values()), "monthly": q["monthly"], "setup": q["setup"]}
     info, problems = O.create(c, who(ctx), O.domain(ctx))
     if problems:
         return new_app(ctx, note="Не получилось: " + "; ".join(problems[:4]))
@@ -896,15 +1059,13 @@ def new_app_create(ctx):
         r["created"] = info["code"]
         ctx.office.put("tariff_req", reqs)
     ctx.office.audit(who(ctx), "client", f"создан клиент {info['code']} из пульта")
-    # стартовые настройки в его базе: люди, подключение (с акцией), скидка партнёра
-    try:
+    done = []
+    try:                                                    # всё из черновика — в его базу
         capp = K.client_app(ctx.app, info["code"], ctx.today)
         cc = capp.ctx(K.ADMIN)
         st = B.state(cc)
-        st["people"] = sum(counts.values())
+        st["people"], st["setup"], st["functions"] = sum(counts.values()), q["setup"], sorted(fs)
         st["counts"] = {k: int(counts.get(k) or 0) for k in E.DEPT_CODES}
-        st["setup"] = q["setup"]
-        st["functions"] = sorted(fs)
         from core import demo as D
         pid = str(c.get("by") or (r or {}).get("partner") or "")
         pg = D._guests(ctx).get(pid) if pid else None
@@ -914,7 +1075,25 @@ def new_app_create(ctx):
                                 "till": months_end(ctx.today, pdisc["months"]).isoformat(), "why": f"клиент партнёра {D._title(pg, pid)}",
                                 "ts": _stamp(), "who": who(ctx)}]
         B.save(cc, st)
-        add_hist(cc, f"Создано приложение {info['url']}", who(ctx))
+        if d.get("wo"):
+            from modules.ship import OWNER_KEY
+            cc.db.put(OWNER_KEY, dict(d["wo"]))
+        cc = capp.ctx(K.ADMIN)
+        if d.get("people"):
+            made, _ = H.apply(cc, d["people"])
+            done.append(f"заведено людей {made}")
+            if d.get("adm"):
+                fio = H.make_admin(cc, d["adm"])
+                if fio:
+                    done.append(f"администратор — {fio}")
+            cc = capp.ctx(K.ADMIN)
+            H.sync_billing(cc)
+        if d.get("logo") or d.get("icon"):
+            from core import brand as BR
+            cc.office.put(BR.KEY, {"name": (d.get("icon") or name)[:30], **({"logo": d["logo"], "c1": d.get("c1"), "c2": d.get("c2")} if d.get("logo") else {}),
+                                   "ts": datetime.now().isoformat()})
+            done.append("бренд")
+        add_hist(cc, f"Создано приложение {info['url']}" + (" · " + ", ".join(done) if done else ""), who(ctx))
     except Exception:                                 # noqa: BLE001 — приложение создано, настройки поправим в карточке
         log.exception("пульт: стартовые настройки %s", info["code"])
     # записка дежурному на сервере: запустить службу, адрес в Caddy, защиту
@@ -926,6 +1105,7 @@ def new_app_create(ctx):
     except OSError:
         log.exception("пульт: записка дежурному")
     ctx.session.pop("nw", None)
+    ctx.session.pop("upto", None)
     ctx.save()
-    return K.card(ctx, info["code"], f"✅ Создано: {info['url']}. Дежурный запускает приложение — обычно до минуты. "
-                                     "Ссылка администратора для клиента — кнопка ниже.")
+    return K.card(ctx, info["code"], f"✅ Создано: {info['url']}" + (" · " + ", ".join(done) if done else "") +
+                  ". Дежурный запускает приложение — обычно до минуты. Ссылка администратора — кнопка ниже.")

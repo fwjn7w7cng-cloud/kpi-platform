@@ -300,6 +300,46 @@ class Pult(Control):
         app.db().c.execute("UPDATE employees SET tg_id = 900 WHERE id = ?", (owner["id"],))
         self.assertEqual(app.ctx(900).shops_only, {"s1", "s2"})                 # владелец видит только свои магазины
 
+    def test_wizard_all_before_create(self):
+        """Адам 20.11 (эскиз WZ.png): всё до «Создать» — люди, склады, администратор, логотип; один магазин — без «кто какие видит»."""
+        def ui(out, kind):
+            r = next(x for x in out if x.view)
+            return [b[1] for k, b in r.view.blocks if k == "ui" and b[0] == kind]
+        self.demo.press(1, "mnw:new")
+        for x in ("mnp:src:alapa", "mnp:seg:retail", "mnp:d:stock", "mnp:d:logistics"):
+            self.demo.press(1, x)
+        out = self.demo.press(1, "mnsv", form={"name": "Мебель Дом", "shops": "Мебель Дом", "whs": ""})
+        keys = {f["k"] for f in ui(out, "sform")[0]["fields"]}
+        self.assertIn("s|s1|seller", keys)
+        self.assertFalse([k for k in keys if k.startswith("L")])                 # один магазин — руководителей по магазинам нет
+        self.assertIn("o|director", keys)
+        form = {"name": "Мебель Дом", "shops": "Мебель Дом", "s|s1|seller": "3", "s|s1|shop_admin": "1", "s|s1|driver": "1",
+                "o|director": "1", "adm": "s|s1|shop_admin", "icon": "Дом"}
+        from PIL import Image
+        import io
+        buf = io.BytesIO()
+        Image.new("RGB", (64, 64), (120, 20, 20)).save(buf, "PNG")
+        self.demo.press(1, "mnsv", form=form)
+        self.demo.upload(1, "logo.png", buf.getvalue())
+        out = self.demo.press(1, "mns", form=form)
+        self.assertIn("заведено людей 6", text_of(out[0]))
+        app = App("mebel_dom", today=DAY, admins=[1], data_dir=self.data)
+        es = app.db().employees()
+        self.assertEqual(len(es), 6)
+        self.assertEqual(sorted(e["role"] for e in es if e["role"] in ("owner", "admin")), ["admin", "owner"])
+        from core import billing as B
+        from core import brand as BR
+        from core import control as K
+        self.assertEqual(B.people(K.cctx(self.demo.ctx(1), "mebel_dom")), 4)     # 3 продавца + водитель; владелец и админ бесплатно
+        self.assertEqual(BR.get(app.db())["name"], "Дом")
+        self.assertTrue(BR.get(app.db()).get("logo"))
+        # опт на 1С с командами — люди по командам
+        self.demo.press(1, "mnw:new")
+        out = self.demo.press(1, "mnsv", form={"name": "Опт Торг", "teams": "Север\nЮг"})
+        keys = {f["k"] for f in ui(out, "sform")[0]["fields"]}
+        self.assertIn("t|t1|rep", keys)
+        self.assertIn("t|t2|sv", keys)
+
     def test_hire_tool_by_names(self):
         """tools/hire.py: те же люди по названиям магазинов, складов, должностей."""
         self.demo.press(1, "mnw:new")
