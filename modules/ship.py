@@ -42,6 +42,7 @@ def active(ctx):
 
 
 WH_KEY = "warehouses"     # склады, добавленные в приложении (загрузка остатков из Excel): [[id, название]]
+WH_FULL = "warehouses_full"   # склады переименовывали / убирали в приложении — тогда весь список в WH_KEY, анкета не читается
 
 
 def _cfg(src):
@@ -53,10 +54,18 @@ def whs(src):
     src — ctx (с базой) или анкета."""
     out = [tuple(w) for w in (getattr(_cfg(src), "warehouses", None) or [])]
     db = getattr(src, "db", None)
+    if db is not None and db.get(WH_FULL):                       # склады правили в приложении — список целиком в базе
+        return [tuple(w) for w in (db.get(WH_KEY) or [])] or [(WH, "Склад")]
     if db is not None:
         have = {w for w, _ in out}
         out += [tuple(w) for w in (db.get(WH_KEY) or []) if w[0] not in have]
     return out or [(WH, "Склад")]
+
+
+def set_whs(ctx, items):
+    """Записать весь список складов (справочники, modules/catalog.py)."""
+    ctx.db.put(WH_KEY, [list(w) for w in items])
+    ctx.db.put(WH_FULL, True)
 
 
 def add_wh(db, name):
@@ -65,7 +74,10 @@ def add_wh(db, name):
     for w, n in ws:
         if n.lower() == name.lower():
             return w
-    wid = f"w{len(ws) + 1}"
+    ids, n = {w for w, _ in ws}, len(ws) + 1
+    while f"w{n}" in ids:
+        n += 1
+    wid = f"w{n}"
     db.put(WH_KEY, ws + [[wid, name[:40]]])
     return wid
 
@@ -430,7 +442,7 @@ def move_save(ctx):
     if ctx.duty != "shop":
         return moves(ctx)
     f = ctx.form or {}
-    goods_ = ctx.db.q("SELECT code, name FROM goods")
+    goods_ = ctx.db.q("SELECT code, name FROM goods WHERE off = 0")
     out, errs = [], []
     for i, line in enumerate(str(f.get("lines", "")).splitlines()[:40], 1):
         parts = [p.strip() for p in line.split(";")]

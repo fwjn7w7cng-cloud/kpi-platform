@@ -254,7 +254,7 @@ def goods(ctx, flt=None):
         return Reply(text="Товары видят руководство, закупки, склад и магазины.")
     see = can_see(ctx, "товары с себестоимостью")
     q = str((ctx.form or {}).get("q", "")).strip().lower()[:60]
-    rows = ctx.db.q("SELECT * FROM goods ORDER BY code")
+    rows = ctx.db.q("SELECT * FROM goods WHERE off = 0 ORDER BY code")
     stock_cost = sum(r["qty"] * r["cost"] for r in rows)
     stock_price = sum(r["qty"] * r["price"] for r in rows)
     v = View("📦 Товары", f"{len(rows)} товаров")
@@ -284,11 +284,14 @@ def goods(ctx, flt=None):
     out = []
     for r in rows[:40]:
         cells = [[_num(r["qty"]), "bad" if r["qty"] <= 0 else ""], [_num(r["price"]), ""]]
+        acts = [["📦 Карточка", f"gdi:{r['code']}"]] + ([["✏️ Изменить", f"gde:{r['code']}"]] if buyer(ctx) else [])
         if see:
             mk = r["price"] / r["cost"] - 1 if r["cost"] else 0
             cells += [[_num(r["cost"]), ""], [pct(mk), _tone(mk)]]
         out.append({"n": short_name(r["name"]), "cells": cells, "det": f"{r['name']} · код {r['code']} · {r['supplier']}",
-                    "acts": [["📦 Карточка", f"gdi:{r['code']}"]]})
+                    "acts": acts})
+    if buyer(ctx):
+        v.ui("quick", {"items": [["➕ Новый товар", "gde:new"], ["⚙️ Справочники", "rf"], ["📥 Из Excel", "gdu"]]}, "")
     v.ui("team", {"head": head, "rows": out, "right": f"{len(rows)} шт." if len(rows) > 40 else "",
                   "note": ("Себестоимость считается сама: средняя цена всех приходов товара. Пришла партия дороже — себестоимость поднялась."
                            if see else "🔒 Себестоимость и наценка закрыты владельцем.")}, "Товары",
@@ -303,15 +306,19 @@ def goods_card(ctx, code=None):
         return goods(ctx)
     see = can_see(ctx, f"себестоимость товара «{g['name']}»")
     sold = ctx.db.one("SELECT SUM(qty) AS q FROM item_sales WHERE code = ? AND day >= ?", code, ctx.month + "-01")["q"] or 0
-    v = View(g["name"], f"код {g['code']} · {g['grp']}")
-    v.ui("hero", {"label": "Цена продажи", "big": money(g["price"]), "sub": f"код {g['code']} · {g['supplier']}", "id": f"gdi{code}",
+    v = View(g["name"], f"код {g['code']} · {g['grp'] or 'без раздела'}" + (" · в архиве" if g["off"] else ""))
+    v.ui("hero", {"label": "Цена розничная", "big": money(g["price"]),
+                  "sub": f"оптовая {money(g['price_opt'])} · код {g['code']}" + (f" · {g['supplier']}" if g["supplier"] else ""), "id": f"gdi{code}",
                   "pairs": [["На складе", f"{_num(g['qty'])} {g['unit']}", "bad" if g["qty"] <= 0 else ""],
                             ["Продано за месяц", _num(sold), ""]], "acts": []},
          fallback=[f"Цена: {money(g['price'])}", f"На складе: {_num(g['qty'])}"])
     mk = g["price"] / g["cost"] - 1 if g["cost"] else 0
     if see:
-        items = [{"t": f"Себестоимость {LOCK}", "s": "средняя цена всех приходов", "v": money(g["cost"])},
-                 {"t": f"Наценка {LOCK}", "s": f"с одной штуки {money(g['price'] - g['cost'])}", "chip": [pct(mk), "", _tone(mk)]}]
+        mo = g["price_opt"] / g["cost"] - 1 if g["cost"] and g["price_opt"] else 0
+        items = [{"t": f"Закупочная (себестоимость) {LOCK}", "s": "средняя цена всех приходов", "v": money(g["cost"])},
+                 {"t": f"Наценка розницы {LOCK}", "s": f"с одной штуки {money(g['price'] - g['cost'])}", "chip": [pct(mk), "", _tone(mk)]}]
+        if g["price_opt"]:
+            items.append({"t": f"Наценка опта {LOCK}", "s": f"с одной штуки {money(g['price_opt'] - g['cost'])}", "chip": [pct(mo), "", _tone(mo)]})
     else:
         items = [{"t": "Себестоимость и наценка", "s": "закрыты владельцем", "chip": [LOCK, "", ""]}]
     v.ui("rows", {"items": items}, "")
@@ -327,7 +334,8 @@ def goods_card(ctx, code=None):
                 hist.append({"t": f"Приход №{r['id']} · {_dm(r['day'])}", "s": r["supplier"],
                              "v": f"{_num(got)} шт" + (f" × {_num(price)}" if see else "")})
     v.ui("rows", {"items": hist[:6], "empty": "Приходов в учёте ещё не было"}, "Последние приходы")
-    return Reply(view=v, buttons=[[Button("‹ К товарам", "gd")]])
+    kb = [[Button("‹ К товарам", "gd")]] + ([[Button("✏️ Изменить", f"gde:{code}")]] if buyer(ctx) else [])
+    return Reply(view=v, buttons=kb)
 
 
 # ======================= приходы =======================
@@ -434,7 +442,7 @@ def _parse_num(x):
 
 def parse_lines(db, text):
     """«название или код; шт; цена» по строкам → ([[код, шт, цена, None]], [ошибки])."""
-    goods_ = db.q("SELECT code, name FROM goods")
+    goods_ = db.q("SELECT code, name FROM goods WHERE off = 0")
     out, errs = [], []
     for i, line in enumerate(str(text).splitlines()[:80], 1):
         line = line.strip()

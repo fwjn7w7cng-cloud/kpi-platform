@@ -237,6 +237,49 @@ class Pult(Control):
         app.press(1, "gdy", form={"p0": "s1", "p1": "wh", "p2": "new"})
         self.assertEqual(db.one("SELECT COUNT(*) AS n FROM goods")["n"], 4)
         self.assertEqual(db.one("SELECT qty FROM goods WHERE name = 'диван ASTON'")["qty"], 7)
+        # ✏️ товар: три цены, раздел, архив (Адам 20.11)
+        code = sofa["code"]
+        db.add_employee("Хозяин Сети", "office", position="director", role="owner", tg_id=800)
+        app.press(800, "gde:" + code)
+        app.press(800, "gds:" + code, form={"name": "диван ASTON 02", "grp_new": "Диваны", "price": "64 000", "price_opt": "55 000", "cost": "41000"})
+        g = db.one("SELECT * FROM goods WHERE code = ?", code)
+        self.assertEqual((g["name"], g["grp"], g["price"], g["price_opt"], g["cost"]), ("диван ASTON 02", "Диваны", 64000, 55000, 41000))
+        bad = app.press(1, "gds:" + code, form={"name": "стул JULIAN", "price": "1"})
+        self.assertIn("уже есть", text_of(bad[0]))
+        app.press(1, "gds:new", form={"name": "Новый шкаф", "price": "10000"})
+        self.assertTrue(db.one("SELECT 1 AS x FROM goods WHERE name = 'Новый шкаф'"))
+        new = db.one("SELECT code FROM goods WHERE name = 'Новый шкаф'")["code"]
+        app.press(1, f"gdz:{new}:ok")                                             # без истории — стирается
+        self.assertIsNone(db.one("SELECT 1 AS x FROM goods WHERE code = ?", new))
+        app.press(1, f"gdz:{code}:ok")                                            # с остатками — в архив
+        self.assertEqual(db.one("SELECT off FROM goods WHERE code = ?", code)["off"], 1)
+        app.press(1, f"gdz:{code}:back")
+        # ⚙️ справочники: раздел, склад, магазин
+        from modules import catalog as CT
+        app.press(1, f"rfs:g:{CT._key('Диваны')}", form={"name": "Мягкая мебель"})
+        self.assertEqual(db.one("SELECT grp FROM goods WHERE code = ?", code)["grp"], "Мягкая мебель")
+        app.press(1, "rfs:w:wh2", form={"name": "Склад Курчалой новый"})
+        self.assertIn("Склад Курчалой новый", [n for _, n in SH.whs(app.ctx(1))])
+        out = app.press(1, "rfd:w:wh:ok")
+        self.assertIn("нельзя", text_of(out[0]))                                 # на складе есть товар
+        app.press(1, "rfs:s:s3", form={"name": "Фаида Центр"})
+        app.press(1, "rfs:s:new", form={"name": "Бааев Крым"})
+        self.assertEqual([n for _, n in RT.shops(app.ctx(1).cfg)], ["Барт", "Барт Премиум", "Фаида Центр", "Бааев Крым"])
+        app.press(1, "rfd:s:s4:ok")
+        self.assertNotIn("Бааев Крым", [n for _, n in RT.shops(app.ctx(1).cfg)])
+        # 🏬 видит магазины: руководитель магазинов — только отмеченные
+        db.add_employee("Руководитель Один", "shops", position="shops_head", role="head", tg_id=900)
+        db.add_employee("Продавец Барт", "shops", team="s1", position="seller", role="rep", tg_id=901)
+        db.add_employee("Продавец Фаида", "shops", team="s3", position="seller", role="rep", tg_id=902)
+        boss = db.one("SELECT id FROM employees WHERE tg_id = 900")["id"]
+        app.press(1, f"shy:{boss}", form={"shops": "s1,s2"})
+        c = app.ctx(900)
+        self.assertEqual(c.shops_only, {"s1", "s2"})
+        self.assertEqual([n for _, n in RT.shops(c.cfg)], ["Барт", "Барт Премиум"])
+        seen = {e["fio"] for e in db.employees() if c.sees(e)}
+        self.assertIn("Продавец Барт", seen)
+        self.assertNotIn("Продавец Фаида", seen)
+        self.assertIn("2 магазина", text_of(app.press(900, "home")[0]))
 
 
 class Panel(Control):

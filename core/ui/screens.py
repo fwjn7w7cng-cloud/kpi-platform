@@ -153,6 +153,8 @@ def _live_home(ctx, v):
             retail.seller_home(ctx, v)
         elif ctx.duty == "assembler" and ctx.me:
             retail.asm_home(ctx, v)
+        elif ctx.role == "head" and ctx.me and retail.has_shops(ctx.cfg) and ctx.me["dept"] == retail.shop_dept(ctx.cfg):
+            retail.group_home(ctx, v)                  # руководитель магазинов — только «видит магазины»
         elif ctx.role in ("head", "sv") and ctx.dept_kind == "sales":
             live.head_home(ctx, v)
         elif ctx.role in SELLERS and ctx.me:

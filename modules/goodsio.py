@@ -26,10 +26,12 @@ from modules import ship as SH
 M = "stock"
 KEY = "goods_import"
 MAX_ROWS = 20000
+PRICE_T = {"price": "розничная цена", "price_opt": "оптовая цена", "cost": "закупочная цена"}
 NAME_HEADS = ("название", "наименование", "номенклатура", "товар")
 FIXED = {"код": "code", "артикул": "code", "название": "name", "наименование": "name", "номенклатура": "name", "товар": "name",
-         "группа": "grp", "цена": "price", "цена продажи": "price", "розничная цена": "price", "себестоимость": "cost",
-         "закупочная цена": "cost", "цена закупки": "cost", "поставщик": "supplier"}
+         "группа": "grp", "раздел": "grp", "цена": "price", "цена продажи": "price", "розничная цена": "price", "цена розничная": "price",
+         "розница": "price", "оптовая цена": "price_opt", "цена оптовая": "price_opt", "опт": "price_opt", "себестоимость": "cost",
+         "закупочная цена": "cost", "цена закупочная": "cost", "цена закупки": "cost", "закупка": "cost", "поставщик": "supplier"}
 
 
 def may(ctx):
@@ -74,11 +76,11 @@ def parse(grid):
             for k in ("code", "grp", "supplier"):
                 if k in cols and cols[k] < len(r):
                     it[k] = str(r[cols[k]]).strip()[:60]
-            for k in ("price", "cost"):
+            for k in ("price", "price_opt", "cost"):
                 if k in cols and cols[k] < len(r) and str(r[cols[k]]).strip():
                     x = num(r[cols[k]])
                     if x < 0 or x > 1e9:
-                        errs.append(f"строка {i}: {'цена' if k == 'price' else 'себестоимость'} «{r[cols[k]]}» — не число")
+                        errs.append(f"строка {i}: {PRICE_T[k]} «{r[cols[k]]}» — не число")
                     else:
                         it[k] = x
             it["qty"] = {}
@@ -162,18 +164,18 @@ def template(ctx):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Товары"
-    head = ["Код", "Название", "Группа", "Цена продажи", "Себестоимость 🔒", "Поставщик"] + [n for _, n in SH.locs(ctx)]
+    head = ["Код", "Название", "Раздел", "Цена розничная", "Цена оптовая", "Цена закупочная 🔒", "Поставщик"] + [n for _, n in SH.locs(ctx)]
     ws.append(head)
-    ws.append(["", "Диван «Лондон»", "Диваны", 64000, 41000, "Фабрика N"] + [""] * (len(head) - 6))
+    ws.append(["", "Диван «Лондон»", "Диваны", 64000, 55000, 41000, "Фабрика N"] + [""] * (len(head) - 7))
     for c in ws[1]:
         c.font = Font(bold=True)
         c.fill = PatternFill("solid", fgColor="E6F0E8")
-    for col, w in zip("ABCDEF", (12, 40, 18, 14, 16, 18)):
+    for col, w in zip("ABCDEFG", (12, 40, 18, 15, 15, 18, 18)):
         ws.column_dimensions[col].width = w
     h = wb.create_sheet("Как заполнять")
     for line in ["Одна строка — один товар. Код можно не писать — бот даст свой.",
                  "Колонки мест — сколько штук лежит на каждом складе и в каждом магазине. Пусто — не трогать.",
-                 "Цена и себестоимость — по желанию. Себестоимость видит только владелец и те, кому он открыл.",
+                 "Цены — по желанию: розничная (магазины), оптовая (опт), закупочная — её видит только владелец и те, кому он открыл.",
                  "Можно загрузить и отчёт «Остатки» из 1С как есть — места хранения бот найдёт сам."]:
         h.append([line])
     h.column_dimensions["A"].width = 110
@@ -243,9 +245,9 @@ def upload(ctx, note=None):
          "Места из файла", fallback=[f["l"] for f in fields])
     if pend.get("errors"):
         v.ui("rows", {"items": [{"t": e} for e in pend["errors"][:10]]}, f"Проверить · {len(pend['errors'])}")
-    has_price = sum(1 for it in items if it.get("price"))
-    v.note(f"Цены продажи есть у {A._num(has_price)} из {A._num(len(items))}." + ("" if has_price else
-           " Цены можно загрузить потом тем же шаблоном — только колонки «Название» и «Цена продажи»."))
+    has_price = sum(1 for it in items if it.get("price") or it.get("price_opt"))
+    v.note(f"Цены есть у {A._num(has_price)} из {A._num(len(items))}." + ("" if has_price else
+           " Цены можно загрузить потом тем же шаблоном — колонки «Название» и цены (розничная, оптовая, закупочная)."))
     return Reply(view=v, buttons=[[Button("✖️ Отменить загрузку", "gdx"), Button("⬇️ Шаблон", "gdt")]], upload=True)
 
 
@@ -286,16 +288,17 @@ def apply(ctx):
             seq += 1
             code = f"A{seq:05d}"
         if code in codes:
-            sets, vals = ["name = ?", "ts = ?"], [it["name"], now]
-            for k in ("grp", "supplier", "price") + (("cost",) if see else ()):
+            sets, vals = ["name = ?", "ts = ?", "off = 0"], [it["name"], now]
+            for k in ("grp", "supplier", "price", "price_opt") + (("cost",) if see else ()):
                 if it.get(k) not in (None, ""):
                     sets.append(f"{k} = ?")
                     vals.append(it[k])
             ctx.db.x(f"UPDATE goods SET {', '.join(sets)} WHERE code = ?", *vals, code)
             upd += 1
         else:
-            ctx.db.x("INSERT INTO goods (code, name, grp, price, cost, qty, supplier, ts) VALUES (?,?,?,?,?,0,?,?)", code, it["name"],
-                     it.get("grp", ""), it.get("price") or 0, (it.get("cost") or 0) if see else 0, it.get("supplier", ""), now)
+            ctx.db.x("INSERT INTO goods (code, name, grp, price, price_opt, cost, qty, supplier, ts) VALUES (?,?,?,?,?,?,0,?,?)",
+                     code, it["name"], it.get("grp", ""), it.get("price") or 0, it.get("price_opt") or 0,
+                     (it.get("cost") or 0) if see else 0, it.get("supplier", ""), now)
             codes.add(code)
             added += 1
         have[_norm(it["name"])] = code

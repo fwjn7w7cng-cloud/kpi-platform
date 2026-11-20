@@ -208,4 +208,8 @@ CREATE TABLE moves (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, loc
     (11, "📥 учёт в Алапе: приход на выбранный склад (у сети их несколько), загрузки товаров из Excel", """
 ALTER TABLE receipts ADD COLUMN wh TEXT NOT NULL DEFAULT '';
 """),
+    (12, "💲 три цены товара (закупочная = себестоимость, оптовая, розничная) и архив товаров", """
+ALTER TABLE goods ADD COLUMN price_opt REAL NOT NULL DEFAULT 0;
+ALTER TABLE goods ADD COLUMN off INTEGER NOT NULL DEFAULT 0;
+"""),
 ]

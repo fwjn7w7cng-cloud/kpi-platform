@@ -43,7 +43,8 @@ class Ctx:
             b = self.office.get("billing") or {}
             if isinstance(b.get("functions"), list):
                 cfg = cfg.with_functions(b["functions"], cfg.depts)
-        self.cfg = cfg
+        from core.ui.retail import apply_edits
+        self.cfg = apply_edits(cfg, self.db)          # магазины, переименованные / добавленные в приложении (Адам 20.11)
         self.db.hide = self._hidden() if self.demo else frozenset()
         self.month = self.session.get("month") or month_of(self.today)
         if self.month > month_of(self.today):
@@ -51,7 +52,21 @@ class Ctx:
         self._kpi, self._pay = {}, {}
         self.photo = ""
         self.form = None                  # данные формы одной страницей из приложения (core/ui/builder.py)
+        self.shops_only = None
         self._resolve()
+        self.shops_only = self._shops_limit()
+
+    def _shops_limit(self):
+        """«Видит магазины» (Адам 20.11): у руководителя отмечены не все магазины — видит только их. None — без ограничения."""
+        from core.ui.retail import SEES_KEY, limit_to, shops
+        if not self.me or self.role in ("owner", "admin", "accountant"):
+            return None
+        mine = (self.db.get(SEES_KEY) or {}).get(str(self.me["id"]))
+        if not mine:
+            return None
+        allowed = {s for s, _ in shops(self.cfg) if s in set(mine)}
+        self.cfg = limit_to(self.cfg, allowed)
+        return allowed
 
     def _hidden(self):
         """Демо (Адам 17.11: «что в сборке — то и везде»): отделы, выключенные в «Собрать», и люди сверх выбранного числа
@@ -189,6 +204,12 @@ class Ctx:
             return True
         if not self.me:
             return False
+        if getattr(self, "shops_only", None) is not None and emp["team"]:     # «видит магазины»: только люди своих магазинов
+            from core.ui.retail import shop_dept
+            t = emp["team"]
+            sid = t if emp["dept"] == shop_dept(self.cfg) else t.rsplit("_", 1)[-1] if "_s" in t else None
+            if sid is not None and sid not in self.shops_only:
+                return False
         if s == "dept":
             return emp["dept"] == self.me["dept"]
         if s == "team":

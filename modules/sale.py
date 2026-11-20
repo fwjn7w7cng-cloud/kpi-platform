@@ -79,11 +79,11 @@ def sale(ctx, act=None, code=None, err=""):
     q = str((ctx.form or {}).get("q", "")).strip().lower()[:60] if act == "q" else ""
     v.ui("form", {"fields": [{"k": "q", "l": "🔍 Товар", "v": q, "ph": "название или код", "w": True}], "send": ["Найти", "sale:q"]}, "")
     if q:
-        found = [g for g in ctx.db.q("SELECT * FROM goods ORDER BY name") if q in g["name"].lower() or q == g["code"]][:12]
+        found = [g for g in ctx.db.q("SELECT * FROM goods WHERE off = 0 ORDER BY name") if q in g["name"].lower() or q == g["code"]][:12]
         title = f"Нашлось: {len(found)}"
     else:
         found = ctx.db.q("SELECT g.* FROM goods g LEFT JOIN (SELECT code, SUM(qty) AS q FROM item_sales WHERE day >= ? GROUP BY code) s "
-                         "ON s.code = g.code WHERE g.qty > 0 ORDER BY COALESCE(s.q, 0) DESC LIMIT 8", ctx.month + "-01")
+                         "ON s.code = g.code WHERE g.qty > 0 AND g.off = 0 ORDER BY COALESCE(s.q, 0) DESC LIMIT 8", ctx.month + "-01")
         title = "Часто берут"
     locs = SH.has_locs(ctx.db)
     res = SH.reserved(ctx.db) if locs else {}

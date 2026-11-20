@@ -42,6 +42,53 @@ def shop_name(cfg, team):
     return dict(shops(cfg)).get(team, team)
 
 
+EDIT_KEY = "shops_edit"      # Адам 20.11: магазины правятся в приложении — {names: {id: название}, add: [[id, название]], off: [id]}
+SEES_KEY = "sees_shops"      # «видит магазины» у руководителя: {id сотрудника: [id магазинов]}
+
+
+def shop_teams(cfg, sid):
+    """Команды одного магазина во всех отделах: s1 в «Магазинах» и <отдел>_s1 в складе, логистике, офисе."""
+    return [t for t in cfg.teams if t.id == sid or t.id.endswith("_" + sid)]
+
+
+def apply_edits(cfg, db):
+    """Анкета с правками магазинов из приложения: переименованные, добавленные, убранные. Без правок — та же анкета."""
+    e = db.get(EDIT_KEY) if db is not None else None
+    if not e or not shop_dept(cfg):
+        return cfg
+    import copy
+    from core.config import Team
+    c = copy.copy(cfg)
+    names, off = e.get("names") or {}, set(e.get("off") or [])
+    sd = shop_dept(cfg)
+    line = next((t.line for t in cfg.teams_of(sd)), "")
+    teams = [copy.copy(t) for t in cfg.teams]
+    others = sorted({t.dept for t in cfg.teams if "_s" in t.id and t.dept != sd})
+    for sid, name in e.get("add") or []:
+        teams.append(Team(sid, name, sd, line))
+        teams += [Team(f"{d}_{sid}", name, d) for d in others]
+    out = []
+    for t in teams:
+        sid = t.id if t.dept == sd else t.id.rsplit("_", 1)[-1] if "_s" in t.id else None
+        if sid in off:
+            continue
+        if sid and sid in names:
+            t.name = names[sid]
+        out.append(t)
+    c.teams = out
+    return c
+
+
+def limit_to(cfg, allowed):
+    """Анкета, где видны только эти магазины (руководитель группы магазинов)."""
+    import copy
+    sd = shop_dept(cfg)
+    c = copy.copy(cfg)
+    c.teams = [t for t in cfg.teams if not ((t.dept == sd and t.id not in allowed) or
+                                            ("_s" in t.id and t.dept != sd and t.id.rsplit("_", 1)[-1] not in allowed))]
+    return c
+
+
 def segment_hide(cfg, es, seg):
     """Кого не показывать в сегменте демо: опт — без магазинов и сборщиков, розница — без отдела продаж опта."""
     d = shop_dept(cfg)
@@ -245,6 +292,24 @@ def owner_home(ctx, v):
     if ds:
         v.ui("decide", {"items": ds}, "Ждёт решения")
     v.ui("tiles", {"items": live.dept_tiles(ctx)}, "Отделы")
+
+
+def group_home(ctx, v):
+    """Руководитель магазинов (Адам 20.11): выручка его магазинов («видит магазины» или все), магазины полосками, заказы."""
+    from core.ui import live
+    ss = shops(ctx.cfg)
+    sc = [_shop_fact(ctx, t) for t, _ in ss]
+    fact, plan = sum(s.fact for s in sc), sum(s.plan for s in sc)
+    need = sc[0].need if sc else None
+    live.hero(v, f"{_n(len(ss), 'магазин', 'магазина', 'магазинов')} · {month_title(ctx.month).lower()}", money(fact),
+              f"план {money(plan)} · нужно к сегодня {pct(need)}" if plan else "", p=fact / plan if plan else None,
+              need=need if plan else None, md=True, ident="rto")
+    shop_rows(ctx, v)
+    cs = [order_counts(ctx.db, ctx.today, t) for t, _ in ss]
+    v.ui("tiles", {"items": [["🚚", "Доставки сегодня", str(sum(c["deliv"] for c in cs)),
+                              f"{sum(c['late'] for c in cs)} опаздывают" if any(c["late"] for c in cs) else "все в срок", "rto"],
+                             ["📦", "Заказов в работе", str(sum(c["open"] for c in cs)), f"на {money(sum(c['open_sum'] for c in cs))}", "rto"]]},
+         "Заказы")
 
 
 def shop_rows(ctx, v):

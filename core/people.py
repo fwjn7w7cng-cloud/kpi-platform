@@ -223,6 +223,12 @@ def card(ctx, emp_id):
         row.append(Button("🚫 Закрыть доступ", f"pax:{e['id']}"))
     row.append(Button("🗑 Уволить", f"paf:{e['id']}") if e["active"] else Button("↩️ Вернуть на работу", f"paf:{e['id']}:back"))
     kb.append(row)
+    try:
+        from modules.catalog import sees_ok
+        if sees_ok(ctx, e) and ctx.can("stock"):                 # Адам 20.11: «видит магазины» у руководителя
+            kb.append([Button("🏬 Видит магазины", f"shs:{e['id']}")])
+    except ImportError:
+        pass
     kb.append([Button("‹ Сотрудники", f"pa:{e['dept']}"), Button("📊 Показатели", f"emp:{e['id']}")])
     return Reply(view=v, buttons=kb)
 
