@@ -2,7 +2,7 @@
 
 Магазин — команда в отделе, где есть должность с обязанностью «seller» (продавец). Директор магазина — обязанность «shop»,
 сборщик — «assembler». Данные магазинов лежат в базе ключами (у демо их кладёт сидер, у клиента — «Учёт в Алапе»):
-  rt:<месяц>   {checks: {сотрудник: {день: [чеков, позиций, сумма]}}, shifts: {сотрудник: [дни]}, cash: {магазин: {день: [по чекам, сдано]}},
+  rt:<месяц>   {checks: {сотрудник: {день: [чеков, позиций, сумма]}}, shifts: {сотрудник: [дни]},
                 came: {день: {сотрудник: "09:52"}}, inst: {сотрудник: договоров рассрочки}, avg_bar: порог среднего чека}
   rt_orders    {stages: [...], asm_word: "Сборка", items: [{id, day, shop, seller, client, item, sum, pay, prepay, months, deliv, stage,
                 paid, late, asm, complaint}]} — stage: 0 заказ, 1 оплата, 2 доставка, 3 сборка, 4 закрыт
@@ -221,19 +221,17 @@ def owner_home(ctx, v):
               pairs=pairs, md=True, ident="rto")
     shop_rows(ctx, v)
     oc = order_counts(ctx.db, ctx.today)
-    d = month_data(ctx.db, ctx.month)
-    y = (ctx.today - timedelta(days=1)).isoformat()
-    open_cash = [shop_name(ctx.cfg, t) for t, by in (d.get("cash") or {}).items() if (by.get(y) or [0, 0])[1] is None]
     tiles = [["🚚", "Доставки сегодня", str(oc["deliv"]), f"{oc['late']} опаздывают" if oc["late"] else "все в срок", "rto"],
-             ["💳", "Рассрочка · просрочка", str(ins["late_n"]), f"на {money(ins['late_sum'])}", "rto"]]
-    if open_cash:
-        tiles.append(["💵", "Касса не сдана", str(len(open_cash)), ", ".join(open_cash), "rts:" + next(
-            t for t, by in d["cash"].items() if (by.get(y) or [0, 0])[1] is None)])
-    else:
-        tiles.append(["💵", "Касса", "сдана", "все магазины за вчера", "rto"])
+             ["💳", "Рассрочка · просрочка", str(ins["late_n"]), f"на {money(ins['late_sum'])}", "rto"],
+             ["📦", "Заказов в работе", str(oc["open"]), f"на {money(oc['open_sum'])}", "rto"]]
     if o:
         tiles.append(["📈", "Опт · торговые", pct(o.pct) if o.plan else money(o.fact), "к плану", "sales"])
-    v.ui("tiles", {"items": tiles}, "Заказы, касса, рассрочка")
+    v.ui("tiles", {"items": tiles}, "Заказы и рассрочка")
+    try:
+        from modules import sale as SL
+        SL.owner_block(ctx, v)
+    except ImportError:
+        pass
     v.ui("feed", {"items": live.feed(ctx), "live": "по отчётам и отметкам"}, "Сейчас в фирме")
     ds = live.decisions(ctx)
     if ds:
@@ -263,7 +261,7 @@ def shop_rows(ctx, v):
 
 
 def shop_home(ctx, v, team=None):
-    """Директор магазина: выручка магазина, продавцы, смена сегодня, касса."""
+    """Директор магазина: выручка магазина, продавцы, смена сегодня, ближайшие доставки."""
     from core.ui import live
     team = team or (ctx.me or {}).get("team")
     k = ctx.kpi()
@@ -278,6 +276,7 @@ def shop_home(ctx, v, team=None):
     live.hero(v, f"{shop_name(ctx.cfg, team)} · {month_title(ctx.month).lower()}", money(s.fact),
               f"план {money(s.plan)} · нужно к сегодня {pct(s.need)}" if s.plan else "",
               p=s.pct if s.plan else None, need=s.need if s.plan else None, md=True, ident=f"rts{team}",
+              acts=[["🧾 Продажа", "sale"], ["📋 Продажи сегодня", "sll"]] if ctx.duty == "shop" and ctx.can("stock") else [],
               pairs=[("Чеков", str(n), ""), ("Средний чек", money(tot / n) if n else "—", ""),
                      ("Позиций в чеке", f"{pos / n:.1f}".replace(".", ",") if n else "—", "")])
     rows = []
@@ -306,12 +305,6 @@ def shop_home(ctx, v, team=None):
             items.append({"t": _short(e["fio"]), "s": f"пришёл {c} · опоздание {lates[e['id']]['minutes']} мин", "chip": ["опоздал", "", "bad"]})
         else:
             items.append({"t": _short(e["fio"]), "s": f"пришёл {c}", "chip": ["на месте", "", "good"]})
-    y = (ctx.today - timedelta(days=1)).isoformat()
-    cash = ((d.get("cash") or {}).get(team) or {}).get(y)
-    if cash:
-        ok = cash[1] is not None
-        items.append({"t": "Касса · вчера", "s": f"по чекам {money(cash[0])}" + (f" · сдано {money(cash[1])}" if ok else " · не сдана"),
-                      "chip": ["сошлось", "", "good"] if ok and cash[1] == cash[0] else ["не сдана", "", "bad"]})
     v.ui("rows", {"items": items, "empty": "Сегодня смены нет"}, "Смена сегодня")
     op = sorted(open_orders(ctx.db, team), key=lambda o: o["deliv"])[:4]
     if op:
@@ -333,7 +326,8 @@ def seller_home(ctx, v):
         ("Средний чек", money(x["avg"]) if x["checks"] else "—", ""), ("Смен", f"{x['shifts']} из {x['shifts_all']}", "")]
     live.hero(v, f"Мой план · {month_title(ctx.month).lower()}", pct(s.pct) if s.plan else money(s.fact),
               (f"{money(s.fact)} из {money(s.plan)} · в смену по {money(left / left_sh)}" if left else "план выполнен 🎉") if s.plan else "",
-              p=s.pct if s.plan else None, need=s.need if s.plan else None, pairs=pairs, ident="sel")
+              p=s.pct if s.plan else None, need=s.need if s.plan else None, pairs=pairs, ident="sel",
+              acts=[["🧾 Продажа", "sale"], ["📋 Продажи сегодня", "sll"]] if ctx.can("stock") else [])
     if p and p.rows:
         live.explain(v, p, "Из чего зарплата")
     mine = sorted(open_orders(ctx.db, seller=e["id"]), key=lambda o: o["deliv"])

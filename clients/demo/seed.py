@@ -17,7 +17,7 @@ from core.calendar import Month, first_day, last_day, month_of, shift_month
 from core.data.model import (Client, Dataset, Debt, Group, ItemSale, Payment, Return, Sale, Stock, Trip, TripStop,
                              Visit)
 
-VERSION = 5          # поменялся наполнитель — поднять: демо-базы пересоздадутся сами при следующем открытии (20.11: учёт в Алапе)
+VERSION = 6          # поменялся наполнитель — поднять: демо-базы пересоздадутся сами при следующем открытии (20.11: продажа в магазине)
 
 # команда → (сколько торговых, характеры: множитель темпа к плану)
 TEAMS = {"north": [1.22, 1.06, 0.98, 0.93, 0.74], "south": [1.12, 1.01, 0.95, 0.88, 0.79], "key": [1.04, 0.97]}
@@ -234,12 +234,13 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=4):
         status = "done" if i % 3 == 0 else "open"
         _task(db, rop if i % 2 else owner, [eid], task_texts[i % len(task_texts)], due, "ok" if status == "done" else "work", today)
     _route_marks(db, R, cfg, today)
-    _stock(db, R, groups, months_list, today)
+    _stock(db, R, groups, months_list, today, PRICE_K.get(industry, 1))
     _quiz(db, R, today)
     _company(db, cfg, random.Random(rnd_seed + 100), today, months_list, newbie, start_new)
     _tasks_more(db, random.Random(rnd_seed + 200), today, owner, rop, reps)
     _retail_orders(db, rt, today)
-    _accounting(db, random.Random(rnd_seed + 400), today)                              # 20.11: учёт в Алапе
+    _accounting(db, random.Random(rnd_seed + 400), today, PRICE_K.get(industry, 1))                            # 20.11: учёт в Алапе
+    _shop_sales(db, random.Random(rnd_seed + 500), today, rt)                           # 20.11: продажи в магазинах через приложение
     for m in months_list:
         db.put(f"planst:{m}", {"status": "ok", "note": "", "hist": [{"ts": f"{m}-01T09:00", "who": "Директор",
                                                                      "status": "ok", "note": ""}]})
@@ -296,7 +297,7 @@ def _retail_month(db, shop, month, cal, today, groups, trend):
     inst_share = 0.22 if shop["industry"] in AVG_CHECK else 0.05
     weights = [w for _, _, w in groups]
     start, stop = cal.start, cal.end
-    data = {"checks": {}, "shifts": {}, "cash": {}, "came": {}, "inst": {}, "avg_bar": round(avg * 0.92, -2)}
+    data = {"checks": {}, "shifts": {}, "came": {}, "inst": {}, "avg_bar": round(avg * 0.92, -2)}
     rows = []
     plans = {}
     for eid, key, team, skill, off in shop["sellers"]:
@@ -322,21 +323,13 @@ def _retail_month(db, shop, month, cal, today, groups, trend):
                     for g, a in by_g.items():
                         rows.append(Sale(d, key, f"R-{team}", g, a, qty=1, discount=round(R.uniform(0, 0.05), 3)))
                     checks[d.isoformat()] = [n, pos, tot]
-                    c = data["cash"].setdefault(team, {}).setdefault(d.isoformat(), [0, 0])
-                    c[0] += tot
             d += timedelta(days=1)
         data["shifts"][str(eid)] = days
         data["checks"][str(eid)] = checks
         data["inst"][str(eid)] = inst
         plans[eid] = round(exp * 0.95 * 0.92, -4)
-    for team, by_day in data["cash"].items():
-        for day, c in by_day.items():
-            c[1] = c[0]
-    # вчера один магазин кассу не сдал; сегодня — кто на смене и во сколько пришёл (один опоздал)
-    y = (today - timedelta(days=1)).isoformat()
+    # сегодня — кто на смене и во сколько пришёл (один опоздал); кассы нет (Адам 20.11: «никакой кассы»)
     if month == today.strftime("%Y-%m"):
-        if len(shop["shops"]) > 1 and y in data["cash"].get(shop["shops"][1][0], {}):
-            data["cash"][shop["shops"][1][0]][y][1] = None
         came = {}
         on = [s_ for s_ in shop["sellers"] if today.isoformat() in data["shifts"][str(s_[0])]]
         for i, (eid, *_r) in enumerate(on):
@@ -397,7 +390,7 @@ def _retail_orders(db, shop, today):
     db.put("rt_inst", inst)
 
 
-def _accounting(db, R, today):
+def _accounting(db, R, today, k=1):
     """📦 Учёт в Алапе: товары с себестоимостью из среза остатков, приходы (история, один ждёт склад, черновик),
     кому владелец открыл закрытые цифры и журнал просмотров (modules/acc.py)."""
     import json
@@ -411,7 +404,8 @@ def _accounting(db, R, today):
     for x in db.q('SELECT code, name, supplier, qty FROM stock WHERE "on" = ? ORDER BY code', on):
         p = round(price.get(x["code"]) or R.uniform(300, 3000), -1)
         cost = round(p / R.choice([1.25, 1.35, 1.45, 1.5, 1.55, 1.6, 1.7]), 2)
-        goods.append((x["code"], x["name"], x["name"].split(" · ")[0], p, cost, x["qty"], x["supplier"]))
+        qty = x["qty"] if k == 1 else max(round(x["qty"] / (k / 2)), 0) if x["qty"] else 0        # дорогой товар — штук меньше
+        goods.append((x["code"], x["name"], x["name"].split(" · ")[0], p, cost, qty, x["supplier"]))
     db.c.executemany("INSERT OR REPLACE INTO goods (code, name, grp, price, cost, qty, supplier, ts) VALUES (?,?,?,?,?,?,?,?)",
                      [(*g, on) for g in goods])
     es = db.employees()
@@ -447,6 +441,24 @@ def _accounting(db, R, today):
            (f"{y}T14:32:00", "Поддержка Алапы", "admin", "открыла закрытые цифры на 30 мин", "настраивали приход по вашей просьбе", 1),
            (f"{today}T11:05:00", short(buyers[0]) if buyers else "Закупки", "Менеджер по закупкам", f"завёл приход №{n - 1} с ценами закупки", "", 0)]
     db.c.executemany("INSERT INTO secret_log (ts, who, role, what, why, support) VALUES (?,?,?,?,?,?)", log)
+
+
+def _shop_sales(db, R, today, rt):
+    """Сегодняшние продажи в магазинах через приложение (modules/sale.py): чтобы у директора был «день магазинов» с маржой.
+    В строки продаж не пишем — сегодняшние чеки магазинов в демо уже посчитаны в _retail_month."""
+    import json
+    goods = db.q("SELECT * FROM goods WHERE qty > 0 ORDER BY code")
+    if not goods or not rt["sellers"]:
+        return
+    for k in range(14):
+        eid, key, team, *_r = R.choice(rt["sellers"])
+        disc = R.choice([0, 0, 0, 0.03, 0.05]) if k != 5 else 0.42                 # одна — с большой скидкой, ниже себестоимости
+        lines = [[g["code"], R.choice([1, 1, 1, 2]), round(g["price"] * (1 - disc), 2), g["cost"]] for g in R.sample(goods, R.choice([1, 1, 2]))]
+        total = round(sum(n * p for _, n, p, _c in lines), -1)
+        pay = R.choice(["cash", "card", "card", "transfer", "inst"])
+        db.x("INSERT INTO shop_sales (day, ts, shop, seller, lines, disc, total, pay, take, buyer) VALUES (?,?,?,?,?,?,?,?,?,?)",
+             today.isoformat(), f"{today.isoformat()}T{10 + k // 2:02d}:{R.randint(0, 59):02d}:00", team, eid, json.dumps(lines), disc,
+             total, pay, R.choice(["self", "self", "deliv"]), R.choice(BUYERS) if pay == "inst" else "")
 
 
 def _trips(db, R, cal, end, sales, drivers):
@@ -504,7 +516,10 @@ def _returns(db, R, cal, end, rets, staff_keys):
     db.load(Dataset("returns", cal.start, cal.end, rows=rows, source="seed"))
 
 
-def _stock(db, R, groups, months_list, today):
+PRICE_K = {"furniture": 50, "electronics": 8}       # цены товаров отрасли: мебель — кухни от 150 000, а не 540 ₽ (20.11)
+
+
+def _stock(db, R, groups, months_list, today, k=1):
     """Склад: по 10 товаров в группе, продажи по неделям за 4 месяца, остаток на вчера; заказы в пути и пришедшие."""
     import json
     items = []
@@ -514,7 +529,7 @@ def _stock(db, R, groups, months_list, today):
             code += 1
             speed = R.lognormvariate(1.2, 0.9)          # штук в день
             kind = R.choices(["ok", "low", "out", "stale"], weights=[76, 11, 6, 7])[0]
-            items.append((str(code), f"{gname} · {var}", R.choice(SUPPLIERS), speed, kind, round(R.uniform(150, 3000), -1)))
+            items.append((str(code), f"{gname} · {var}", R.choice(SUPPLIERS), speed, kind, round(R.uniform(150, 3000), -1) * k))
     y = today - timedelta(days=1)
     for month in months_list:
         start, stop = first_day(month), min(last_day(month), y)

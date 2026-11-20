@@ -189,4 +189,11 @@ CREATE TABLE receipts (id INTEGER PRIMARY KEY AUTOINCREMENT, no TEXT NOT NULL DE
 CREATE TABLE secret_log (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, who TEXT NOT NULL, role TEXT NOT NULL DEFAULT '',
   what TEXT NOT NULL, why TEXT NOT NULL DEFAULT '', support INTEGER NOT NULL DEFAULT 0);
 """),
+    (9, "🧾 продажа в магазине через приложение: строки с себестоимостью на момент продажи, оплата, доставка, рассрочка", """
+CREATE TABLE shop_sales (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, ts TEXT NOT NULL, shop TEXT NOT NULL DEFAULT '',
+  seller INTEGER, lines TEXT NOT NULL DEFAULT '[]', disc REAL NOT NULL DEFAULT 0, total REAL NOT NULL DEFAULT 0,
+  pay TEXT NOT NULL DEFAULT 'cash', take TEXT NOT NULL DEFAULT 'self', buyer TEXT NOT NULL DEFAULT '', order_id INTEGER, inst_id INTEGER,
+  status TEXT NOT NULL DEFAULT 'ok');
+CREATE INDEX shop_sales_day ON shop_sales(day, shop);
+"""),
 ]
