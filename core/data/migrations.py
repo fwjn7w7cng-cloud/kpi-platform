@@ -196,4 +196,13 @@ CREATE TABLE shop_sales (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL
   status TEXT NOT NULL DEFAULT 'ok');
 CREATE INDEX shop_sales_day ON shop_sales(day, shop);
 """),
+    (10, "🚚 учёт в Алапе: остатки по местам (склад и салоны, образцы), маршрутные листы из погрузки, перемещения", """
+CREATE TABLE stock_loc (code TEXT NOT NULL, loc TEXT NOT NULL, qty REAL NOT NULL DEFAULT 0, smp REAL NOT NULL DEFAULT 0,
+  PRIMARY KEY (code, loc));
+CREATE TABLE route_sheets (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, driver INTEGER NOT NULL, ts_out TEXT NOT NULL,
+  orders TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL DEFAULT 'open', by TEXT NOT NULL DEFAULT '');
+CREATE TABLE moves (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, loc TEXT NOT NULL, lines TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'ask', author TEXT NOT NULL DEFAULT '', author_id INTEGER, ts TEXT NOT NULL, go_ts TEXT, done_ts TEXT,
+  note TEXT NOT NULL DEFAULT '');
+"""),
 ]

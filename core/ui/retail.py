@@ -154,6 +154,14 @@ def order_row(ctx, o, who=True):
     s = f"{money(o['sum'])} · {pay} · доставка {_dm(o['deliv'])}"
     if who:
         s += f" · {shop_name(ctx.cfg, o['shop'])}"
+    if o.get("lines"):                                  # учёт в Алапе: Заказ → Погружен → Доставлен (modules/ship.py)
+        from modules import ship as SH
+        row = {"t": f"{o['item']} · {o['client']}", "s": s + SH.order_note(ctx.db, o), "steps": SH.new_steps(o)}
+        if o.get("load") == "no" or (not o.get("driver") and o.get("load") != "gone"):
+            row["chip"] = ["сменить водителя" if o.get("driver") else "назначить водителя", f"rdv:{o['id']}", "warn"]
+        elif o.get("load") == "gone":
+            row["chip"] = ["лист", f"rs:{o['sheet']}", ""]
+        return row
     row = {"t": f"{o['item']} · {o['client']}", "s": s, "steps": stage_steps(ctx.db, o)}
     if o.get("late"):
         row["chip"] = ["опаздывает", "", "bad"]

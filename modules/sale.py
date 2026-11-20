@@ -14,6 +14,7 @@ from core.ui.kit import Button, Reply, money, pct
 from core.ui.registry import menu, screen
 from core.ui.views import View
 from modules import acc as A
+from modules import ship as SH
 
 M = "stock"
 DISC = {"seller": 0.05, "shop": 0.20}                       # потолок скидки по обязанности; владелец — любая
@@ -84,9 +85,20 @@ def sale(ctx, act=None, code=None, err=""):
         found = ctx.db.q("SELECT g.* FROM goods g LEFT JOIN (SELECT code, SUM(qty) AS q FROM item_sales WHERE day >= ? GROUP BY code) s "
                          "ON s.code = g.code WHERE g.qty > 0 ORDER BY COALESCE(s.q, 0) DESC LIMIT 8", ctx.month + "-01")
         title = "Часто берут"
-    v.ui("rows", {"items": [{"t": g["name"], "s": f"{money(g['price'])} · на складе {A._num(g['qty'])}",
-                             "chip": ["＋ добавить", f"sale:a:{g['code']}", ""] if g["qty"] > c.get(g["code"], 0) else ["нет на складе", "", "bad"]}
-                            for g in found], "empty": "Ничего не нашлось"}, title)
+    locs = SH.has_locs(ctx.db)
+    res = SH.reserved(ctx.db) if locs else {}
+    items = []
+    for g in found:
+        if locs:                                             # свободно = есть − образцы − резерв, по местам (modules/ship.py)
+            here, wh = SH.free(ctx.db, g["code"], ctx.me["team"], res), SH.free(ctx.db, g["code"], SH.WH, res)
+            can, s_ = here + wh, f"{money(g['price'])} · свободно: тут {A._num(here)} · склад {A._num(wh)}"
+            if not here and SH.stock_at(ctx.db, g["code"], ctx.me["team"])[1]:
+                s_ += " · в зале образец"
+        else:
+            can, s_ = g["qty"], f"{money(g['price'])} · на складе {A._num(g['qty'])}"
+        items.append({"t": g["name"], "s": s_, "chip": ["＋ добавить", f"sale:a:{g['code']}", ""] if can > c.get(g["code"], 0)
+                      else ["нет свободного", "", "bad"]})
+    v.ui("rows", {"items": items, "empty": "Ничего не нашлось"}, title)
     if lines:
         v.ui("rows", {"items": [{"t": g["name"], "s": f"{money(g['price'])} × {n}", "v": money(g["price"] * n),
                                  "chip": ["− 1", f"sale:m:{g['code']}", ""]} for g, n in lines],
@@ -109,6 +121,8 @@ def form_fields(ctx, f=None):
          "when": ["pay", ["inst"]]},
         {"k": "prepay", "t": "num", "l": "Предоплата, ₽", "v": f.get("prepay", ""), "when": ["pay", ["prepay"]]},
         {"k": "take", "t": "seg", "l": "Забирает", "v": f.get("take", "self"), "opts": take},
+        {"k": "drv", "t": "seg", "l": "Водитель · сколько у него заказов", "v": f.get("drv", ""), "when": ["take", ["deliv", "asm"]],
+         "opts": [[str(e["id"]), f"🚚 {RT._short(e['fio'])} · {SH.driver_load(ctx.db, e['id'])}"] for e in SH.drivers(ctx)] + [["", "Назначу позже"]]},
         {"k": "addr", "t": "text", "l": "Адрес доставки", "v": f.get("addr", ""), "ph": "улица, дом, квартира", "when": ["take", ["deliv", "asm"]]},
         {"k": "dday", "t": "date", "l": "Дата доставки", "v": f.get("dday", (ctx.today + timedelta(days=2)).isoformat()),
          "min": ctx.today.isoformat(), "when": ["take", ["deliv", "asm"]],
@@ -138,9 +152,28 @@ def checkout(ctx):
     lines, tot = totals(ctx)
     if not lines:
         return sale(ctx, err="Корзина пустая")
-    for g, n in lines:
-        if n > g["qty"]:
-            return _err(ctx, f"«{g['name']}» на складе только {A._num(g['qty'])}", f)
+    take0 = f.get("take") if f.get("take") in ("self", "deliv", "asm") else "self"
+    srcs = {}
+    if SH.has_locs(ctx.db):                                  # откуда отдаём: сам — из этого салона, доставка — со склада (или из салона)
+        res, here = SH.reserved(ctx.db), ctx.me["team"]
+        for g, n in lines:
+            fh, fw = SH.free(ctx.db, g["code"], here, res), SH.free(ctx.db, g["code"], SH.WH, res)
+            if take0 == "self":
+                if fh < n:
+                    return _err(ctx, f"«{g['name']}» в этом салоне свободно {A._num(fh)}" + (" (образец не продаётся)" if
+                                SH.stock_at(ctx.db, g["code"], here)[1] else "") + " — со склада только доставкой.", f)
+                srcs[g["code"]] = here
+            else:
+                if fw >= n:
+                    srcs[g["code"]] = SH.WH
+                elif fh >= n:
+                    srcs[g["code"]] = here
+                else:
+                    return _err(ctx, f"«{g['name']}» свободно: склад {A._num(fw)}, этот салон {A._num(fh)}.", f)
+    else:
+        for g, n in lines:
+            if n > g["qty"]:
+                return _err(ctx, f"«{g['name']}» на складе только {A._num(g['qty'])}", f)
     d = _num(f.get("disc"))
     if d is None or d < 0 or d / 100 > max_disc(ctx):
         return _err(ctx, f"Скидка — от 0 до {round(max_disc(ctx) * 100)}%. Больше — директор магазина.", f)
@@ -170,10 +203,12 @@ def checkout(ctx):
             return _err(ctx, f"Предоплата — больше нуля и меньше {money(total)}.", f)
     months = int(f.get("months")) if str(f.get("months")) in ("6", "10", "12") else 10
     first = int(f.get("first")) if str(f.get("first")) in ("20", "25", "30") else 25
-    return finish(ctx, lines, total, disc, pay, take, buyer, dday, str(f.get("addr", "")).strip()[:160], prepay, months, first)
+    drv = int(f["drv"]) if str(f.get("drv", "")).isdigit() and any(e["id"] == int(f["drv"]) for e in SH.drivers(ctx)) else None
+    return finish(ctx, lines, total, disc, pay, take, buyer, dday, str(f.get("addr", "")).strip()[:160], prepay, months, first,
+                  srcs, drv)
 
 
-def finish(ctx, lines, total, disc, pay, take, buyer, dday, addr, prepay, months, first):
+def finish(ctx, lines, total, disc, pay, take, buyer, dday, addr, prepay, months, first, srcs=None, drv=None):
     db, me, day = ctx.db, ctx.me, ctx.today.isoformat()
     now = datetime.now().isoformat(timespec="seconds")
     gcode = {r["name"]: r["code"] for r in db.q("SELECT code, name FROM groups")}
@@ -181,7 +216,11 @@ def finish(ctx, lines, total, disc, pay, take, buyer, dday, addr, prepay, months
     rows = [[g["code"], n, round(g["price"] * (1 - disc), 2), g["cost"]] for g, n in lines]
     by_g = {}
     for g, n in lines:
-        db.x("UPDATE goods SET qty = qty - ? WHERE code = ?", n, g["code"])
+        if srcs:                                            # учёт по местам: сам забрал — списали из салона; доставка — резерв до погрузки
+            if take == "self":
+                SH.move_qty(db, g["code"], srcs[g["code"]], -n)
+        else:
+            db.x("UPDATE goods SET qty = qty - ? WHERE code = ?", n, g["code"])
         k = gcode.get(g["grp"], "")
         by_g[k] = by_g.get(k, 0) + g["price"] * n * (1 - disc)
     if key:
@@ -211,6 +250,8 @@ def finish(ctx, lines, total, disc, pay, take, buyer, dday, addr, prepay, months
                       "pay": "inst" if pay == "inst" else "prepay" if pay == "prepay" else "full", "prepay": prepay,
                       "months": months if pay == "inst" else 0, "deliv": dday.isoformat(), "stage": stage, "paid": True,
                       "late": False, "asm": None, "complaint": False, "addr": addr, "need_asm": take == "asm"})
+        if srcs:
+            items[-1].update(lines=[[g["code"], n, srcs[g["code"]]] for g, n in lines], driver=drv, load="", stage=0)
         od["items"] = items
         od.setdefault("stages", ["Заказ", "Оплата", "Доставка"] + (["Сборка"] if od.get("asm_word") else []))
         db.put("rt_orders", od)
@@ -244,7 +285,9 @@ def sale_card(ctx, sid=None):
     if s["order_id"]:
         links.append(["🚚 Заказ с доставкой", "rto:me" if ctx.duty == "seller" else "rto"])
     links.append(["🧾 Новая продажа", "sale"])
-    v.ui("rows", {"items": [], "foot": links, "empty": "Товар списан со склада. Продажа уже в плане продавца."}, "")
+    note = ("Товар в резерве на складе — спишется, когда его погрузят в машину. Продажа уже в плане продавца." if s["take"] != "self"
+            else "Товар списан. Продажа уже в плане продавца.")
+    v.ui("rows", {"items": [], "foot": links, "empty": note}, "")
     return Reply(view=v)
 
 

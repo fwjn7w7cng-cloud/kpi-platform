@@ -537,6 +537,24 @@ def staff_home(ctx, v):
             sent = f" · отправлен {sent[8:10]}.{sent[5:7]}" if len(sent) >= 10 else ""
             items.append({"t": o["supplier"], "s": f"{_n(n, 'позиция', 'позиции', 'позиций')}{sent}", "chip": ["принять", f"wrc:{o['id']}", "warn"]})
         v.ui("rows", {"items": items, "empty": "Поставок в пути нет"}, "Приёмка")
+    if ctx.dept_kind == "warehouse":                    # учёт в Алапе: погрузка по водителям и перемещения в салоны (modules/ship.py)
+        from modules import ship as SH
+        if SH.active(ctx):
+            orders = SH.to_load(ctx)
+            items = []
+            for d in SH.drivers(ctx):
+                mine = [o for o in orders if o.get("driver") == d["id"]]
+                if mine:
+                    on = sum(1 for o in mine if o.get("load") == "on")
+                    items.append({"t": f"🚚 {short(d['fio'])}", "s": f"{_n(len(mine), 'заказ', 'заказа', 'заказов')}" + (f" · погружено {on}" if on else ""),
+                                  "chip": ["грузить", f"ld:d:{d['id']}", "warn"]})
+            nod = [o for o in orders if not o.get("driver")]
+            if nod:
+                items.append({"t": "Без водителя", "s": f"{_n(len(nod), 'заказ', 'заказа', 'заказов')} · назначит менеджер", "chip": ["смотреть", "ld:d:0", ""]})
+            mv = ctx.db.one("SELECT COUNT(*) AS n FROM moves WHERE status = 'ask'")["n"]
+            if mv:
+                items.append({"t": "🔁 В салоны", "s": f"{_n(mv, 'перемещение', 'перемещения', 'перемещений')} ждут отгрузки", "chip": ["открыть", "mv", "warn"]})
+            v.ui("rows", {"items": items, "empty": "Сегодня грузить нечего"}, "Погрузка сегодня")
     if ctx.dept_kind == "warehouse":                    # учёт в Алапе: приходы от закупок ждут пересчёта (modules/acc.py)
         rs = ctx.db.q("SELECT id, supplier, lines, day FROM receipts WHERE status = 'sent' ORDER BY day, id LIMIT 6")
         if rs:
@@ -564,7 +582,19 @@ def driver_home(ctx, v, p):
         if dd == last:
             items.append({"t": f"Рейс №{n}", "s": f"{_n(len(r['stops']), 'точка', 'точки', 'точек')} · {round(r['kg'])} кг", "v": f"{round(r['km'])} км"})
     if items:
-        v.ui("rows", {"items": items}, f"Рейсы по 1С · {date.fromisoformat(last).day} {MONTHS_GEN[date.fromisoformat(last).month - 1]}")
+        v.ui("rows", {"items": items}, f"Рейсы · {date.fromisoformat(last).day} {MONTHS_GEN[date.fromisoformat(last).month - 1]}")
+    from modules import ship as SH
+    if SH.active(ctx):                                   # учёт в Алапе: маршрутный лист из погрузки
+        s = ctx.db.one("SELECT * FROM route_sheets WHERE driver = ? AND status = 'open' ORDER BY id DESC LIMIT 1", e["id"])
+        if s:
+            import json
+            ids = json.loads(s["orders"])
+            v.ui("rows", {"items": [{"t": f"🗺 Маршрутный лист №{s['id']}", "s": f"{_n(len(ids), 'точка', 'точки', 'точек')} · выехал {s['ts_out'][11:16]}",
+                                     "chip": ["открыть", f"rs:{s['id']}", "warn"]}]}, "Сегодня везу")
+        else:
+            wait = [o for o in SH.to_load(ctx) if o.get("driver") == e["id"]]
+            if wait:
+                v.ui("rows", {"items": [{"t": "Ждут погрузки на складе", "s": _n(len(wait), "заказ", "заказа", "заказов")}]}, "Сегодня везу")
     if p and p.rows:
         explain(v, p, "Заработано за месяц")
 

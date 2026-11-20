@@ -316,6 +316,10 @@ def goods_card(ctx, code=None):
         items = [{"t": "Себестоимость и наценка", "s": "закрыты владельцем", "chip": [LOCK, "", ""]}]
     v.ui("rows", {"items": items}, "")
     support_block(ctx, v)
+    from modules import ship as SH
+    if SH.active(ctx):
+        v.ui("team", {"head": ["Где", "Есть", "Резерв", "Свободно"], "rows": SH.loc_rows(ctx, code),
+                      "note": "Резерв — продано с доставкой, ждёт машину. Образец в зале не продаётся."}, "Где лежит")
     hist = []
     for r in ctx.db.q("SELECT * FROM receipts WHERE status = 'done' ORDER BY day DESC, id DESC LIMIT 60"):
         for c, n, price, got in json.loads(r["lines"]):
@@ -574,6 +578,9 @@ def receipt_done(ctx, rid=None):
             cost = (q0 * c0 + x * p) / (q0 + x) if q0 + x else p          # средняя цена всех приходов
             ctx.db.x("UPDATE goods SET qty = qty + ?, cost = ?, ts = ? WHERE code = ?", x, round(cost, 2),
                      datetime.now().isoformat(timespec="seconds"), c)
+            if ctx.db.one("SELECT 1 AS x FROM stock_loc LIMIT 1"):          # учёт по местам: приход — на склад (modules/ship.py)
+                ctx.db.x("INSERT INTO stock_loc (code, loc, qty, smp) VALUES (?, 'wh', ?, 0) "
+                         "ON CONFLICT(code, loc) DO UPDATE SET qty = qty + ?", c, x, x)
         if x < n:
             shorts.append(f"{names.get(c, c)} — {_num(n - x)} шт")
     note = str(f.get("note", "")).strip()[:200]

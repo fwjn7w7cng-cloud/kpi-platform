@@ -17,7 +17,7 @@ from core.calendar import Month, first_day, last_day, month_of, shift_month
 from core.data.model import (Client, Dataset, Debt, Group, ItemSale, Payment, Return, Sale, Stock, Trip, TripStop,
                              Visit)
 
-VERSION = 6          # поменялся наполнитель — поднять: демо-базы пересоздадутся сами при следующем открытии (20.11: продажа в магазине)
+VERSION = 7          # поменялся наполнитель — поднять: демо-базы пересоздадутся сами при следующем открытии (20.11: склад и салоны, листы)
 
 # команда → (сколько торговых, характеры: множитель темпа к плану)
 TEAMS = {"north": [1.22, 1.06, 0.98, 0.93, 0.74], "south": [1.12, 1.01, 0.95, 0.88, 0.79], "key": [1.04, 0.97]}
@@ -241,6 +241,7 @@ def seed(db, cfg, industry=None, today=None, rnd_seed=7, months=4):
     _retail_orders(db, rt, today)
     _accounting(db, random.Random(rnd_seed + 400), today, PRICE_K.get(industry, 1))                            # 20.11: учёт в Алапе
     _shop_sales(db, random.Random(rnd_seed + 500), today, rt)                           # 20.11: продажи в магазинах через приложение
+    _locations(db, random.Random(rnd_seed + 600), today, rt)                            # 20.11: склад и салоны, погрузка, листы
     for m in months_list:
         db.put(f"planst:{m}", {"status": "ok", "note": "", "hist": [{"ts": f"{m}-01T09:00", "who": "Директор",
                                                                      "status": "ok", "note": ""}]})
@@ -459,6 +460,77 @@ def _shop_sales(db, R, today, rt):
         db.x("INSERT INTO shop_sales (day, ts, shop, seller, lines, disc, total, pay, take, buyer) VALUES (?,?,?,?,?,?,?,?,?,?)",
              today.isoformat(), f"{today.isoformat()}T{10 + k // 2:02d}:{R.randint(0, 59):02d}:00", team, eid, json.dumps(lines), disc,
              total, pay, R.choice(["self", "self", "deliv"]), R.choice(BUYERS) if pay == "inst" else "")
+
+
+def _locations(db, R, today, rt):
+    """Учёт по местам (modules/ship.py): остаток склада и салонов, образцы в залах; заказы с доставкой на сегодня у водителей —
+    часть уже уехала маршрутным листом (одна точка доставлена), часть ждёт погрузки, один «не влез»; перемещения в салоны."""
+    import json
+    goods = db.q("SELECT code, qty FROM goods ORDER BY code")
+    if not goods or not rt["shops"]:
+        return
+    rows = []
+    for g in goods:
+        wh = g["qty"]
+        for team, _n in rt["shops"]:
+            q = R.choice([0, 0, 0, 1, 1, 2, 3]) if wh > 3 else 0
+            smp = 1 if R.random() < 0.25 else 0
+            if q or smp:
+                rows.append((g["code"], team, q + smp, smp))
+                wh -= q
+                db.x("UPDATE goods SET qty = qty + ? WHERE code = ?", smp, g["code"])
+        rows.append((g["code"], "wh", wh, 0))
+    db.c.executemany("INSERT INTO stock_loc (code, loc, qty, smp) VALUES (?,?,?,?)", rows)
+    drv = [e for e in db.employees() if e["position"] == "driver"]
+    sellers = rt["sellers"]
+    if not drv or not sellers:
+        return
+    od = db.get("rt_orders") or {"items": [], "stages": ["Заказ", "Оплата", "Доставка"]}
+    nid = max([o["id"] for o in od.get("items", [])] + [x["id"] for x in (db.get("rt_inst") or [])] + [2000]) + 1
+    big = [g for g in db.q("SELECT g.code, g.name, g.price, s.qty FROM goods g JOIN stock_loc s ON s.code = g.code AND s.loc = 'wh' "
+                           "WHERE s.qty >= 5 ORDER BY g.code")]
+    streets = ["ул. Мира", "пр. Победы", "ул. Садовая", "ул. Лесная", "ул. Школьная", "ул. Кирова", "ул. Нагорная", "пр. Ленина"]
+    plan = [(0, "gone"), (0, "gone"), (0, "gone"), (1, "on"), (1, "on"), (1, ""), (1, "no"), (2 % len(drv), ""), (None, "")]
+    sheet_ids = []
+    key0 = (db.one("SELECT key FROM emp_keys WHERE emp_id = ? ORDER BY since DESC LIMIT 1", drv[0]["id"]) or {}).get("key", "")
+    sid = db.x("INSERT INTO route_sheets (day, driver, ts_out, orders, by) VALUES (?,?,?,?,?)", today.isoformat(), drv[0]["id"],
+               f"{today.isoformat()}T09:42:00", "[]", "Склад")
+    for k, (di, load) in enumerate(plan):
+        g = R.choice(big)
+        n = R.choice([1, 1, 2])
+        eid, key, team, *_r = R.choice(sellers)
+        o = {"id": nid, "day": (today - timedelta(days=R.randint(1, 4))).isoformat(), "shop": team, "seller": eid,
+             "client": R.choice(BUYERS), "item": g["name"], "sum": round(g["price"] * n, -1), "pay": R.choice(["full", "inst", "prepay"]),
+             "prepay": 0, "months": 0, "deliv": today.isoformat(), "stage": 0, "paid": True, "late": False, "asm": None,
+             "complaint": False, "addr": f"{R.choice(streets)} {R.randint(1, 60)}" + (f", кв. {R.randint(1, 90)}" if R.random() < 0.6 else ""),
+             "need_asm": R.random() < 0.4, "lines": [[g["code"], n, "wh"]], "driver": drv[di]["id"] if di is not None else None, "load": load}
+        if o["pay"] == "prepay":
+            o["prepay"] = round(o["sum"] * 0.5, -3)
+        if o["pay"] == "inst":
+            o["months"] = 10
+        if load == "no":
+            o["no_why"] = "не влез"
+        if load == "gone":
+            db.x("UPDATE stock_loc SET qty = qty - ? WHERE code = ? AND loc = 'wh'", n, g["code"])
+            db.x("UPDATE goods SET qty = qty - ? WHERE code = ?", n, g["code"])
+            o.update(stage=2, sheet=sid, loaded_ts="09:38")
+            if not sheet_ids:
+                o.update(dlv="ok", dlv_ts="11:05", stage=4 if not o["need_asm"] else 3)
+            sheet_ids.append(nid)
+            db.x("INSERT INTO trip_stops (batch, day, emp_key, trip, client, doc) VALUES (0,?,?,?,?,?)", today.isoformat(), key0,
+                 f"Л-{sid}", f"Z{nid}", f"№{nid}")
+        od.setdefault("items", []).append(o)
+        nid += 1
+    db.x("UPDATE route_sheets SET orders = ? WHERE id = ?", json.dumps(sheet_ids), sid)
+    db.x("INSERT INTO trips (batch, day, emp_key, trip, km, kg, m3) VALUES (0,?,?,?,0,0,0)", today.isoformat(), key0, f"Л-{sid}")
+    db.put("rt_orders", od)
+    for team, status in ((rt["shops"][1][0], "ask"), (rt["shops"][0][0], "go")):
+        g = R.choice(big)
+        db.x("INSERT INTO moves (day, loc, lines, status, author, ts, go_ts) VALUES (?,?,?,?,?,?,?)", (today - timedelta(days=1)).isoformat(),
+             team, json.dumps([[g["code"], 2, 0, None]]), status, "Директор магазина", f"{today - timedelta(days=1)}T16:00:00",
+             f"{today.isoformat()}T09:10:00" if status == "go" else None)
+        if status == "go":
+            db.x("UPDATE stock_loc SET qty = qty - 2 WHERE code = ? AND loc = 'wh'", g["code"])
 
 
 def _trips(db, R, cal, end, sales, drivers):

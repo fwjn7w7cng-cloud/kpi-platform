@@ -37,8 +37,12 @@ class Sale(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def good(self):
-        return self.db().one("SELECT * FROM goods WHERE qty >= 3 ORDER BY code LIMIT 1")
+    def good(self, here=True):
+        """Товар, свободный в салоне продавца (сам забирает) или на складе (доставка)."""
+        team = self.app.ctx(ADMIN).me["team"]
+        loc = team if here else "wh"
+        return self.db().one("SELECT g.* FROM goods g JOIN stock_loc s ON s.code = g.code AND s.loc = ? "
+                             "WHERE s.qty - s.smp >= 3 ORDER BY g.code LIMIT 1", loc)
 
     def test_sale_writes_off_and_counts_in_plan(self):
         g = self.good()
@@ -50,6 +54,8 @@ class Sale(unittest.TestCase):
         self.assertIn("Продано", text(out))
         self.assertNotIn("Маржа", text(out))                       # продавец маржу не видит
         self.assertEqual(self.db().one("SELECT qty FROM goods WHERE code = ?", g["code"])["qty"], g["qty"] - 2)
+        team = self.app.ctx(ADMIN).me["team"]
+        self.assertTrue(self.db().one("SELECT 1 AS x FROM stock_loc WHERE code = ? AND loc = ?", g["code"], team))
         after = self.app.ctx(ADMIN).kpi().emp(me["id"])["sales"].fact
         self.assertAlmostEqual(after - before, g["price"] * 2 * 0.95, delta=1)
 
@@ -59,7 +65,7 @@ class Sale(unittest.TestCase):
         self.assertIn("Скидка — от 0 до 5%", text(out))
 
     def test_installment_and_delivery(self):
-        self.app.press(ADMIN, f"sale:a:{self.good()['code']}")
+        self.app.press(ADMIN, f"sale:a:{self.good(here=False)['code']}")
         out = self.app.press(ADMIN, "sale:ok", form={"disc": "0", "pay": "inst", "take": "deliv", "buyer": ""})
         self.assertIn("напишите покупателя", text(out))
         out = self.app.press(ADMIN, "sale:ok", form={"disc": "0", "pay": "inst", "months": "10", "first": "25", "take": "deliv",
