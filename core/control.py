@@ -234,7 +234,7 @@ def card(ctx, code, note=None):
     url = _link(code)
     if url:
         kb.insert(0, [Button("🔑 Открыть его приложение", url=url)])
-        v.lines([url], title="Ссылка администратора для клиента")
+        v.lines([url], title="🔑 Ваша ссылка администратора — не пересылать никому")
     return Reply(view=v, buttons=kb)
 
 
